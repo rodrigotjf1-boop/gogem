@@ -14,6 +14,15 @@ async function bootstrap(): Promise<void> {
   // Segurança básica de headers.
   app.use(helmet());
 
+  // CORS: o painel (admin) roda em outro domínio (ex.: admin-stg.gogem.com.br) e
+  // precisa chamar esta API. CORS_ORIGIN = lista de origens separadas por vírgula;
+  // sem a var (dev), reflete a origem da requisição. Auth é por Bearer (não cookie).
+  const corsOrigin = process.env.CORS_ORIGIN;
+  app.enableCors({
+    origin: corsOrigin ? corsOrigin.split(',').map((o) => o.trim()) : true,
+    credentials: true,
+  });
+
   // Validação global: rejeita campos não declarados e transforma payloads.
   app.useGlobalPipes(
     new ValidationPipe({

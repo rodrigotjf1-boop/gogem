@@ -1,0 +1,5 @@
+# Scripts shell e o Dockerfile SEMPRE com LF (rodam em Linux/containers).
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
