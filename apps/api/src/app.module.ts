@@ -4,6 +4,8 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { CategoriaModule } from './categoria/categoria.module';
+import { ProdutoModule } from './produto/produto.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -12,6 +14,8 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     PrismaModule,
     HealthModule,
     AuthModule,
+    CategoriaModule,
+    ProdutoModule,
   ],
   providers: [
     // Abre o contexto multi-tenant (AsyncLocalStorage) por requisição, após a
