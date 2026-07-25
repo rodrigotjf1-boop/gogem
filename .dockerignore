@@ -1,0 +1,17 @@
+# Contexto de build enxuto (usado pelo apps/api/Dockerfile, contexto = raiz).
+node_modules
+**/node_modules
+**/dist
+**/build
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+*.log
+**/*.log
+**/coverage
+apps/kiosk
+**/.dart_tool
+**/.vscode
+**/.idea
