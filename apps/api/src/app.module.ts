@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { CategoriaModule } from './categoria/categoria.module';
 import { ProdutoModule } from './produto/produto.module';
 import { ComplementoModule } from './complemento/complemento.module';
+import { CatalogoModule } from './catalogo/catalogo.module';
 import { RegemImportModule } from './integracoes/regem/regem-import.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
@@ -19,6 +20,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     CategoriaModule,
     ProdutoModule,
     ComplementoModule,
+    CatalogoModule,
     RegemImportModule,
   ],
   providers: [

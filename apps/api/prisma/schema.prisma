@@ -165,14 +165,19 @@ model ComplementoOpcao {
   @@map("complemento_opcoes")
 }
 
-// Publicação versionada do catálogo (§3). Stub: o totem sincroniza por
-// `versao` (delta). O snapshot do cardápio publicado entra no S1–S2.
+// Publicação versionada do catálogo (§3). Ao publicar, o rascunho é
+// congelado num `snapshot` (árvore completa do cardápio) imutável; o totem
+// sincroniza por `versao` (delta). `publishedById` = usuário que publicou.
 model MenuVersion {
-  id        String   @id @default(uuid())
-  tenantId  String
-  versao    Int
-  publishedAt DateTime @default(now())
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  versao        Int
+  // Árvore completa do catálogo publicado (categorias + produtos + grupos +
+  // opções). Imutável — snapshot do rascunho no momento da publicação.
+  snapshot      Json
+  publishedById String?
+  publishedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
