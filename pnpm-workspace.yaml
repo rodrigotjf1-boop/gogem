@@ -1,0 +1,5 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'integrations/*'
+# apps/kiosk é Flutter (Dart) — fica fora dos workspaces JS.

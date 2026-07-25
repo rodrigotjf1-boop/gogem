@@ -1,0 +1,45 @@
+# Dependências
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Ambiente / segredos (NUNCA commitar)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Flutter / kiosk
+apps/kiosk/.dart_tool/
+apps/kiosk/build/
+apps/kiosk/.flutter-plugins*
+apps/kiosk/android/.gradle/
+apps/kiosk/android/local.properties
+*.apk
+*.aab
+
+# Logs / temporários
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editores
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Coverage / testes
+coverage/
+.nyc_output/
+
+# Assets binários grandes (usar MinIO/CDN — ver CLAUDE.md)
+*.mp4
+*.psd

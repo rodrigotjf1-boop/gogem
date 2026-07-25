@@ -1,0 +1,16 @@
+{
+  "name": "gogem",
+  "version": "0.0.0",
+  "private": true,
+  "description": "GoGeM by DMS — plataforma white-label de autoatendimento para food service",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "pnpm -r --if-present run lint",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "build": "pnpm -r --if-present run build"
+  }
+}
