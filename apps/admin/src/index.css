@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tema GoGeM — dark por padrão (não há light mode).
+ * Paleta da marca (ver README):
+ *   fundo    #0F1713  → --background
+ *   painéis  #16211B  → --card / --popover / --secondary
+ *   bordas   #2A3A31  → --border / --input
+ *   âmbar    #FFC24B  → --primary / --ring   (ação primária)
+ *   menta    #3ECF8E  → --success / --accent (confirmação/sucesso)
+ *   texto claro       → --foreground
+ */
+@layer base {
+  :root {
+    --background: 150 21% 7%; /* #0F1713 */
+    --foreground: 150 20% 92%;
+
+    --card: 147 20% 11%; /* #16211B */
+    --card-foreground: 150 20% 92%;
+
+    --popover: 147 20% 11%;
+    --popover-foreground: 150 20% 92%;
+
+    --sidebar: 150 24% 9%; /* navy/verde profundo da barra lateral */
+    --sidebar-foreground: 150 18% 88%;
+
+    --primary: 40 100% 65%; /* âmbar #FFC24B — ação primária */
+    --primary-foreground: 150 30% 8%;
+
+    --secondary: 147 20% 15%;
+    --secondary-foreground: 150 20% 92%;
+
+    --muted: 147 18% 15%;
+    --muted-foreground: 150 10% 62%;
+
+    --accent: 153 60% 53%; /* menta #3ECF8E */
+    --accent-foreground: 150 30% 8%;
+
+    --success: 153 60% 53%; /* menta #3ECF8E — status ok/sucesso */
+    --success-foreground: 150 30% 8%;
+
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 146 16% 20%; /* #2A3A31 */
+    --input: 146 16% 20%;
+    --ring: 40 100% 65%; /* âmbar */
+
+    --radius: 0.625rem;
+
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display tracking-tight;
+  }
+}

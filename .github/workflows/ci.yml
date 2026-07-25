@@ -33,6 +33,33 @@ jobs:
       - name: Test
         run: pnpm test
 
+  admin:
+    name: Admin (React + Vite) — typecheck + build + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Typecheck
+        run: pnpm -F @gogem/admin run typecheck
+
+      - name: Build
+        run: pnpm -F @gogem/admin run build
+
+      - name: Test
+        run: pnpm -F @gogem/admin run test
+
   # Placeholder — habilitar quando apps/kiosk (Flutter) tiver código (S3).
   # kiosk:
   #   name: Flutter analyze
