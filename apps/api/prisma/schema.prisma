@@ -63,6 +63,7 @@ model Usuario {
   id        String   @id @default(uuid())
   tenantId  String
   unidadeId String?
+  nome      String
   email     String
   senhaHash String
   papel     Papel    @default(execucao)
