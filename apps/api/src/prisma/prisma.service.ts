@@ -1,28 +1,24 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { tenantScopeMiddleware } from './tenant-scope.middleware';
 
 /**
  * PrismaService — cliente Prisma gerenciado pelo ciclo de vida do Nest.
  *
- * Multi-tenant (CLAUDE.md §2): NENHUMA query pode rodar sem filtro de
- * `tenantId`. O escopo é aplicado por um middleware ($use) — abaixo há um
- * STUB documentado que mostra onde e como o tenant será injetado.
+ * Multi-tenant (CLAUDE.md §2): NENHUMA query de modelo escopado roda sem
+ * filtro de `tenantId`. O escopo é aplicado pelo middleware `$use`
+ * (`tenantScopeMiddleware`), que lê o `TenantContext` (AsyncLocalStorage
+ * alimentado pelo TenantContextInterceptor a partir do JWT) e injeta o tenant
+ * em toda leitura/escrita, falhando fechado quando não há tenant no contexto.
  */
 @Injectable()
 export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  private readonly logger = new Logger(PrismaService.name);
-
   constructor() {
     super();
-    this.registerTenantScopeMiddleware();
+    this.$use(tenantScopeMiddleware);
   }
 
   async onModuleInit(): Promise<void> {
@@ -31,45 +27,5 @@ export class PrismaService
 
   async onModuleDestroy(): Promise<void> {
     await this.$disconnect();
-  }
-
-  /**
-   * STUB de escopo por tenant.
-   *
-   * Modelos de negócio que carregam `tenantId` — o filtro deve ser injetado
-   * automaticamente em toda operação de leitura/escrita.
-   *
-   * TODO(S1–S2): obter o `tenantId` do contexto da requisição
-   *   (AsyncLocalStorage alimentado por um middleware/guard de auth a partir
-   *   do JWT ou do X-Sync-Token do dispositivo) e aplicá-lo aqui:
-   *     - reads  (findMany/findFirst/count/aggregate): injetar em `args.where`.
-   *     - writes (create/createMany): injetar em `args.data`.
-   *     - update/delete: garantir `tenantId` no `where` (nunca vazar entre
-   *       tenants). Falhar fechado se o contexto não tiver tenant.
-   *
-   * Enquanto o contexto não existe, este middleware apenas registra a
-   * intenção e repassa a chamada — NÃO confiar nele para isolamento ainda.
-   */
-  private registerTenantScopeMiddleware(): void {
-    const TENANT_SCOPED_MODELS = new Set([
-      'Unidade',
-      'Usuario',
-      'Categoria',
-      'Produto',
-      'MenuVersion',
-    ]);
-
-    this.$use(async (params, next) => {
-      if (params.model && TENANT_SCOPED_MODELS.has(params.model)) {
-        // TODO(S1–S2): const tenantId = tenantContext.get();
-        //              if (!tenantId) throw new ForbiddenException('sem tenant');
-        //              injetar tenantId em params.args.where / params.args.data.
-        this.logger.debug(
-          `tenant-scope (stub): ${params.model}.${params.action} — ` +
-            `TODO injetar tenantId do contexto da requisição`,
-        );
-      }
-      return next(params);
-    });
   }
 }
