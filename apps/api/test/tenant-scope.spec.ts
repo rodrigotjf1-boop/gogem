@@ -121,6 +121,51 @@ describe('tenantScopeMiddleware', () => {
     expect(params.args.where).toEqual({ tenantId: TENANT });
   });
 
+  it('ComplementoGrupo é escopado: read injeta tenantId, create idem', async () => {
+    const read = await comTenant({
+      model: 'ComplementoGrupo',
+      action: 'findMany',
+      args: { where: { produtoId: 'p-1' } },
+    } as Prisma.MiddlewareParams);
+    expect(read.params.args.where).toEqual({
+      produtoId: 'p-1',
+      tenantId: TENANT,
+    });
+    const create = await comTenant({
+      model: 'ComplementoGrupo',
+      action: 'create',
+      args: { data: { nome: 'Bebida' } },
+    } as Prisma.MiddlewareParams);
+    expect(create.params.args.data).toEqual({
+      nome: 'Bebida',
+      tenantId: TENANT,
+    });
+  });
+
+  it('ComplementoOpcao é escopado: deleteMany injeta tenantId no where', async () => {
+    const { params } = await comTenant({
+      model: 'ComplementoOpcao',
+      action: 'deleteMany',
+      args: { where: { grupoId: 'g-1' } },
+    } as Prisma.MiddlewareParams);
+    expect(params.args.where).toEqual({ grupoId: 'g-1', tenantId: TENANT });
+  });
+
+  it('FAIL-CLOSED: ComplementoOpcao sem tenant lança Forbidden', () => {
+    const next = vi.fn();
+    expect(() =>
+      tenantScopeMiddleware(
+        {
+          model: 'ComplementoOpcao',
+          action: 'create',
+          args: { data: { nome: 'X' } },
+        } as Prisma.MiddlewareParams,
+        next,
+      ),
+    ).toThrow(ForbiddenException);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   it('modelo NÃO escopado (Tenant) passa sem injeção e sem tenant', async () => {
     const next = vi.fn().mockResolvedValue('ok');
     const params = {

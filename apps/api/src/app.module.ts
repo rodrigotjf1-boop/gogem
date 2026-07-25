@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriaModule } from './categoria/categoria.module';
 import { ProdutoModule } from './produto/produto.module';
+import { ComplementoModule } from './complemento/complemento.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -16,6 +17,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     AuthModule,
     CategoriaModule,
     ProdutoModule,
+    ComplementoModule,
   ],
   providers: [
     // Abre o contexto multi-tenant (AsyncLocalStorage) por requisição, após a
