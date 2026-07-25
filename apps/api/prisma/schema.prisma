@@ -35,11 +35,13 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  unidades      Unidade[]
-  usuarios      Usuario[]
-  categorias    Categoria[]
-  produtos      Produto[]
-  menuVersions  MenuVersion[]
+  unidades           Unidade[]
+  usuarios           Usuario[]
+  categorias         Categoria[]
+  produtos           Produto[]
+  menuVersions       MenuVersion[]
+  complementoGrupos  ComplementoGrupo[]
+  complementoOpcoes  ComplementoOpcao[]
 
   @@map("tenants")
 }
@@ -63,6 +65,7 @@ model Usuario {
   id        String   @id @default(uuid())
   tenantId  String
   unidadeId String?
+  nome      String
   email     String
   senhaHash String
   papel     Papel    @default(execucao)
@@ -108,20 +111,73 @@ model Produto {
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
   categoria Categoria? @relation(fields: [categoriaId], references: [id])
+  grupos    ComplementoGrupo[]
 
   @@index([tenantId])
   @@index([categoriaId])
   @@map("produtos")
 }
 
-// Publicação versionada do catálogo (§3). Stub: o totem sincroniza por
-// `versao` (delta). O snapshot do cardápio publicado entra no S1–S2.
+// Grupo de complementos (etapa) de um produto — ex.: "Escolha a bebida".
+// min/max regem a seleção; max nulo = ilimitado. Tenant-scoped (§2).
+model ComplementoGrupo {
+  id          String   @id @default(uuid())
+  tenantId    String
+  produtoId   String
+  nome        String
+  min         Int      @default(0)
+  max         Int?
+  obrigatorio Boolean  @default(false)
+  ordem       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant             @relation(fields: [tenantId], references: [id])
+  produto Produto            @relation(fields: [produtoId], references: [id])
+  opcoes  ComplementoOpcao[]
+
+  @@index([tenantId])
+  @@index([produtoId])
+  @@map("complemento_grupos")
+}
+
+// Opção de um grupo de complementos. `precoCentavosDelta` é um delta (inteiro,
+// nunca float) sobre o preço-base do produto. Carrega de-para PDV (§4) no
+// mesmo shape do Produto: [{ sistema, codigo_pdv, loja? }]. Tenant-scoped.
+model ComplementoOpcao {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  grupoId            String
+  nome               String
+  precoCentavosDelta Int      @default(0)
+  disponivel         Boolean  @default(true)
+  ordem              Int      @default(0)
+  // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
+  externalRefs       Json     @default("[]")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id])
+  grupo  ComplementoGrupo @relation(fields: [grupoId], references: [id])
+
+  @@index([tenantId])
+  @@index([grupoId])
+  @@map("complemento_opcoes")
+}
+
+// Publicação versionada do catálogo (§3). Ao publicar, o rascunho é
+// congelado num `snapshot` (árvore completa do cardápio) imutável; o totem
+// sincroniza por `versao` (delta). `publishedById` = usuário que publicou.
 model MenuVersion {
-  id        String   @id @default(uuid())
-  tenantId  String
-  versao    Int
-  publishedAt DateTime @default(now())
-  createdAt DateTime @default(now())
+  id            String   @id @default(uuid())
+  tenantId      String
+  versao        Int
+  // Árvore completa do catálogo publicado (categorias + produtos + grupos +
+  // opções). Imutável — snapshot do rascunho no momento da publicação.
+  snapshot      Json
+  publishedById String?
+  publishedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
