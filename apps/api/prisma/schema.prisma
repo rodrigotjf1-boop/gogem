@@ -1,0 +1,131 @@
+// GoGeM — schema Prisma (PostgreSQL).
+//
+// Convenções inegociáveis (CLAUDE.md):
+//   §2 Multi-tenant: TODA tabela de negócio carrega `tenantId` + índice; o
+//      escopo por tenant é aplicado no middleware do PrismaService (stub).
+//   §3 Catálogo versionado: publicar gera uma linha em MenuVersion; o totem
+//      sincroniza por versão (delta).
+//   §4 De-para PDV: Produto carrega `externalRefs` (Json) =
+//      [{ sistema, codigo_pdv, loja }]. A integração com o Regem SEMPRE
+//      referencia `codigo_pdv`, nunca o id interno.
+//
+// S1: skeleton mínimo e coerente — NÃO é o CRUD completo (entra no S1–S2).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// RBAC do GoGeM/Regem (CLAUDE.md — hierarquia de perfis).
+enum Papel {
+  presidente
+  gerente
+  supervisao
+  execucao
+}
+
+// Empresa (raiz do multi-tenant). É o próprio tenant.
+model Tenant {
+  id        String   @id @default(uuid())
+  nome      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  unidades      Unidade[]
+  usuarios      Usuario[]
+  categorias    Categoria[]
+  produtos      Produto[]
+  menuVersions  MenuVersion[]
+
+  @@map("tenants")
+}
+
+// Loja (unidade operacional de um tenant).
+model Unidade {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  usuarios Usuario[]
+
+  @@index([tenantId])
+  @@map("unidades")
+}
+
+model Usuario {
+  id        String   @id @default(uuid())
+  tenantId  String
+  unidadeId String?
+  email     String
+  senhaHash String
+  papel     Papel    @default(execucao)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  unidade Unidade? @relation(fields: [unidadeId], references: [id])
+
+  // e-mail único por tenant (não global).
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("usuarios")
+}
+
+model Categoria {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  produtos Produto[]
+
+  @@index([tenantId])
+  @@map("categorias")
+}
+
+model Produto {
+  id           String   @id @default(uuid())
+  tenantId     String
+  categoriaId  String?
+  nome         String
+  descricao    String?
+  precoCentavos Int     @default(0)
+  disponivel   Boolean  @default(true)
+  // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
+  externalRefs Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  categoria Categoria? @relation(fields: [categoriaId], references: [id])
+
+  @@index([tenantId])
+  @@index([categoriaId])
+  @@map("produtos")
+}
+
+// Publicação versionada do catálogo (§3). Stub: o totem sincroniza por
+// `versao` (delta). O snapshot do cardápio publicado entra no S1–S2.
+model MenuVersion {
+  id        String   @id @default(uuid())
+  tenantId  String
+  versao    Int
+  publishedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, versao])
+  @@index([tenantId])
+  @@map("menu_versions")
+}
