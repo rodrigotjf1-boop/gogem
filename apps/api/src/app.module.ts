@@ -8,6 +8,7 @@ import { CategoriaModule } from './categoria/categoria.module';
 import { ProdutoModule } from './produto/produto.module';
 import { ComplementoModule } from './complemento/complemento.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
+import { DispositivoModule } from './dispositivo/dispositivo.module';
 import { RegemImportModule } from './integracoes/regem/regem-import.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
@@ -21,6 +22,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     ProdutoModule,
     ComplementoModule,
     CatalogoModule,
+    DispositivoModule,
     RegemImportModule,
   ],
   providers: [
