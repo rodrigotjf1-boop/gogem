@@ -121,7 +121,7 @@ class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixi
           height: 22 + 10 * _c.value,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: GogemColors.mint.withValues(alpha: 1 - _c.value * .8),
+            color: GogemColors.mint.withAlpha((255 * (1 - _c.value * .8)).round()),
           ),
         ),
       );

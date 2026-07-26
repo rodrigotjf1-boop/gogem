@@ -1,4 +1,4 @@
-# GoGeM Kiosk (`apps/kiosk`) — Fatia 1: andaime
+# GoGeM Kiosk (`apps/kiosk`) — Fatias 1–2
 
 App do totem em Flutter (Android armeabi-v7a/arm64 + Windows), Riverpod, tema
 dark "game menu", perfis de hardware para o RK3288 e navegação base
@@ -37,7 +37,24 @@ lib/features/…       descanso (robô animado) · catalogo (placeholder F2/F3) 
 lib/widgets/gogem_robot.dart  o Robô-Totem em CustomPainter (paperExtent/blink animáveis)
 ```
 
+## Fatia 2 — sync do cardápio (offline-first)
+- `data/api/gogem_api.dart` — `GET /catalogo/publicado?desde=<versao>` (JWT dev
+  via `GOGEM_DEV_JWT` até o pareamento §7.1 existir);
+- `data/db/kiosk_database.dart` — SQLite = fonte da verdade local
+  (`menu_snapshot` guarda o corpo bruto por versão; retenção das 3 últimas);
+- `data/catalog/` — modelos com parsing defensivo, repositório e
+  `CatalogSyncNotifier` (agendador 60s com backoff exponencial até 10min;
+  falha de rede NUNCA apaga o snapshot local);
+- Tela de catálogo real: chips de categoria + grade de produtos + selo de sync.
+
+Rodar apontando para o staging:
+```bash
+flutter run \
+  --dart-define=GOGEM_API_URL=https://api.gogem.com.br/api/v1 \
+  --dart-define=GOGEM_DEV_JWT=<access_token do /auth/login de staging> \
+  --dart-define=GOGEM_HW_PROFILE=low
+```
+
 ## Próximas fatias
-F2 sync do cardápio (SQLite offline-first) · F3 fluxo de pedido · F4 ESC/POS
-com portões de papel · F5 kiosk mode + painel admin real · F6 lançamento da
-venda idempotente.
+F3 fluxo de pedido (produto→complementos min/max→carrinho) · F4 ESC/POS com
+portões de papel · F5 kiosk mode + painel admin real · F6 venda idempotente.
