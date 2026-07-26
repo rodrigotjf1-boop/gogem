@@ -59,7 +59,7 @@ class _RobotPainter extends CustomPainter {
     canvas.drawRRect(rr(178, ey, 36, eh, 17), p);
     canvas.drawRRect(rr(298, ey, 36, eh, 17), p);
     if (blink > 0.5) {
-      p.color = Colors.white.withOpacity(.85);
+      p.color = Colors.white.withValues(alpha: .85);
       canvas.drawOval(Rect.fromLTWH(200 * s, (ey + 6) * s, 10 * s, 14 * s), p);
       canvas.drawOval(Rect.fromLTWH(320 * s, (ey + 6) * s, 10 * s, 14 * s), p);
     }
