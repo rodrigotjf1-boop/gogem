@@ -42,6 +42,7 @@ model Tenant {
   menuVersions       MenuVersion[]
   complementoGrupos  ComplementoGrupo[]
   complementoOpcoes  ComplementoOpcao[]
+  dispositivos       Dispositivo[]
 
   @@map("tenants")
 }
@@ -184,4 +185,34 @@ model MenuVersion {
   @@unique([tenantId, versao])
   @@index([tenantId])
   @@map("menu_versions")
+}
+
+// Dispositivo (totem) pareado a um tenant (issue #12.1). O totem se autentica
+// por um `token` de dispositivo (revogável) — espelha o padrão do equipamento
+// do Regem: o token é gravado direto na linha e conferido a cada requisição.
+//
+// Pareamento em 2 tempos (CLAUDE.md §8 — token por dispositivo, pareamento por
+// código): o admin cria o Dispositivo e recebe um `codigoPareamento` de 6
+// dígitos (uso único, expira em 15 min); o totem troca o código por um `token`
+// no endpoint público de pareamento. Tenant-scoped (§2) — o CRUD do admin fica
+// isolado pelo middleware; o lookup público roda em `runAsSystem`.
+model Dispositivo {
+  id               String    @id @default(uuid())
+  tenantId         String
+  unidadeId        String?
+  nome             String
+  tipo             String    @default("totem")
+  // Token de dispositivo (revogável). Único global; nulo até o pareamento.
+  token            String?   @unique
+  pareado          Boolean   @default(false)
+  codigoPareamento String?
+  codigoExpiraEm   DateTime?
+  ativo            Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("dispositivos")
 }
