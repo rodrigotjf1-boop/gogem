@@ -17,7 +17,7 @@ class OrderRepository {
     final hoje = _clock().toIso8601String().substring(0, 10);
     return _db.transaction((tx) async {
       final r = await tx.query('kv', where: 'chave = ?', whereArgs: ['senha_seq']);
-      var dia = hoje;
+      final dia = hoje;
       var seq = 0;
       if (r.isNotEmpty) {
         final parts = (r.first['valor'] as String).split('|');

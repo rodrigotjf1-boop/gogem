@@ -45,8 +45,8 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
                       ? (_valido ? GogemColors.mint : GogemColors.heat)
                       : GogemColors.ink)),
           if (_completo && !_valido)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
               child: Text('CPF inválido — confira os dígitos',
                   style: TextStyle(color: GogemColors.heat, fontSize: 16)),
             ),

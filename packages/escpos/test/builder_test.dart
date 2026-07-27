@@ -19,11 +19,13 @@ void main() {
   });
 
   test('itemValor alinha à direita em 42 colunas', () {
+    // NÃO filtrar por faixa de bytes: parâmetros de comandos ESC/POS
+    // (ESC @, ESC t, ESC a) são >= 0x20 e contaminariam a "linha".
     final b = EscPosBuilder().itemValor('X', 'Y').build();
-    final linha = String.fromCharCodes(
-        b.where((c) => c >= 0x20 || c == 0x0A)).split('\n').first;
-    expect(linha.length, 42);
-    expect(linha.startsWith('X'), isTrue);
-    expect(linha.endsWith('Y'), isTrue);
+    final linhaEsperada = 'X${' ' * 40}Y'; // 1 + 40 espaços + 1 = 42 colunas
+    expect(String.fromCharCodes(b), contains('$linhaEsperada\n'));
+    // nome+valor maiores que a largura: degrada para separador simples
+    final b2 = EscPosBuilder().itemValor('A' * 30, 'B' * 20).build();
+    expect(String.fromCharCodes(b2), contains('${'A' * 30} ${'B' * 20}'));
   });
 }

@@ -47,7 +47,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    final btn = () =>
+    FilledButton btn() =>
         tester.widget<FilledButton>(find.byKey(const ValueKey('adicionar')));
     expect(btn().onPressed, isNull); // obrigatório pendente
     expect(find.text('ADICIONAR · R\$ 29,90'), findsOneWidget);

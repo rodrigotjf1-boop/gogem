@@ -50,7 +50,7 @@ class _ProdutoScreenState extends ConsumerState<ProdutoScreen> {
     final valido = p.grupos.every((g) => selecaoValida(g, _sel[g.id] ?? const []));
     final unit = p.precoCentavos +
         [for (final l in _sel.values) ...l]
-            .fold(0, (s, o) => s + o.precoCentavosDelta);
+            .fold<int>(0, (s, o) => s + o.precoCentavosDelta);
 
     return Scaffold(
       body: SafeArea(

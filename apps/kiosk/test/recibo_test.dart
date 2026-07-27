@@ -13,7 +13,7 @@ void main() {
           produto: menu.produtos.first, selecoes: {'g1': [bacon]}, quantidade: 2)
     ], forma: FormaPagamento.credito);
     final bytes = montarCupom(p, '042');
-    final txt = String.fromCharCodes(bytes.where((c) => c >= 0x20 || c == 0x0A));
+    final txt = String.fromCharCodes(bytes); // sem filtro: contains() ignora bytes de comando
     expect(txt, contains('2x Mister Burguer'));
     expect(txt, contains('+ Bacon'));
     expect(txt, contains('67,80')); // 2 x 33,90

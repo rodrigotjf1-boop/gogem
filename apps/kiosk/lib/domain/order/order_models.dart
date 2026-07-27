@@ -41,7 +41,7 @@ class ItemCarrinho {
 
   int get precoUnitarioCentavos =>
       produto.precoCentavos +
-      todasOpcoes.fold(0, (s, o) => s + o.precoCentavosDelta);
+      todasOpcoes.fold<int>(0, (s, o) => s + o.precoCentavosDelta);
 
   int get totalCentavos => precoUnitarioCentavos * quantidade;
 
@@ -73,7 +73,7 @@ class PedidoLocal {
   final String? cpf;
   final DateTime criadoEm;
 
-  int get totalCentavos => itens.fold(0, (s, i) => s + i.totalCentavos);
+  int get totalCentavos => itens.fold<int>(0, (s, i) => s + i.totalCentavos);
 
   /// Corpo F6-ready: de-para SEMPRE por codigo_pdv, nunca id interno.
   Map<String, dynamic> toJson() => {

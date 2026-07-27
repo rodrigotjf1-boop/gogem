@@ -35,7 +35,7 @@ void main() {
     }
     expect(find.text('ACESSO RESTRITO'), findsOneWidget);
     for (var n = 0; n < 10; n++) {
-      expect(find.byKey(ValueKey('k' + n.toString())), findsOneWidget);
+      expect(find.byKey(ValueKey('k$n')), findsOneWidget);
     }
   });
 }

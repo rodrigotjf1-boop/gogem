@@ -126,7 +126,7 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
                   Text('TOTEM FORA DE OPERACAO',
                       style: t.headlineMedium?.copyWith(color: GogemColors.heat)),
                   const SizedBox(height: 8),
-                  Text('motivo: ' + saude.motivo, style: t.bodyLarge),
+                  Text('motivo: ${saude.motivo}', style: t.bodyLarge),
                   const SizedBox(height: 4),
                   Text('por favor, dirija-se ao balcao', style: t.bodyMedium),
                 ]),

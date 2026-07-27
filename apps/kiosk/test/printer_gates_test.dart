@@ -14,7 +14,6 @@ import 'package:gogem_kiosk/features/pedido/pagamento_screen.dart';
 import 'package:gogem_kiosk/printing/fila_impressao.dart';
 import 'package:gogem_kiosk/printing/printer_providers.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'fixtures.dart';
@@ -63,7 +62,7 @@ void main() {
     final fake = FakeTransport()..tampaAberta = true;
     await tester.pumpWidget(ProviderScope(
       overrides: [printerTransportProvider.overrideWithValue(fake)],
-      child: MaterialApp(home: const PagamentoScreen()),
+      child: const MaterialApp(home: PagamentoScreen()),
     ));
     await bombear(tester, 4);
     expect(find.byKey(const ValueKey('pagamento-bloqueado')), findsOneWidget);

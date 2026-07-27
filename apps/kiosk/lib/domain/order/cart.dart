@@ -4,8 +4,8 @@ import 'order_models.dart';
 class Carrinho {
   const Carrinho({this.itens = const []});
   final List<ItemCarrinho> itens;
-  int get totalCentavos => itens.fold(0, (s, i) => s + i.totalCentavos);
-  int get totalItens => itens.fold(0, (s, i) => s + i.quantidade);
+  int get totalCentavos => itens.fold<int>(0, (s, i) => s + i.totalCentavos);
+  int get totalItens => itens.fold<int>(0, (s, i) => s + i.quantidade);
   bool get vazio => itens.isEmpty;
 }
 
