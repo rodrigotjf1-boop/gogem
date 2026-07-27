@@ -10,7 +10,7 @@ import { Sidebar } from './sidebar';
  * é a única região que rola. Viewport travado (h-screen + overflow-hidden).
  */
 export function Shell() {
-  const { user, logout } = useAuth();
+  const { user, logout, podeEscrever } = useAuth();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -23,6 +23,15 @@ export function Shell() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            {/*
+              Exemplo de RBAC no front (PR C esconde as AÇÕES de escrita com
+              `podeEscrever`; aqui só sinalizamos o modo somente-leitura).
+            */}
+            {user && !podeEscrever && (
+              <span className="hidden rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground sm:inline">
+                Somente leitura
+              </span>
+            )}
             <span className="hidden text-sm text-muted-foreground sm:inline">
               {user?.nome ?? 'Sessão'}
             </span>
