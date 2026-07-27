@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import '../data/catalog/catalog_sync.dart' show databaseProvider;
@@ -15,7 +17,10 @@ class FilaImpressao {
           {
             'uuid': uuid,
             'senha': senha,
-            'cupom': cupom,
+            // Coluna BLOB: o sqflite só binda bytes como Uint8List — um
+            // List<int> cru estoura "Invalid sql argument type". A leitura
+            // (admin_panel) já espera Uint8List (que É List<int>).
+            'cupom': Uint8List.fromList(cupom),
             'tentativas': 0,
             'criado_em': DateTime.now().toIso8601String(),
           },
