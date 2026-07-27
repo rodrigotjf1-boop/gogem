@@ -1,3 +1,48 @@
+# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-27)
+
+> **Leia esta seção primeiro** (a partir da linha divisória vem o handoff amplo antigo).
+> PR **#17** (`feat/kiosk-completo`) — app do totem F1–F6 + `packages/escpos`.
+> Jobs `admin`, `escpos` e `lint` **verdes**; job **Kiosk (Flutter)** ainda vermelho.
+
+### ✅ Já corrigi (commit 733095f, na sua branch — dê `git pull` antes de mexer)
+**`apps/kiosk/lib/printing/fila_impressao.dart` — a fila de reimpressão não persistia.**
+`enfileirar` gravava o cupom como `List<int>` cru numa coluna `BLOB`; o sqflite só binda
+bytes como `Uint8List` → estourava `Invalid sql argument type 'List<int>'`. Efeito real no
+totem: **toda** reimpressão falhava (justo o diferencial nº1 — não perder o pedido pago
+quando falta papel). No CI isso derrubava `fila_impressao_test`, `admin_panel_test`,
+`venda_sync`, `printer_gates` e gerava **timeouts de 10 min** (a exceção deixava async
+pendente → job de ~40 min). Fix: `'cupom': Uint8List.fromList(cupom)`. A leitura
+(`admin_panel_screen`) já esperava `Uint8List` (que é `List<int>`), então fica coerente.
+Verificado local: `flutter analyze` limpo + `test/fila_impressao_test.dart` verde.
+
+### ❌ Pendente — é seu (comportamento de UI)
+**1) `test/descanso_navegacao_test.dart` — "5 toques no canto abrem o portão admin".**
+Espera `find.text('ACESSO RESTRITO')` após 5 `tapAt(Offset(40,40))`; encontra **0**.
+Em `lib/features/descanso/descanso_screen.dart` o `GestureDetector` de **tela cheia**
+(`onTap: context.go('/catalogo')`, opaque) concorre com o **portão admin** de canto
+(`Positioned(0,0,96,96)` → `_tapAdminCorner` → `context.push('/admin')` no 5º toque). Ou a
+arena premia o detector externo (navega pro catálogo já no 1º toque; toques 2–5 caem no
+catálogo), ou o `/admin` não renderiza `ACESSO RESTRITO`/os `k0..k9` dentro de 800x600.
+Escolha conforme sua UX: fazer o canto **vencer** o toque (ex.: `onTapDown` no canto, ou
+excluir a região do canto do `onTap` externo, ou tirar o portão da subárvore do GD externo);
+se o `/admin` abre mas estoura layout, o keypad `GridView` k0..k9 precisa caber (envolver em
+`SingleChildScrollView`/`shrinkWrap`). **Harness:** a tela tem `AnimationController.repeat()`
+— nunca `pumpAndSettle`; `pump(Duration)` fixo (já anotado no topo do teste).
+
+**2) Teste com `Expected: <2> / Actual: <3>`** (no log do CI, antes das stacks da fila) —
+uma contagem quebrou (provável `catalogo_screen_test`/`checkout_flow_test`: espera 2, há 3).
+Rode local e ajuste teste **ou** código conforme a intenção. O CI aponta o arquivo.
+
+**3) Rode o job Kiosk do #17** depois do meu fix e confirme o placar — o esperado é sobrar só
+(1) e (2). Se algum teste de impressão ainda cair, me chame (tenho o SDK e sirvo de gate).
+
+### Gate de pré-voo (antes de empurrar)
+`cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`
+(use `withAlpha`/`Color` const); sem `pumpAndSettle` com `.repeat()`; tap dentro de 800x600;
+1 commit pt-BR; **não** faça merge com o job do kiosk vermelho.
+
+---
+
 # Repasse técnico — GoGeM (handoff para o Fable)
 
 > Documento de repasse do **GoGeM by DMS** (plataforma de autoatendimento/totem).
