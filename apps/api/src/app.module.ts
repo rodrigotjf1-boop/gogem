@@ -10,6 +10,7 @@ import { ComplementoModule } from './complemento/complemento.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { DispositivoModule } from './dispositivo/dispositivo.module';
 import { RegemImportModule } from './integracoes/regem/regem-import.module';
+import { VendasModule } from './vendas/vendas.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -24,6 +25,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     CatalogoModule,
     DispositivoModule,
     RegemImportModule,
+    VendasModule,
   ],
   providers: [
     // Abre o contexto multi-tenant (AsyncLocalStorage) por requisição, após a

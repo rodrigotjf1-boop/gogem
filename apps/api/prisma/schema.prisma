@@ -43,6 +43,7 @@ model Tenant {
   complementoGrupos  ComplementoGrupo[]
   complementoOpcoes  ComplementoOpcao[]
   dispositivos       Dispositivo[]
+  pedidos            Pedido[]
 
   @@map("tenants")
 }
@@ -215,4 +216,46 @@ model Dispositivo {
 
   @@index([tenantId])
   @@map("dispositivos")
+}
+
+// Venda de totem repassada ao Regem (issue #12.2). O totem fala SÓ com o GoGeM:
+// ele registra o Pedido aqui e o GoGeM o lança no Regem (`POST /vendas/externa-pdv`,
+// auth por `X-Sync-Token`), guardando o token do Regem no servidor — não o
+// espalha por totem. Idempotência dupla (CLAUDE.md §1): chave única local
+// `(tenantId, idempotencyKey)` + o Regem também dedupe pela mesma `idempotencyKey`.
+//
+// Dinheiro em centavos inteiros (§ regra do produto): `pagamentos[].valor` é
+// centavos; `taxaServicoPct` é um percentual inteiro. Tenant-scoped (§2) — o
+// middleware injeta o `tenantId`; o endpoint é device-authed (DeviceTokenGuard).
+model Pedido {
+  id             String   @id @default(uuid())
+  tenantId       String
+  dispositivoId  String?
+  idempotencyKey String
+  cpf            String?
+  // Itens do pedido: [{ codigoPdv, quantidade, observacao? }] (de-para §4).
+  itens          Json
+  // Split de pagamento: [{ forma, valor(centavos), nsu?, autorizacao?, formaPagamentoId? }].
+  pagamentos     Json
+  // Percentual de taxa de serviço (inteiro), ex.: 10 = 10%.
+  taxaServicoPct Int?
+  // Senha local exibida no totem (repassada ao Regem como senhaPlataforma).
+  senhaLocal     Int?
+  // pendente | enviado | falha — ciclo de vida do repasse ao Regem.
+  status         String   @default("pendente")
+  // Resultado do Regem (preenchido no sucesso).
+  regemComandaId String?
+  regemSenha     Int?
+  regemResposta  Json?
+  // Mensagem de erro do último repasse com falha.
+  erro           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  // Idempotência local: uma venda por chave, por tenant (§1).
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId])
+  @@map("pedidos")
 }
