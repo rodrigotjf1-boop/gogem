@@ -25,6 +25,14 @@ abstract final class KioskDatabase {
         salvo_em TEXT NOT NULL
       )''');
     await db.execute('''
+      CREATE TABLE IF NOT EXISTS pedidos_locais (
+        uuid TEXT PRIMARY KEY,
+        senha TEXT NOT NULL,
+        corpo_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        criado_em TEXT NOT NULL
+      )''');
+    await db.execute('''
       CREATE TABLE IF NOT EXISTS kv (
         chave TEXT PRIMARY KEY,
         valor TEXT NOT NULL

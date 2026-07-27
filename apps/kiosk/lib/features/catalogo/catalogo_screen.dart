@@ -121,7 +121,11 @@ class _ProdutoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    return Container(
+    return InkWell(
+      key: ValueKey('prod-tap-${p.id}'),
+      onTap: () => context.push('/produto/${p.id}'),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
       key: ValueKey('prod-${p.id}'),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -141,6 +145,7 @@ class _ProdutoCard extends StatelessWidget {
         Text(formatCentavos(p.precoCentavos),
             style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
       ]),
+      ),
     );
   }
 }

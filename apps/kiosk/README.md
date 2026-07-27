@@ -1,4 +1,4 @@
-# GoGeM Kiosk (`apps/kiosk`) — Fatias 1–2
+# GoGeM Kiosk (`apps/kiosk`) — Fatias 1–3
 
 App do totem em Flutter (Android armeabi-v7a/arm64 + Windows), Riverpod, tema
 dark "game menu", perfis de hardware para o RK3288 e navegação base
@@ -55,6 +55,18 @@ flutter run \
   --dart-define=GOGEM_HW_PROFILE=low
 ```
 
+## Fatia 3 — fluxo de pedido (pagamento MOCK)
+descanso → catálogo → produto (grupos com min/max/obrigatorio; `obrigatorio`
+com min 0 exige 1; max=1 vira rádio) → carrinho (qtd, totais em centavos) →
+CPF opcional (numpad próprio + validação de DV) → pagamento mock
+(crédito/débito/pix) → confirmação: robô "imprime" (paperExtent 0→1, animação
+única) + SENHA gigante + auto-retorno em 8s.
+
+Todo pedido nasce com **UUID v4** e entra na fila local `pedidos_locais`
+(`pendente_envio`) com **senha sequencial diária** — a F6 drena a fila para o
+backend com a mesma chave (idempotência). O JSON do pedido referencia SEMPRE
+`codigo_pdv` (nunca id interno).
+
 ## Próximas fatias
-F3 fluxo de pedido (produto→complementos min/max→carrinho) · F4 ESC/POS com
-portões de papel · F5 kiosk mode + painel admin real · F6 venda idempotente.
+F4 ESC/POS com portões de papel (o portão entra ANTES do pagamento) ·
+F5 kiosk mode + painel admin real · F6 venda idempotente no backend/TEF real.
