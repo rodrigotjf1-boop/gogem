@@ -58,9 +58,16 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<AuthResult> {
     // Busca global por e-mail (login ainda não tem tenant no contexto).
-    const usuario = await TenantContext.runAsSystem(() =>
-      this.prisma.usuario.findFirst({ where: { email: dto.email } }),
-    );
+    // O `await` DENTRO do runAsSystem é obrigatório: mantém o contexto de
+    // sistema (AsyncLocalStorage) vivo durante a query + o middleware do Prisma.
+    // Com callback síncrono (`() => findFirst()`), o contexto é descartado antes
+    // do Prisma rodar e o middleware fail-closed derruba com 403.
+    const usuario = await TenantContext.runAsSystem(async () => {
+      const encontrado = await this.prisma.usuario.findFirst({
+        where: { email: dto.email },
+      });
+      return encontrado;
+    });
 
     const senhaOk =
       usuario && (await bcrypt.compare(dto.senha, usuario.senhaHash));
