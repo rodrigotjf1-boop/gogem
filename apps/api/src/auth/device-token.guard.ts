@@ -47,9 +47,13 @@ export class DeviceTokenGuard implements CanActivate {
       throw new UnauthorizedException('Token de dispositivo ausente.');
     }
 
-    const dispositivo = await TenantContext.runAsSystem(() =>
-      this.prisma.dispositivo.findFirst({ where: { token } }),
-    );
+    // `await` dentro do runAsSystem mantém o contexto de sistema (ALS) vivo
+    // durante a query + middleware (callback síncrono descartaria o contexto
+    // antes do Prisma rodar → 403 fail-closed).
+    const dispositivo = await TenantContext.runAsSystem(async () => {
+      const dev = await this.prisma.dispositivo.findFirst({ where: { token } });
+      return dev;
+    });
 
     if (!dispositivo || !dispositivo.pareado || !dispositivo.ativo) {
       throw new UnauthorizedException('Dispositivo inválido ou revogado.');
