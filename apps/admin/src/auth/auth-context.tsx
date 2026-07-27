@@ -1,28 +1,77 @@
 import * as React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
+import { apiGet, apiPost } from '@/lib/api';
 import {
   clearToken,
   getToken,
   setToken as persistToken,
 } from '@/lib/auth-token';
 
+/** Perfis de acesso do Regem/GoGeM (hierarquia decrescente). */
+export type Papel = 'presidente' | 'gerente' | 'supervisao' | 'execucao';
+
+/** Usuário autenticado — espelha exatamente o contrato de `/auth/*`. */
 export interface AuthUser {
   id: string;
+  tenantId: string;
+  unidadeId: string | null;
+  email: string;
+  nome: string;
+  papel: Papel;
+}
+
+/** Resposta comum de `POST /auth/login` e `POST /auth/register`. */
+interface AuthResponse {
+  access_token: string;
+  user: AuthUser;
+}
+
+/** Payload de criação de conta/tenant. */
+export interface RegisterInput {
+  empresa: string;
   nome: string;
   email: string;
-  tenantId: string;
-  role: string;
+  senha: string;
+}
+
+/**
+ * Ranking da hierarquia: presidente > gerente > supervisao > execucao.
+ * Escrita (criar/editar/publicar) é permitida de **gerente para cima**.
+ */
+const PAPEL_RANK: Record<Papel, number> = {
+  execucao: 0,
+  supervisao: 1,
+  gerente: 2,
+  presidente: 3,
+};
+
+/**
+ * Helper de RBAC puro: `true` quando o papel é **gerente ou acima**.
+ * Exportado para o PR C reutilizar fora do provider (ex.: guards de rota,
+ * botões de ação em tabelas do catálogo).
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function papelPodeEscrever(papel: Papel | null | undefined): boolean {
+  if (!papel) return false;
+  return PAPEL_RANK[papel] >= PAPEL_RANK.gerente;
 }
 
 interface AuthContextValue {
-  token: string | null;
   user: AuthUser | null;
   isAuthenticated: boolean;
+  /** `true` enquanto o boot (GET /auth/me) não resolveu — trava o RequireAuth. */
+  carregando: boolean;
   /**
-   * STUB — no PR B isto chama a API de login. Por ora apenas persiste o
-   * token/usuário recebidos para exercitar a proteção de rotas.
+   * `true` quando o usuário logado pode escrever (papel gerente ou acima).
+   * O front apenas oculta; a autorização real é sempre no servidor.
    */
-  login: (token: string, user?: AuthUser) => void;
+  podeEscrever: boolean;
+  /** Autentica por e-mail+senha. Lança em falha (mensagem genérica). */
+  login: (email: string, senha: string) => Promise<void>;
+  /** Cria conta/tenant e já deixa a sessão ativa. Lança em falha. */
+  register: (input: RegisterInput) => Promise<void>;
+  /** Encerra a sessão local. */
   logout: () => void;
 }
 
@@ -35,12 +84,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getToken(),
   );
   const [user, setUser] = React.useState<AuthUser | null>(null);
+  // Só há boot a resolver se já existe um token persistido no arranque.
+  const [carregando, setCarregando] = React.useState<boolean>(() =>
+    Boolean(getToken()),
+  );
 
-  const login = React.useCallback((newToken: string, newUser?: AuthUser) => {
-    persistToken(newToken);
-    setTokenState(newToken);
-    if (newUser) setUser(newUser);
+  // Boot: com token persistido, valida a sessão em GET /auth/me.
+  // Sucesso → popula o usuário; 401/erro → limpa e fica deslogado.
+  // `carregando` permanece true até resolver, evitando flicker de redirect.
+  React.useEffect(() => {
+    if (!getToken()) {
+      setCarregando(false);
+      return;
+    }
+    let cancelado = false;
+    apiGet<AuthUser>('/auth/me')
+      .then((u) => {
+        if (!cancelado) setUser(u);
+      })
+      .catch(() => {
+        if (cancelado) return;
+        clearToken();
+        setTokenState(null);
+        setUser(null);
+      })
+      .finally(() => {
+        if (!cancelado) setCarregando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
   }, []);
+
+  const aplicarSessao = React.useCallback((data: AuthResponse) => {
+    persistToken(data.access_token);
+    setTokenState(data.access_token);
+    setUser(data.user);
+  }, []);
+
+  const login = React.useCallback(
+    async (email: string, senha: string) => {
+      try {
+        const data = await apiPost<AuthResponse>('/auth/login', {
+          email,
+          senha,
+        });
+        aplicarSessao(data);
+      } catch {
+        // Mensagem genérica: nunca vazar se o e-mail existe.
+        throw new Error('E-mail ou senha inválidos');
+      }
+    },
+    [aplicarSessao],
+  );
+
+  const register = React.useCallback(
+    async (input: RegisterInput) => {
+      const data = await apiPost<AuthResponse>('/auth/register', input);
+      aplicarSessao(data);
+    },
+    [aplicarSessao],
+  );
 
   const logout = React.useCallback(() => {
     clearToken();
@@ -50,13 +154,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo<AuthContextValue>(
     () => ({
-      token,
       user,
       isAuthenticated: Boolean(token),
+      carregando,
+      podeEscrever: papelPodeEscrever(user?.papel),
       login,
+      register,
       logout,
     }),
-    [token, user, login, logout],
+    [token, user, carregando, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -71,10 +177,37 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-/** Protege rotas privadas: redireciona para /login quando não autenticado. */
+/**
+ * Conveniência para o PR C: esconder/desabilitar ações de escrita.
+ * Ex.: `const podeEscrever = usePodeEscrever();` e então
+ * `{podeEscrever && <Button>Novo produto</Button>}`.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePodeEscrever(): boolean {
+  return useAuth().podeEscrever;
+}
+
+/**
+ * Protege rotas privadas. Enquanto o boot não resolve (`carregando`), mostra
+ * um loader — **não** redireciona, para não piscar /login numa sessão válida.
+ * Depois: não autenticado → /login; autenticado → renderiza o conteúdo.
+ */
 export function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, carregando } = useAuth();
   const location = useLocation();
+
+  if (carregando) {
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-background"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="size-6 animate-spin text-primary" aria-hidden />
+        <span className="sr-only">Carregando sessão…</span>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
