@@ -1,0 +1,118 @@
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+/**
+ * Cliente HTTP de venda do Regem (issue #12.2).
+ *
+ * Lança a venda de totem no Regem via `POST {REGEM_API_BASE}/vendas/externa-pdv`
+ * (endpoint L-VEN-1, PR #226 do Regem), autenticado por `X-Sync-Token`. Base e
+ * token vêm do ConfigService (`REGEM_API_BASE`, `REGEM_SYNC_TOKEN`) — NUNCA
+ * hardcoded (CLAUDE.md §8). Espelha o `RegemCatalogClient`: `fetch` global
+ * (Node 20+) com timeout via AbortController.
+ *
+ * O endpoint do Regem é idempotente por `idempotencyKey` (replay devolve
+ * `{ comandaId, idempotente: true }`), somando-se à idempotência local do GoGeM
+ * (unique `(tenantId, idempotencyKey)` em `Pedido`).
+ *
+ * Dinheiro em centavos inteiros (`pagamentos[].valor`); `taxaServicoPct` é um
+ * percentual inteiro. Sem float onde for dinheiro.
+ */
+
+// ── Shape do corpo enviado ao Regem (contrato de `/vendas/externa-pdv`) ──────
+
+/** Item da venda, casado no Regem por `codigoPdv` (de-para §4). */
+export interface RegemVendaItem {
+  codigoPdv: string;
+  quantidade: number;
+  observacao?: string;
+}
+
+/** Forma de pagamento (split). `valor` em centavos inteiros. */
+export interface RegemVendaPagamento {
+  forma: string;
+  valor: number;
+  nsu?: string;
+  autorizacao?: string;
+  formaPagamentoId?: string;
+}
+
+/** Corpo do lançamento de venda externa no Regem. */
+export interface RegemVendaExternaBody {
+  idempotencyKey: string;
+  itens: RegemVendaItem[];
+  pagamentos: RegemVendaPagamento[];
+  cpf?: string;
+  taxaServicoPct?: number;
+  plataforma?: string;
+  senhaPlataforma?: number;
+}
+
+/**
+ * Resposta do Regem. No caminho feliz traz `comandaId`, `senha`, `subtotal` e
+ * `total` (e `nfce?` se fiscal ativo). Em replay idempotente, o Regem devolve
+ * `{ comandaId, idempotente: true }` — os demais campos podem faltar.
+ */
+export interface RegemVendaExternaResposta {
+  comandaId: string;
+  senha?: number;
+  subtotal?: number;
+  total?: number;
+  nfce?: unknown;
+  idempotente?: boolean;
+}
+
+/** Timeout padrão da requisição ao Regem (ms). */
+const FETCH_TIMEOUT_MS = 15_000;
+
+@Injectable()
+export class RegemSalesClient {
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Lança a venda de totem no Regem. Lança erro claro quando a config está
+   * ausente ou a resposta não é 2xx (inclui status + corpo).
+   */
+  async lancarVendaExterna(
+    body: RegemVendaExternaBody,
+  ): Promise<RegemVendaExternaResposta> {
+    const base = this.config.get<string>('REGEM_API_BASE');
+    const token = this.config.get<string>('REGEM_SYNC_TOKEN');
+    if (!base || !token) {
+      throw new Error(
+        'Integração Regem não configurada: defina REGEM_API_BASE e REGEM_SYNC_TOKEN.',
+      );
+    }
+
+    const url = `${base.replace(/\/$/, '')}/vendas/externa-pdv`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      throw new Error(`Falha ao lançar venda no Regem (${url}): ${motivo}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (!res.ok) {
+      // Inclui o corpo do erro para diagnóstico (best-effort).
+      const corpo = await res.text().catch(() => '');
+      throw new Error(
+        `Venda no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
+      );
+    }
+
+    return (await res.json()) as RegemVendaExternaResposta;
+  }
+}
