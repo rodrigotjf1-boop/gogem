@@ -26,6 +26,10 @@ jobs:
       run:
         working-directory: apps/kiosk
     steps:
+      # Esconde o JWT dos logs do run (é injetado no build via --dart-define).
+      - name: Mascarar segredo nos logs
+        run: echo "::add-mask::${{ inputs.dev_jwt }}"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-java@v4
