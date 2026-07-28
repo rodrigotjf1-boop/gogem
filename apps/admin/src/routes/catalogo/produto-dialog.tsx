@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Loader2 } from 'lucide-react';
+import { ImagePlus, Loader2, Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -11,11 +11,16 @@ import {
   codigoPdvRegem,
   useAtualizarProduto,
   useCriarProduto,
+  useUploadImagem,
   type Categoria,
   type ExternalRef,
   type Produto,
   type ProdutoInput,
 } from '@/lib/catalogo';
+
+/** Limite espelhado do backend (POST /midia): 5 MB, imagens comuns. */
+const MAX_BYTES = 5 * 1024 * 1024;
+const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const schema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome do produto'),
@@ -43,6 +48,8 @@ export function ProdutoDialog({
   const editando = Boolean(produto);
   const criar = useCriarProduto();
   const atualizar = useAtualizarProduto();
+  const upload = useUploadImagem();
+  const inputFotoRef = React.useRef<HTMLInputElement>(null);
 
   const [nome, setNome] = React.useState('');
   const [descricao, setDescricao] = React.useState('');
@@ -50,6 +57,7 @@ export function ProdutoDialog({
   const [disponivel, setDisponivel] = React.useState(true);
   const [categoriaId, setCategoriaId] = React.useState('');
   const [codigoPdv, setCodigoPdv] = React.useState('');
+  const [imagemUrl, setImagemUrl] = React.useState<string | null>(null);
   const [erros, setErros] = React.useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
 
@@ -61,11 +69,36 @@ export function ProdutoDialog({
     setDisponivel(produto?.disponivel ?? true);
     setCategoriaId(produto?.categoriaId ?? '');
     setCodigoPdv(produto ? (codigoPdvRegem(produto) ?? '') : '');
+    setImagemUrl(produto?.imagemUrl ?? null);
     setErros({});
     setErroGeral(null);
   }, [aberto, produto]);
 
   const enviando = criar.isPending || atualizar.isPending;
+
+  async function onEscolherFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = e.target.files?.[0];
+    e.target.value = ''; // permite reescolher o mesmo arquivo
+    if (!arquivo) return;
+    setErros((x) => ({ ...x, foto: '' }));
+    if (!TIPOS_ACEITOS.includes(arquivo.type)) {
+      setErros((x) => ({ ...x, foto: 'Use JPG, PNG, WEBP ou GIF.' }));
+      return;
+    }
+    if (arquivo.size > MAX_BYTES) {
+      setErros((x) => ({ ...x, foto: 'A imagem deve ter até 5 MB.' }));
+      return;
+    }
+    try {
+      const url = await upload.mutateAsync(arquivo);
+      setImagemUrl(url);
+    } catch {
+      setErros((x) => ({
+        ...x,
+        foto: 'Não foi possível subir a imagem. Tente novamente.',
+      }));
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,6 +130,7 @@ export function ProdutoDialog({
       descricao: descricao.trim() || undefined,
       precoCentavos: parsed.data.precoCentavos,
       disponivel,
+      imagemUrl,
       categoriaId: categoriaId || undefined,
       externalRefs,
     };
@@ -135,6 +169,69 @@ export function ProdutoDialog({
           {erros.nome && (
             <p className="text-xs text-destructive">{erros.nome}</p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Foto do produto</Label>
+          <div className="flex items-center gap-4">
+            <div className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-input bg-muted">
+              {imagemUrl ? (
+                <img
+                  src={imagemUrl}
+                  alt="Prévia da foto do produto"
+                  className="size-full object-cover"
+                />
+              ) : (
+                <ImagePlus
+                  className="size-6 text-muted-foreground"
+                  aria-hidden
+                />
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                ref={inputFotoRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="sr-only"
+                onChange={onEscolherFoto}
+                disabled={enviando || upload.isPending}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => inputFotoRef.current?.click()}
+                  disabled={enviando || upload.isPending}
+                >
+                  {upload.isPending ? (
+                    <Loader2 className="animate-spin" aria-hidden />
+                  ) : (
+                    <ImagePlus aria-hidden />
+                  )}
+                  {imagemUrl ? 'Trocar foto' : 'Adicionar foto'}
+                </Button>
+                {imagemUrl && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setImagemUrl(null)}
+                    disabled={enviando || upload.isPending}
+                  >
+                    <Trash2 aria-hidden />
+                    Remover
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG, WEBP ou GIF, até 5 MB. Boas fotos dão vontade de
+                consumir.
+              </p>
+            </div>
+          </div>
+          {erros.foto && <p className="text-xs text-destructive">{erros.foto}</p>}
         </div>
 
         <div className="space-y-2">

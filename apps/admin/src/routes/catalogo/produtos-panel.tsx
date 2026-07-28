@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ImageOff, Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -146,12 +146,30 @@ export function ProdutosPanel() {
                 return (
                   <tr key={p.id} className="hover:bg-secondary/30">
                     <td className="px-4 py-2">
-                      <div className="font-medium">{p.nome}</div>
-                      {p.descricao && (
-                        <div className="max-w-xs truncate text-xs text-muted-foreground">
-                          {p.descricao}
+                      <div className="flex items-center gap-3">
+                        {p.imagemUrl ? (
+                          <img
+                            src={p.imagemUrl}
+                            alt=""
+                            className="size-10 shrink-0 rounded-md border border-border object-cover"
+                          />
+                        ) : (
+                          <div
+                            className="flex size-10 shrink-0 items-center justify-center rounded-md border border-dashed border-border text-muted-foreground"
+                            aria-hidden
+                          >
+                            <ImageOff className="size-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-medium">{p.nome}</div>
+                          {p.descricao && (
+                            <div className="max-w-xs truncate text-xs text-muted-foreground">
+                              {p.descricao}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
                     <td className="px-4 py-2 text-muted-foreground">
                       {nomeCategoria(p.categoriaId)}

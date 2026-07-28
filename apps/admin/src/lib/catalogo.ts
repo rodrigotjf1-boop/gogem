@@ -32,6 +32,7 @@ export interface Produto {
   descricao: string | null;
   precoCentavos: number;
   disponivel: boolean;
+  imagemUrl: string | null;
   categoriaId: string | null;
   externalRefs: ExternalRef[];
 }
@@ -46,6 +47,7 @@ export interface ProdutoInput {
   descricao?: string;
   precoCentavos: number;
   disponivel?: boolean;
+  imagemUrl?: string | null;
   categoriaId?: string;
   externalRefs?: ExternalRef[];
 }
@@ -138,4 +140,22 @@ export function useRemoverProduto() {
 export function codigoPdvRegem(produto: Produto): string | null {
   const ref = produto.externalRefs?.find((r) => r.sistema === 'regem');
   return ref?.codigo_pdv ?? null;
+}
+
+// ————————————————————————— Mídia (foto do produto) —————————————————————————
+
+/**
+ * Sobe uma imagem para o Storage e devolve a URL pública (POST /midia,
+ * multipart `arquivo`). O caller guarda a URL em `imagemUrl` do produto.
+ * O axios seta o boundary do multipart sozinho quando o body é FormData.
+ */
+export function useUploadImagem() {
+  return useMutation({
+    mutationFn: async (arquivo: File): Promise<string> => {
+      const form = new FormData();
+      form.append('arquivo', arquivo);
+      const { url } = await apiPost<{ url: string }, FormData>('/midia', form);
+      return url;
+    },
+  });
 }
