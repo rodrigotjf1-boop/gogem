@@ -153,8 +153,8 @@ export class DispositivoService {
    * 400 genérico (não revela qual condição falhou). Sucesso: grava o token,
    * marca `pareado`, limpa o código e retorna `{ token, nome }` UMA vez.
    *
-   * TODO(seg): não há throttler global montado — adicionar rate-limit neste
-   * endpoint público quando existir (anti-brute-force de código de 6 dígitos).
+   * Segurança: o endpoint público tem rate-limit apertado (10/min por IP, ver
+   * DispositivoPublicoController) contra brute-force do código de 6 dígitos.
    */
   async parear(codigo: string): Promise<{ token: string; nome: string }> {
     const falha = new BadRequestException('Código inválido ou expirado.');

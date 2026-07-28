@@ -1,5 +1,6 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { DispositivoService } from './dispositivo.service';
 import { ParearDto } from './dto/parear.dto';
 
@@ -13,6 +14,9 @@ import { ParearDto } from './dto/parear.dto';
 export class DispositivoPublicoController {
   constructor(private readonly dispositivos: DispositivoService) {}
 
+  // Rate-limit apertado (10/min por IP): anti brute-force do código de 6 dígitos
+  // (endpoint público, sem auth). Resolve o TODO(seg) do DispositivoService.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('parear')
   @ApiOkResponse({
     description:
