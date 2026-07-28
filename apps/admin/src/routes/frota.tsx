@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { usePodeEscrever } from '@/auth/auth-context';
 import {
   codigoExpirado,
+  estaOnline,
   useCriarDispositivo,
   useDispositivos,
   useReparear,
@@ -90,6 +91,7 @@ export default function FrotaPage() {
               <tr>
                 <th className="px-4 py-2 font-medium">Totem</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Ao vivo</th>
                 <th className="px-4 py-2 font-medium">Pareamento</th>
                 {podeEscrever && <th className="px-4 py-2 text-right font-medium">Ações</th>}
               </tr>
@@ -109,6 +111,9 @@ export default function FrotaPage() {
                     ) : (
                       <Badge variant="outline">Aguardando</Badge>
                     )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <TelemetriaCelula d={d} />
                   </td>
                   <td className="px-4 py-2">
                     {d.ativo && !d.pareado ? (
@@ -189,6 +194,41 @@ export default function FrotaPage() {
         onFechar={() => setRemovendo(undefined)}
       />
     </section>
+  );
+}
+
+function TelemetriaCelula({ d }: { d: Dispositivo }) {
+  if (!d.pareado || !d.ativo) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  if (!estaOnline(d.ultimoHeartbeat)) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="size-2 rounded-full bg-muted-foreground/40" aria-hidden />
+        Offline
+      </span>
+    );
+  }
+  const s = d.ultimoStatus;
+  const detalhes: string[] = [];
+  if (s?.impressoraOk === false) detalhes.push('impressora ✗');
+  else if (s?.impressoraOk === true)
+    detalhes.push(s.papelAcabando ? 'papel acabando' : 'impressora ok');
+  if (typeof s?.filaImpressao === 'number' && s.filaImpressao > 0)
+    detalhes.push(`fila ${s.filaImpressao}`);
+  if (s?.versaoCatalogo != null) detalhes.push(`v${s.versaoCatalogo}`);
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-1.5 text-xs">
+        <span className="size-2 rounded-full bg-success" aria-hidden />
+        Online
+      </span>
+      {detalhes.length > 0 && (
+        <span className="text-[11px] text-muted-foreground">
+          {detalhes.join(' · ')}
+        </span>
+      )}
+    </div>
   );
 }
 

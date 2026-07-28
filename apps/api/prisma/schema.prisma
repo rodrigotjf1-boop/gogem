@@ -209,6 +209,11 @@ model Dispositivo {
   codigoPareamento String?
   codigoExpiraEm   DateTime?
   ativo            Boolean   @default(true)
+  // Telemetria (heartbeat): último "sinal de vida" + estado reportado (papel,
+  // fila, versão do catálogo/app). O online/offline é derivado da recência de
+  // `ultimoHeartbeat` no admin.
+  ultimoHeartbeat  DateTime?
+  ultimoStatus     Json?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

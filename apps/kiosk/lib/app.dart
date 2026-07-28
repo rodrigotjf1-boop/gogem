@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/pareamento/device_token.dart';
 import 'core/router.dart';
+import 'core/telemetria/heartbeat.dart';
 import 'core/theme/gogem_theme.dart';
 import 'data/catalog/catalog_sync.dart';
 import 'domain/order/venda_sync.dart';
@@ -25,6 +26,8 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         ref.read(deviceTokenProvider.notifier).carregar();
         ref.read(catalogSyncProvider.notifier).iniciarAgendador();
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();
+        // Telemetria: heartbeat periódico (só envia quando pareado).
+        ref.read(heartbeatProvider.notifier).iniciar();
       });
     }
   }

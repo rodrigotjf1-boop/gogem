@@ -86,6 +86,20 @@ class GogemApi {
     throw GogemApiException(200, 'corpo inesperado');
   }
 
+  /// POST /dispositivos/heartbeat — telemetria (device-authed). Envia o estado
+  /// atual do totem (papel, fila, versão). Silencioso: erros não quebram o app.
+  Future<void> heartbeat(Map<String, dynamic> status) async {
+    final uri = Uri.parse('$baseUrl/dispositivos/heartbeat');
+    final res = await _client
+        .post(uri,
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(status))
+        .timeout(const Duration(seconds: 10));
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+  }
+
   /// POST /vendas — lançamento idempotente do pedido pago (F6).
   /// `Idempotency-Key` = uuid do pedido: reenvio JAMAIS duplica; o backend
   /// responde 200/201 (ou 409 já-processado, tratado como sucesso pelo sync).

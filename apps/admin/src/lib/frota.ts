@@ -13,6 +13,15 @@ import { apiGet, apiPost } from '@/lib/api';
  * O token NUNCA volta ao admin (segredo do dispositivo).
  */
 
+/** Estado reportado pelo totem no heartbeat (Json flexível). */
+export interface DispositivoStatus {
+  versaoCatalogo?: number;
+  filaImpressao?: number;
+  impressoraOk?: boolean;
+  papelAcabando?: boolean;
+  appVersao?: string;
+}
+
 export interface Dispositivo {
   id: string;
   unidadeId: string | null;
@@ -22,8 +31,16 @@ export interface Dispositivo {
   codigoPareamento: string | null;
   codigoExpiraEm: string | null;
   ativo: boolean;
+  ultimoHeartbeat: string | null;
+  ultimoStatus: DispositivoStatus | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Online = heartbeat recente (< 2 min). */
+export function estaOnline(ultimoHeartbeat: string | null): boolean {
+  if (!ultimoHeartbeat) return false;
+  return Date.now() - new Date(ultimoHeartbeat).getTime() < 2 * 60_000;
 }
 
 /** Resposta ao criar/reparear: o código aparece UMA vez. */
