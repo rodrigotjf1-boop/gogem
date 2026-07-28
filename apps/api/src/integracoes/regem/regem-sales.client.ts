@@ -14,8 +14,13 @@ import { ConfigService } from '@nestjs/config';
  * `{ comandaId, idempotente: true }`), somando-se à idempotência local do GoGeM
  * (unique `(tenantId, idempotencyKey)` em `Pedido`).
  *
- * Dinheiro em centavos inteiros (`pagamentos[].valor`); `taxaServicoPct` é um
- * percentual inteiro. Sem float onde for dinheiro.
+ * ⚠️ CONTRATO DE DADOS DO REGEM (conferido no código do Regem):
+ *   - `pagamentos[].valor` vai em **REAIS decimais** (ex.: 29.90), NÃO centavos.
+ *     O Regem deriva o total de `precoVenda` (reais) e exige `somaPag ≈ total`
+ *     (tolerância 0,05). Enviar centavos faz toda venda paga falhar com 400.
+ *   - `senhaPlataforma` é **string** (o DTO do Regem valida `@IsString`).
+ *   A conversão de centavos→reais e número→string acontece no VendasService,
+ *   na borda de saída — o GoGeM permanece internamente em centavos (§ dinheiro).
  */
 
 // ── Shape do corpo enviado ao Regem (contrato de `/vendas/externa-pdv`) ──────
@@ -27,7 +32,7 @@ export interface RegemVendaItem {
   observacao?: string;
 }
 
-/** Forma de pagamento (split). `valor` em centavos inteiros. */
+/** Forma de pagamento (split). `valor` em REAIS decimais (contrato do Regem). */
 export interface RegemVendaPagamento {
   forma: string;
   valor: number;
@@ -44,7 +49,8 @@ export interface RegemVendaExternaBody {
   cpf?: string;
   taxaServicoPct?: number;
   plataforma?: string;
-  senhaPlataforma?: number;
+  /** Nº do pedido no totem — string (o DTO do Regem valida `@IsString`). */
+  senhaPlataforma?: string;
 }
 
 /**
