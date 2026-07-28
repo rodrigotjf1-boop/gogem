@@ -64,6 +64,16 @@ jobs:
           fi
           grep -n 'INTERNET' "$MANIFEST"
 
+      # Modo quiosque: substitui o MainActivity gerado pelo que tem lock task
+      # (canal 'gogem/kiosk'). O caminho segue --org com.dms.gogem + nome do
+      # projeto (gogem_kiosk).
+      - name: Instalar MainActivity de quiosque
+        run: |
+          DEST=android/app/src/main/kotlin/com/dms/gogem/gogem_kiosk
+          mkdir -p "$DEST"
+          cp tool/kiosk_mainactivity.kt "$DEST/MainActivity.kt"
+          echo "MainActivity de quiosque instalada em $DEST"
+
       - name: Build APK (armeabi-v7a + arm64)
         run: >-
           flutter build apk --release --split-per-abi

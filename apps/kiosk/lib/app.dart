@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/kiosk/kiosk_service.dart';
 import 'core/pareamento/device_token.dart';
 import 'core/router.dart';
 import 'core/telemetria/heartbeat.dart';
@@ -28,6 +29,8 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();
         // Telemetria: heartbeat periódico (só envia quando pareado).
         ref.read(heartbeatProvider.notifier).iniciar();
+        // Modo quiosque: fixa a tela (best-effort; silencioso sem Device Owner).
+        KioskService.entrar();
       });
     }
   }

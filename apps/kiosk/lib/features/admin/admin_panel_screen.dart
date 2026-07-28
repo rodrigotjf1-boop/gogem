@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gogem_escpos/escpos.dart';
 import '../../core/config/app_config.dart';
+import '../../core/kiosk/kiosk_service.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../../domain/order/venda_sync.dart';
@@ -160,7 +161,11 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
                       child: const Text('CANCELAR')),
                   FilledButton(
                       key: const ValueKey('confirmar-sair'),
-                      onPressed: () => SystemNavigator.pop(),
+                      onPressed: () async {
+                        // Libera o modo quiosque ANTES de fechar (manutenção).
+                        await KioskService.sair();
+                        await SystemNavigator.pop();
+                      },
                       child: const Text('SAIR')),
                 ],
               ),
