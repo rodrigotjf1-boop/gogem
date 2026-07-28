@@ -133,18 +133,32 @@ class _ProdutoCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: GogemColors.line),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(p.nome, style: t.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
-        if (p.descricao.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(p.descricao,
-                style: t.bodyMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
-          ),
-        const Spacer(),
-        Text(formatCentavos(p.precoCentavos),
-            style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
-      ]),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Flexible(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(p.nome,
+                        style: t.titleLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    if (p.descricao.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(p.descricao,
+                            style: t.bodyMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                  ]),
+            ),
+            Text(formatCentavos(p.precoCentavos),
+                style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
+          ]),
       ),
     );
   }

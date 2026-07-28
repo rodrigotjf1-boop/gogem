@@ -1,52 +1,56 @@
-# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28)
+# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28, pós-17b)
 
 > **Leia esta seção primeiro** (a partir da linha divisória vem o handoff amplo antigo).
-> PR **#17** (`feat/kiosk-completo`) — app do totem F1–F6 + `packages/escpos`.
-> Apliquei seu patch dos 17 arquivos + validei com o SDK (flutter/dart) aqui e
-> empurrei. **Dê `git pull` antes de mexer.** Jobs `admin`, `escpos`, `lint` **verdes**.
-> Job **Kiosk**: caiu de ~8 falhas para **2** (ambas widget-level e **pré-existentes**,
-> já falhavam antes do seu patch). Não consigo iterar nelas aqui (o sandbox não roda
-> teste de widget Flutter — compila > timeout), então voltam pra você que roda local.
+> PR **#17** (`feat/kiosk-completo`). Apliquei seu patch **17b** (5 arquivos) + validei com
+> o SDK e empurrei. **Dê `git pull` antes de mexer.** Jobs `admin`, `escpos`, `lint` **verdes**.
+> Seu 17b **fechou o `catalogo_screen`** ✅. Sobra **1 falha**: `admin_panel_test` (trava).
+> Não consigo iterar nela aqui — o sandbox congela em widget test de db (detalhe abaixo).
 
-### ✅ Verde agora (confirmado no CI, com seu patch + meus ajustes)
-`descanso_navegacao` (2), `catalog_sync` (4), `produto_screen`, `printer_gates`,
-`fila_impressao`, `catalog_repository`, `order_repository`, `venda_sync`, `cart`,
-`catalog_models`, `order_models`, `hardware_profile`, `moeda`, `recibo`, `robot_painter`,
-e `escpos` (analyze + 9). `flutter analyze --fatal-infos` limpo.
+### ✅ Verde (confirmado local/CI, com seu patch + meus ajustes)
+`catalogo_screen` (2, seu 17b), `descanso_navegacao` (2), `catalog_sync` (4), `produto_screen`,
+`printer_gates`, `fila_impressao`, `catalog_repository`, `order_repository`, `venda_sync`,
+`cart`, `catalog_models`, `order_models`, `hardware_profile`, `moeda`, `recibo`, `robot_painter`,
+`escpos` (analyze + 9). `flutter analyze --fatal-infos` limpo.
 
-**Ajustes que precisei fazer além do seu patch** (todos verificados; commit na branch):
-- `test/db_helper.dart`: `novaDbMemoria` com `:memory:` + `singleInstance:false`. Sua forma
-  `mode=memory&cache=private` isolava mas quebrava a persistência entre operações do mesmo
-  teste (o `catalog_sync` offline-first depende de salvar e reler o snapshot).
-- `test/catalog_sync_test.dart`: os mocks das respostas com acento precisavam de
-  `content-type: application/json; charset=utf-8` — senão o body vira latin1 e o
-  `utf8.decode` do cliente estoura. Só passava antes por vazamento do banco compartilhado;
-  o isolamento (correto) do `novaDbMemoria` expôs o bug do mock.
-- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` não cabia as 4 linhas
-  do keypad em 600px; como o `GridView` é **lazy**, as teclas da linha cortada nem eram
-  construídas e os `find.byKey('k$n')` falhavam. Achatei p/ **2.8** + enxuguei espaçamentos.
+**Ajustes meus além do patch** (verificados; na branch):
+- `test/catalog_sync_test.dart`: os mocks com acento precisavam de
+  `content-type: application/json; charset=utf-8` — senão o body vira latin1 e o `utf8.decode`
+  do cliente estoura. Só passava antes por vazamento do banco compartilhado; o isolamento do
+  `novaDbMemoria` (seu, correto) expôs o bug do mock. **Este era o real motivo do `catalog_sync`.**
+- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` não cabia as 4 linhas do
+  keypad em 600px; `GridView` é **lazy** → teclas da linha cortada nem eram construídas e os
+  `find.byKey('k$n')` falhavam. Achatei p/ **2.8** + enxuguei espaçamentos.
 - `test/descanso_navegacao_test.dart`: `setUp(() => router.go('/descanso'))` — o `router` é
   singleton global; sem reset o 1º teste terminava em `/catalogo` e o 2º começava lá.
-- `dart fix --apply`: imports órfãos de `kiosk_database` nos testes migrados + 2 lints.
+- `db_helper.dart` está no SEU original (`mode=memory&cache=private`); mantive.
+- `dart fix --apply`: imports órfãos + 1 unnecessary_import.
 
-### ❌ Faltam 2 (widget-level, pré-existentes — precisam de você rodando local)
+### ❌ Falta 1 — `test/admin_panel_test.dart` TRAVA (event loop congela)
 
-**1) `test/admin_panel_test.dart` — TRAVA (TimeoutException 10 min).**
-O 1º teste ("teste de impressora … drena a fila") pendura por 10 min; arrasta o job todo.
-Já falhava antes do patch (o hang NÃO era da fila — meu fix da fila resolveu os *outros*
-timeouts, mas este continua). O `FakeTransport` responde a status (o `escpos/driver_test`
-usa `FakeTransport()`+`imprimir` e passa), então o `await` que nunca completa está no fluxo
-Riverpod da `AdminPanelScreen`: suspeito de `_refrescar()` (postFrame) → `vendaSyncProvider`
-(NÃO overridado no teste, roda o real) ou do `printerHealthProvider` observado no `build`
-(pode subir timer/health-check). Peço: rode `flutter test test/admin_panel_test.dart`
-localmente, veja qual `await` pendura (instrumente com print), e ou overrida `vendaSyncProvider`
-no teste, ou dê um caminho fake/rápido pro que ele espera. Sem hang, o teste deve passar.
+**Diagnóstico (instrumentei com log em ARQUIVO, que sobrevive ao kill):** o freeze é no
+`_refrescar()` (postFrame) exatamente em **`await ref.read(orderRepositoryProvider.future)`**
+dentro de `VendaSyncNotifier.atualizarContagem()` — o `.future` NUNCA resolve. E o
+`ref.read(filaImpressaoProvider.future)` logo antes (override IDÊNTICO, `(ref) async => x`)
+resolve normal. Não é await de rede: é um **congelamento síncrono** — pus `.timeout(4s)` nos
+awaits e **o timeout nem dispara** (nem timers rodam).
 
-**2) `test/catalogo_screen_test.dart` — "lista categorias e produtos do snapshot local".**
-Só o 1º teste falha (o "estado vazio" passa). É asserção de renderização: confira contra o
-`publicadoFixture`/`CatalogoScreen` qual `find.text` não bate — candidatos: `'R$ 29,90'`
-(espaço normal vs NBSP do `formatCentavos`), `'BURGERS'`/`'Mister Burguer'`, ou a troca de
-categoria (`tap('BEBIDAS')` → `'Refri Lata'`). Também já falhava antes do patch.
+**O que já DESCARTEI** (cada um custou uma rodada, então não repita):
+- Não é a fila (meu `Uint8List.fromList` já corrige).
+- Não é o `FakeTransport`/impressão (`escpos/driver_test` usa e passa).
+- Não é o `printerHealthProvider` (build só retorna `const`, não sobe timer).
+- Não é o factory de isolate: troquei `databaseFactoryFfi` → `databaseFactoryFfiNoIsolate`, **igual trava**.
+- Não é `:memory:` vs `cache=private`: **trava nos dois**.
+- Stubei o `vendaSyncProvider` (fake notifier com `atualizarContagem` no-op) → **ainda trava**
+  (o freeze migra pro fluxo de tap: `_reimprimirFila`/`fila.listar` — tudo db em widget test).
+
+**Conclusão / direção:** é a interação **`sqflite` (ffi) + `TestWidgetsFlutterBinding`**: queries
+disparadas de dentro do widget, sob o relógio-falso do teste, não completam. `sqflite`
+funciona nos testes de UNIDADE (order/catalog_repository passam), mas **quebra em WIDGET test**.
+Direção que eu tentaria com você rodando: (a) **não usar sqflite real no widget test** — mockar
+`FilaImpressao`/`OrderRepository` (fakes em memória Dart puro, sem sqflite) nos overrides, OU
+(b) envolver as interações que tocam db em `tester.runAsync(() async {...})` (roda em async real,
+fora do relógio-falso). A (a) é mais limpa e alinha com a sua regra 8. Rode, e se fechar me chama
+que a gente mescla o #17 verde.
 
 ### Gate de pré-voo (antes de empurrar)
 `cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`;

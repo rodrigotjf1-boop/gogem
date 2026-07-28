@@ -23,6 +23,7 @@ void main() {
     final scope = ProviderScope(
       overrides: [
         menuProvider.overrideWith((ref) async => snap),
+        databaseProvider.overrideWith((ref) async => db),
         orderRepositoryProvider.overrideWith((ref) async => repo),
       ],
       child: const GogemKioskApp(iniciarSync: false),

@@ -29,3 +29,9 @@ Regras aprendidas (não repetir):
 7. **Assert de bytes ESC/POS: nunca filtrar por `c >= 0x20`** — parâmetros de
    comandos (ESC @, ESC t, ESC a) são imprimíveis e contaminam a saída. Usar
    `String.fromCharCodes(bytes)` + `contains(sequência exata)`.
+8. **Widget test que toca banco: overridar `databaseProvider`** (com o db ffi
+   do teste) além de order/fila providers — senão algum caminho cai em
+   `getApplicationSupportDirectory()` (path_provider), que trava o harness sem
+   plugin (timeout de 10 min, não "timer pending").
+9. **SnackBar em teste: `duration` curto + `consumirSnackbar`** (pump da
+   duração) para não deixar timer pendente.

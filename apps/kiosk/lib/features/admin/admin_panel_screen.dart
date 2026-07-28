@@ -31,10 +31,14 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
   }
 
   Future<void> _refrescar() async {
-    final fila = await ref.read(filaImpressaoProvider.future);
-    final n = await fila.pendentes();
-    await ref.read(vendaSyncProvider.notifier).atualizarContagem();
-    if (mounted) setState(() => _filaImpressao = n);
+    try {
+      final fila = await ref.read(filaImpressaoProvider.future);
+      final n = await fila.pendentes();
+      await ref.read(vendaSyncProvider.notifier).atualizarContagem();
+      if (mounted) setState(() => _filaImpressao = n);
+    } catch (_) {
+      // diagnóstico não deve derrubar o painel; segue com o último estado
+    }
   }
 
   Future<void> _acao(String nome, Future<String> Function() fn) async {
@@ -47,8 +51,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
     }
     if (!mounted) return;
     setState(() => _ocupado = null);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$nome: $msg')));
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    messenger.showSnackBar(SnackBar(
+        content: Text('$nome: $msg'),
+        duration: const Duration(seconds: 2)));
     await _refrescar();
   }
 
