@@ -8,6 +8,14 @@ import { AppModule } from './app.module';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
+  // Atrás do proxy do EasyPanel (1 hop): confia no X-Forwarded-For para o
+  // rate-limit enxergar o IP real do cliente (senão todos compartilham o IP do
+  // proxy). `1` = exatamente um proxy confiável.
+  const expressApp = app.getHttpAdapter().getInstance() as {
+    set: (k: string, v: unknown) => void;
+  };
+  expressApp.set('trust proxy', 1);
+
   // Prefixo global — CLAUDE.md: API pública versionada em /api/v1.
   app.setGlobalPrefix('api/v1');
 
@@ -33,16 +41,23 @@ async function bootstrap(): Promise<void> {
   );
 
   // OpenAPI — fonte da verdade do contrato (alimenta packages/contracts).
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('GoGeM API')
-    .setDescription(
-      'API núcleo do GoGeM by DMS — autoatendimento food service.',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/v1/docs', app, document);
+  // Em PRODUÇÃO fica FECHADO por padrão (não expor o contrato/rotas ao público):
+  // só liga com SWAGGER_ENABLED=true. Fora de produção, sempre ligado.
+  const swaggerLigado =
+    process.env.SWAGGER_ENABLED === 'true' ||
+    process.env.NODE_ENV !== 'production';
+  if (swaggerLigado) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('GoGeM API')
+      .setDescription(
+        'API núcleo do GoGeM by DMS — autoatendimento food service.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/v1/docs', app, document);
+  }
 
   const port = Number(process.env.PORT ?? 3000);
   await app.listen(port);

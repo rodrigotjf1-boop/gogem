@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthResult, AuthService } from './auth.service';
 import { CurrentUser } from './current-user.decorator';
 import { LoginDto } from './dto/login.dto';
@@ -13,6 +14,8 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   /** Cadastro inicial: cria empresa (tenant) + usuário presidente. */
+  // Rate-limit apertado (10/min por IP): register cria tenant → anti-spam.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('register')
   @ApiOkResponse({
     description: 'Empresa e presidente criados; retorna token.',
@@ -22,6 +25,8 @@ export class AuthController {
   }
 
   /** Login por e-mail + senha. */
+  // Rate-limit apertado (10/min por IP): anti brute-force de senha.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @ApiOkResponse({ description: 'Credenciais válidas; retorna token.' })
   login(@Body() dto: LoginDto): Promise<AuthResult> {
