@@ -19,7 +19,9 @@ export class DispositivoDeviceController {
   constructor(private readonly dispositivos: DispositivoService) {}
 
   @Post('heartbeat')
-  @ApiOkResponse({ description: 'Registra o heartbeat + estado do dispositivo.' })
+  @ApiOkResponse({
+    description: 'Registra o heartbeat + estado do dispositivo.',
+  })
   heartbeat(@DeviceCtx() ctx: DeviceUser, @Body() dto: HeartbeatDto) {
     return this.dispositivos.heartbeat(ctx.deviceId, dto);
   }
