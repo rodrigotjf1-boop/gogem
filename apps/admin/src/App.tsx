@@ -6,7 +6,7 @@ import { Shell } from '@/components/app-shell/shell';
 import LoginPage from '@/routes/login';
 import RegistroPage from '@/routes/registro';
 import CatalogoPage from '@/routes/catalogo';
-import ImportarPage from '@/routes/importar';
+import IntegracoesPage from '@/routes/integracoes';
 import PublicarPage from '@/routes/publicar';
 import FrotaPage from '@/routes/frota';
 
@@ -29,7 +29,12 @@ export default function App() {
               }
             >
               <Route path="/catalogo" element={<CatalogoPage />} />
-              <Route path="/importar" element={<ImportarPage />} />
+              <Route path="/integracoes" element={<IntegracoesPage />} />
+              {/* Rota antiga: redireciona para a área de Integrações. */}
+              <Route
+                path="/importar"
+                element={<Navigate to="/integracoes" replace />}
+              />
               <Route path="/publicar" element={<PublicarPage />} />
               <Route path="/frota" element={<FrotaPage />} />
             </Route>

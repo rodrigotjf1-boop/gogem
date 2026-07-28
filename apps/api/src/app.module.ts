@@ -12,6 +12,7 @@ import { CatalogoModule } from './catalogo/catalogo.module';
 import { DispositivoModule } from './dispositivo/dispositivo.module';
 import { MidiaModule } from './midia/midia.module';
 import { RegemImportModule } from './integracoes/regem/regem-import.module';
+import { IntegracaoModule } from './integracao/integracao.module';
 import { VendasModule } from './vendas/vendas.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
@@ -32,6 +33,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     DispositivoModule,
     MidiaModule,
     RegemImportModule,
+    IntegracaoModule,
     VendasModule,
   ],
   providers: [

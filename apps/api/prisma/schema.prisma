@@ -44,6 +44,7 @@ model Tenant {
   complementoOpcoes  ComplementoOpcao[]
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
+  integracoes        Integracao[]
 
   @@map("tenants")
 }
@@ -265,4 +266,35 @@ model Pedido {
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
   @@map("pedidos")
+}
+
+// Integração de um tenant com um sistema externo (Fase 2). O GoGeM é uma API
+// aberta de conectores: cada `tipo` (ex.: 'regem', 'open_delivery') tem UMA
+// integração por tenant, com credenciais/parâmetros em `config` (Json). Os
+// segredos NUNCA voltam crus ao front — o service mascara (só diz se há valor).
+//
+// O conector Regem lê `config = { apiBase, token }` daqui (resolvido por tenant,
+// com fallback para as envs REGEM_API_BASE/REGEM_SYNC_TOKEN do piloto). Assim o
+// GoGeM deixa de ser mono-tenant (1 token global) e cada loja pareia a sua.
+model Integracao {
+  id          String   @id @default(uuid())
+  tenantId    String
+  // Discriminador do conector: 'regem' | 'open_delivery' | ...
+  tipo        String
+  // Rótulo amigável opcional (ex.: "Regem — Loja Centro").
+  nome        String?
+  ativo       Boolean  @default(false)
+  // Credenciais/parâmetros do conector. Ex. regem: { apiBase, token }.
+  config      Json     @default("{}")
+  // Resultado do último teste de conexão: { ok, em, detalhe? }.
+  ultimoTeste Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  // Uma integração por tipo, por tenant.
+  @@unique([tenantId, tipo])
+  @@index([tenantId])
+  @@map("integracoes")
 }
