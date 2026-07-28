@@ -43,6 +43,15 @@ const DISPOSITIVOS = [
     codigoPareamento: null,
     codigoExpiraEm: null,
     ativo: true,
+    // heartbeat recente → online, com estado reportado
+    ultimoHeartbeat: new Date(Date.now() - 15_000).toISOString(),
+    ultimoStatus: {
+      versaoCatalogo: 3,
+      filaImpressao: 0,
+      impressoraOk: true,
+      papelAcabando: false,
+      appVersao: '0.3.0',
+    },
     createdAt: daqui20min,
     updatedAt: daqui20min,
   },
@@ -71,6 +80,8 @@ describe('Frota', () => {
     expect(screen.getByText('482913')).toBeInTheDocument(); // código do não-pareado
     expect(screen.getByText('Aguardando')).toBeInTheDocument();
     expect(screen.getByText('Pareado')).toBeInTheDocument(); // o d2
+    // telemetria: d2 tem heartbeat recente → Online
+    expect(screen.getByText('Online')).toBeInTheDocument();
   });
 
   it('cadastra um totem e mostra o código de 6 dígitos', async () => {

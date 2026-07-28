@@ -8,6 +8,7 @@ import { Prisma, type Dispositivo } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CreateDispositivoDto } from './dto/create-dispositivo.dto';
+import { HeartbeatDto } from './dto/heartbeat.dto';
 
 /** Validade do código de pareamento (uso único). */
 const CODIGO_TTL_MS = 15 * 60 * 1000; // 15 min
@@ -25,6 +26,8 @@ const DISPOSITIVO_SELECT = {
   codigoPareamento: true,
   codigoExpiraEm: true,
   ativo: true,
+  ultimoHeartbeat: true,
+  ultimoStatus: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DispositivoSelect;
@@ -190,5 +193,24 @@ export class DispositivoService {
 
       return { token, nome: dispositivo.nome };
     });
+  }
+
+  /**
+   * Heartbeat do totem (device-authed): grava o "sinal de vida" + o estado
+   * reportado. Roda sob o contexto de tenant do dispositivo (o middleware
+   * escopa a linha por tenant); o `id` garante que atualiza a própria linha.
+   */
+  async heartbeat(
+    deviceId: string,
+    status: HeartbeatDto,
+  ): Promise<{ ok: true }> {
+    await this.prisma.dispositivo.update({
+      where: { id: deviceId },
+      data: {
+        ultimoHeartbeat: new Date(),
+        ultimoStatus: { ...status } as Prisma.InputJsonValue,
+      },
+    });
+    return { ok: true };
   }
 }
