@@ -175,6 +175,7 @@ export class CatalogoPublicacaoService {
         descricao: p.descricao,
         precoCentavos: p.precoCentavos,
         disponivel: p.disponivel,
+        imagemUrl: p.imagemUrl,
         categoriaId: p.categoriaId,
         externalRefs: p.externalRefs,
         grupos: p.grupos.map((g) => ({
@@ -232,6 +233,7 @@ interface CatalogoSnapshot {
     descricao: string | null;
     precoCentavos: number;
     disponivel: boolean;
+    imagemUrl: string | null;
     categoriaId: string | null;
     externalRefs: Prisma.JsonValue;
     grupos: Array<{

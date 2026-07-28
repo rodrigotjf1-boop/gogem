@@ -10,6 +10,7 @@ import { ProdutoModule } from './produto/produto.module';
 import { ComplementoModule } from './complemento/complemento.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { DispositivoModule } from './dispositivo/dispositivo.module';
+import { MidiaModule } from './midia/midia.module';
 import { RegemImportModule } from './integracoes/regem/regem-import.module';
 import { VendasModule } from './vendas/vendas.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
@@ -29,6 +30,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     ComplementoModule,
     CatalogoModule,
     DispositivoModule,
+    MidiaModule,
     RegemImportModule,
     VendasModule,
   ],

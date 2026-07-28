@@ -106,6 +106,8 @@ model Produto {
   descricao    String?
   precoCentavos Int     @default(0)
   disponivel   Boolean  @default(true)
+  // URL pública da foto do produto (Supabase Storage). Nulo = sem foto.
+  imagemUrl    String?
   // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
   externalRefs Json     @default("[]")
   createdAt    DateTime @default(now())

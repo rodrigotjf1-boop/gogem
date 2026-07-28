@@ -54,6 +54,15 @@ export class CreateProdutoDto {
   disponivel?: boolean;
 
   @ApiProperty({
+    description: 'URL pública da foto do produto (Supabase Storage).',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imagemUrl?: string;
+
+  @ApiProperty({
     description: 'Categoria à qual o produto pertence (opcional).',
     required: false,
   })
