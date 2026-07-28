@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gogem_kiosk/app.dart';
+import 'package:gogem_kiosk/data/api/gogem_api.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_sync.dart';
 import 'package:gogem_kiosk/domain/order/cart.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
-import 'package:gogem_kiosk/domain/order/order_repository.dart';
-import 'db_helper.dart';
+import 'package:gogem_kiosk/domain/order/order_repository.dart'
+    show orderRepositoryProvider;
+import 'package:http/testing.dart';
+import 'fakes.dart';
 import 'fixtures.dart';
 
 /// Ponta a ponta em widget: carrinho → pular CPF → pagar (mock) →
@@ -16,15 +19,21 @@ import 'fixtures.dart';
 void main() {
 
   testWidgets('checkout mock completo', (tester) async {
-    final db = await novaDbMemoria();
-    final repo = OrderRepository(db);
+    final repo = FakeOrderRepository();
     final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
 
     final scope = ProviderScope(
       overrides: [
         menuProvider.overrideWith((ref) async => snap),
-        databaseProvider.overrideWith((ref) async => db),
-        orderRepositoryProvider.overrideWith((ref) async => repo),
+        // Repos em memória (sem sqflite) — senão a query no widget congela o
+        // teste sob o relógio-falso. Ver test/fakes.dart.
+        orderRepositoryProvider.overrideWith((ref) => repo),
+        // A drenagem F6 (unawaited) é disparada no pagamento; API mock offline
+        // evita bater rede real.
+        gogemApiProvider.overrideWithValue(GogemApi(
+            baseUrl: 'http://t/api/v1',
+            bearer: 'jwt',
+            client: MockClient((_) async => throw Exception('offline')))),
       ],
       child: const GogemKioskApp(iniciarSync: false),
     );

@@ -43,8 +43,16 @@ class _ConfirmacaoScreenState extends State<ConfirmacaoScreen>
     final t = Theme.of(context).textTheme;
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        // Rola se o conteúdo (senha gigante + aviso opcional) exceder telas
+        // baixas; centraliza quando cabe. Mantém tudo na árvore (findável).
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
             AnimatedBuilder(
               animation: _print,
               builder: (_, __) => GogemRobot(size: 260, paperExtent: _print.value),
@@ -80,7 +88,10 @@ class _ConfirmacaoScreenState extends State<ConfirmacaoScreen>
               child: const Text('NOVO PEDIDO',
                   style: TextStyle(color: GogemColors.inkDim, fontSize: 18)),
             ),
-          ]),
+                    ]),
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -14,7 +14,7 @@ import 'package:gogem_kiosk/printing/fila_impressao.dart';
 import 'package:gogem_kiosk/printing/printer_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/testing.dart';
-import 'db_helper.dart';
+import 'fakes.dart';
 import 'fixtures.dart';
 
 Future<void> bombear(WidgetTester t, [int n = 8]) async {
@@ -75,9 +75,8 @@ void main() {
   testWidgets(
       'JANELA RESIDUAL — papel acaba após aprovar: pedido salvo, senha na tela, '
       'aviso e cupom na fila de reimpressão', (tester) async {
-    final db = await novaDbMemoria();
-    final repo = OrderRepository(db);
-    final fila = FilaImpressao(db);
+    final repo = FakeOrderRepository();
+    final fila = FakeFilaImpressao();
     final fake = FakeTransport();
     final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
 
@@ -85,8 +84,9 @@ void main() {
       overrides: [
         printerTransportProvider.overrideWithValue(fake),
         menuProvider.overrideWith((ref) async => snap),
-        orderRepositoryProvider.overrideWith((ref) async => repo),
-        filaImpressaoProvider.overrideWith((ref) async => fila),
+        // Repos em memória (sem sqflite) — ver test/fakes.dart.
+        orderRepositoryProvider.overrideWith((ref) => repo),
+        filaImpressaoProvider.overrideWith((ref) => fila),
         // API offline determinística: a drenagem F6 disparada no pagamento
         // falha rápido e o pedido permanece pendente (asserção abaixo).
         gogemApiProvider.overrideWithValue(GogemApi(
@@ -109,10 +109,14 @@ void main() {
     expect(find.text('PAGAMENTO'), findsOneWidget);
 
     // portões passam; o papel acaba DEPOIS do pré-check da impressão
+    // 8 leituras nos dois portões (tela + pagar) + a consulta do imprimir
+    // (4 leituras: printer/offline/error/paper). O papel precisa "acabar" ANTES
+    // da última leitura (paper, a 12ª) para que o status consolidado do imprimir
+    // já reporte SEM PAPEL — daí o cupom vai para a fila e aparece o aviso.
     var lidas = 0;
     fake.aposLeitura = () {
       lidas++;
-      if (lidas >= 12) fake.semPapel = true; // 4 (portão tela) + 4 (portão pagar) + 4 (pré-impressão)
+      if (lidas >= 11) fake.semPapel = true;
     };
     await tester.tap(find.byKey(const ValueKey('forma-debito')));
     await bombear(tester, 3); // spinner
