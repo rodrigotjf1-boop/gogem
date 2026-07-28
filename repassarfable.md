@@ -1,45 +1,57 @@
-# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-27)
+# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28)
 
 > **Leia esta seção primeiro** (a partir da linha divisória vem o handoff amplo antigo).
 > PR **#17** (`feat/kiosk-completo`) — app do totem F1–F6 + `packages/escpos`.
-> Jobs `admin`, `escpos` e `lint` **verdes**; job **Kiosk (Flutter)** ainda vermelho.
+> Apliquei seu patch dos 17 arquivos + validei com o SDK (flutter/dart) aqui e
+> empurrei. **Dê `git pull` antes de mexer.** Jobs `admin`, `escpos`, `lint` **verdes**.
+> Job **Kiosk**: caiu de ~8 falhas para **2** (ambas widget-level e **pré-existentes**,
+> já falhavam antes do seu patch). Não consigo iterar nelas aqui (o sandbox não roda
+> teste de widget Flutter — compila > timeout), então voltam pra você que roda local.
 
-### ✅ Já corrigi (commit 733095f, na sua branch — dê `git pull` antes de mexer)
-**`apps/kiosk/lib/printing/fila_impressao.dart` — a fila de reimpressão não persistia.**
-`enfileirar` gravava o cupom como `List<int>` cru numa coluna `BLOB`; o sqflite só binda
-bytes como `Uint8List` → estourava `Invalid sql argument type 'List<int>'`. Efeito real no
-totem: **toda** reimpressão falhava (justo o diferencial nº1 — não perder o pedido pago
-quando falta papel). No CI isso derrubava `fila_impressao_test`, `admin_panel_test`,
-`venda_sync`, `printer_gates` e gerava **timeouts de 10 min** (a exceção deixava async
-pendente → job de ~40 min). Fix: `'cupom': Uint8List.fromList(cupom)`. A leitura
-(`admin_panel_screen`) já esperava `Uint8List` (que é `List<int>`), então fica coerente.
-Verificado local: `flutter analyze` limpo + `test/fila_impressao_test.dart` verde.
+### ✅ Verde agora (confirmado no CI, com seu patch + meus ajustes)
+`descanso_navegacao` (2), `catalog_sync` (4), `produto_screen`, `printer_gates`,
+`fila_impressao`, `catalog_repository`, `order_repository`, `venda_sync`, `cart`,
+`catalog_models`, `order_models`, `hardware_profile`, `moeda`, `recibo`, `robot_painter`,
+e `escpos` (analyze + 9). `flutter analyze --fatal-infos` limpo.
 
-### ❌ Pendente — é seu (comportamento de UI)
-**1) `test/descanso_navegacao_test.dart` — "5 toques no canto abrem o portão admin".**
-Espera `find.text('ACESSO RESTRITO')` após 5 `tapAt(Offset(40,40))`; encontra **0**.
-Em `lib/features/descanso/descanso_screen.dart` o `GestureDetector` de **tela cheia**
-(`onTap: context.go('/catalogo')`, opaque) concorre com o **portão admin** de canto
-(`Positioned(0,0,96,96)` → `_tapAdminCorner` → `context.push('/admin')` no 5º toque). Ou a
-arena premia o detector externo (navega pro catálogo já no 1º toque; toques 2–5 caem no
-catálogo), ou o `/admin` não renderiza `ACESSO RESTRITO`/os `k0..k9` dentro de 800x600.
-Escolha conforme sua UX: fazer o canto **vencer** o toque (ex.: `onTapDown` no canto, ou
-excluir a região do canto do `onTap` externo, ou tirar o portão da subárvore do GD externo);
-se o `/admin` abre mas estoura layout, o keypad `GridView` k0..k9 precisa caber (envolver em
-`SingleChildScrollView`/`shrinkWrap`). **Harness:** a tela tem `AnimationController.repeat()`
-— nunca `pumpAndSettle`; `pump(Duration)` fixo (já anotado no topo do teste).
+**Ajustes que precisei fazer além do seu patch** (todos verificados; commit na branch):
+- `test/db_helper.dart`: `novaDbMemoria` com `:memory:` + `singleInstance:false`. Sua forma
+  `mode=memory&cache=private` isolava mas quebrava a persistência entre operações do mesmo
+  teste (o `catalog_sync` offline-first depende de salvar e reler o snapshot).
+- `test/catalog_sync_test.dart`: os mocks das respostas com acento precisavam de
+  `content-type: application/json; charset=utf-8` — senão o body vira latin1 e o
+  `utf8.decode` do cliente estoura. Só passava antes por vazamento do banco compartilhado;
+  o isolamento (correto) do `novaDbMemoria` expôs o bug do mock.
+- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` não cabia as 4 linhas
+  do keypad em 600px; como o `GridView` é **lazy**, as teclas da linha cortada nem eram
+  construídas e os `find.byKey('k$n')` falhavam. Achatei p/ **2.8** + enxuguei espaçamentos.
+- `test/descanso_navegacao_test.dart`: `setUp(() => router.go('/descanso'))` — o `router` é
+  singleton global; sem reset o 1º teste terminava em `/catalogo` e o 2º começava lá.
+- `dart fix --apply`: imports órfãos de `kiosk_database` nos testes migrados + 2 lints.
 
-**2) Teste com `Expected: <2> / Actual: <3>`** (no log do CI, antes das stacks da fila) —
-uma contagem quebrou (provável `catalogo_screen_test`/`checkout_flow_test`: espera 2, há 3).
-Rode local e ajuste teste **ou** código conforme a intenção. O CI aponta o arquivo.
+### ❌ Faltam 2 (widget-level, pré-existentes — precisam de você rodando local)
 
-**3) Rode o job Kiosk do #17** depois do meu fix e confirme o placar — o esperado é sobrar só
-(1) e (2). Se algum teste de impressão ainda cair, me chame (tenho o SDK e sirvo de gate).
+**1) `test/admin_panel_test.dart` — TRAVA (TimeoutException 10 min).**
+O 1º teste ("teste de impressora … drena a fila") pendura por 10 min; arrasta o job todo.
+Já falhava antes do patch (o hang NÃO era da fila — meu fix da fila resolveu os *outros*
+timeouts, mas este continua). O `FakeTransport` responde a status (o `escpos/driver_test`
+usa `FakeTransport()`+`imprimir` e passa), então o `await` que nunca completa está no fluxo
+Riverpod da `AdminPanelScreen`: suspeito de `_refrescar()` (postFrame) → `vendaSyncProvider`
+(NÃO overridado no teste, roda o real) ou do `printerHealthProvider` observado no `build`
+(pode subir timer/health-check). Peço: rode `flutter test test/admin_panel_test.dart`
+localmente, veja qual `await` pendura (instrumente com print), e ou overrida `vendaSyncProvider`
+no teste, ou dê um caminho fake/rápido pro que ele espera. Sem hang, o teste deve passar.
+
+**2) `test/catalogo_screen_test.dart` — "lista categorias e produtos do snapshot local".**
+Só o 1º teste falha (o "estado vazio" passa). É asserção de renderização: confira contra o
+`publicadoFixture`/`CatalogoScreen` qual `find.text` não bate — candidatos: `'R$ 29,90'`
+(espaço normal vs NBSP do `formatCentavos`), `'BURGERS'`/`'Mister Burguer'`, ou a troca de
+categoria (`tap('BEBIDAS')` → `'Refri Lata'`). Também já falhava antes do patch.
 
 ### Gate de pré-voo (antes de empurrar)
-`cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`
-(use `withAlpha`/`Color` const); sem `pumpAndSettle` com `.repeat()`; tap dentro de 800x600;
-1 commit pt-BR; **não** faça merge com o job do kiosk vermelho.
+`cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`;
+sem `pumpAndSettle` com `.repeat()`; tap dentro de 800x600; 1 commit pt-BR; **não** faça merge
+com o job do kiosk vermelho. Quando fechar os 2, me chame que confiro e a gente mescla.
 
 ---
 
