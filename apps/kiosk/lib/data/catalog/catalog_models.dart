@@ -90,6 +90,7 @@ class Produto {
     required this.descricao,
     required this.precoCentavos,
     required this.disponivel,
+    required this.imagemUrl,
     required this.externalRefs,
     required this.grupos,
   });
@@ -99,6 +100,9 @@ class Produto {
   final String descricao;
   final int precoCentavos;
   final bool disponivel;
+
+  /// URL pública da foto (Supabase Storage) ou `null` quando não há foto.
+  final String? imagemUrl;
   final List<ExternalRef> externalRefs;
   final List<GrupoComplemento> grupos;
 
@@ -111,12 +115,19 @@ class Produto {
         descricao: '${j['descricao'] ?? ''}',
         precoCentavos: _int(j['precoCentavos']),
         disponivel: _bool(j['disponivel']),
+        imagemUrl: _urlOuNull(j['imagemUrl'] ?? j['imagem_url']),
         externalRefs: ExternalRef.listFrom(j['externalRefs']),
         grupos: [
           for (final g in (j['grupos'] as List? ?? const []).whereType<Map>())
             GrupoComplemento.fromJson(g)
         ],
       );
+}
+
+/// Normaliza a URL da imagem: string não-vazia → ela mesma; senão `null`.
+String? _urlOuNull(dynamic v) {
+  final s = v?.toString().trim() ?? '';
+  return s.isEmpty ? null : s;
 }
 
 class Categoria {

@@ -5,6 +5,7 @@ import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
+import 'produto_imagem.dart';
 
 /// Catálogo (Fatia 2): categorias + produtos do snapshot LOCAL (SQLite),
 /// com selo de estado do sync. O fluxo de pedido (carrinho/complementos)
@@ -93,12 +94,13 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                       child: produtos.isEmpty
                           ? const _Vazio(titulo: 'Nada disponível nesta categoria')
                           : GridView.builder(
+                              padding: const EdgeInsets.only(bottom: 16),
                               gridDelegate:
                                   const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 420,
-                                mainAxisExtent: 128,
-                                mainAxisSpacing: 14,
-                                crossAxisSpacing: 14,
+                                maxCrossAxisExtent: 320,
+                                mainAxisExtent: 288,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
                               ),
                               itemCount: produtos.length,
                               itemBuilder: (_, i) => _ProdutoCard(p: produtos[i]),
@@ -121,44 +123,76 @@ class _ProdutoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    const raio = 18.0;
     return InkWell(
       key: ValueKey('prod-tap-${p.id}'),
       onTap: () => context.push('/produto/${p.id}'),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(raio),
       child: Container(
-      key: ValueKey('prod-${p.id}'),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: GogemColors.panel,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: GogemColors.line),
-      ),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        key: ValueKey('prod-${p.id}'),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: GogemColors.panel,
+          borderRadius: BorderRadius.circular(raio),
+          border: Border.all(color: GogemColors.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Flexible(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(p.nome,
-                        style: t.titleLarge,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    if (p.descricao.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(p.descricao,
-                            style: t.bodyMedium,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
+            // Vitrine: a foto ocupa o topo e puxa a vontade de consumir.
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ProdutoImagem(url: p.imagemUrl),
+                  // Preço em selo, legível sobre qualquer foto.
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: GogemColors.cheese,
+                        borderRadius: BorderRadius.circular(999),
                       ),
-                  ]),
+                      child: Text(
+                        formatCentavos(p.precoCentavos),
+                        style: const TextStyle(
+                          fontFamily: 'Tektur',
+                          fontWeight: FontWeight.w600,
+                          fontSize: 18,
+                          color: Color(0xFF1A1206),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Text(formatCentavos(p.precoCentavos),
-                style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
-          ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(p.nome,
+                      style: t.titleLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                  if (p.descricao.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(p.descricao,
+                          style: t.bodyMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
