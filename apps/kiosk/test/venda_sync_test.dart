@@ -4,19 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/data/api/gogem_api.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_sync.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
 import 'package:gogem_kiosk/domain/order/venda_sync.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 Future<(ProviderContainer, OrderRepository)> montar(http.Client client) async {
-  sqfliteFfiInit();
-  final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-  await KioskDatabase.ensureSchema(db);
+  final db = await novaDbMemoria();
   final repo = OrderRepository(db);
   final c = ProviderContainer(overrides: [
     orderRepositoryProvider.overrideWith((ref) async => repo),

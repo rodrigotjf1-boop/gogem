@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/app.dart';
+import 'package:gogem_kiosk/core/router.dart';
 
 /// NOTA DE HARNESS: a tela de descanso tem animações em loop
 /// (AnimationController.repeat) — NUNCA usar pumpAndSettle com ela na árvore;
 /// usar pumps de duração fixa. Viewport do teste é 800x600: todo tap deve
 /// mirar um finder ou coordenada dentro desses limites.
 void main() {
+  // O `router` é um singleton global: sem resetar, o 1º teste termina em
+  // /catalogo e o 2º começa lá (não em /descanso) → o gesto de canto cai na
+  // tela errada. Reset garante que cada teste parte do descanso.
+  setUp(() => router.go('/descanso'));
+
   testWidgets('descanso -> toque abre catálogo', (tester) async {
     await tester.pumpWidget(
         const ProviderScope(child: GogemKioskApp(iniciarSync: false)));

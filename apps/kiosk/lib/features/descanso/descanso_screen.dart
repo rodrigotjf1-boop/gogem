@@ -41,7 +41,7 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
     _lastTap = now;
     if (++_adminTaps >= 5) {
       _adminTaps = 0;
-      context.push('/admin');
+      context.go('/admin');
     }
   }
 
@@ -56,13 +56,15 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
     return Scaffold(
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: bloqueado ? null : () => context.go('/catalogo'),
+        onTapDown: (d) {
+          // canto sup. esquerdo (96x96) = portão admin, tem prioridade
+          if (d.localPosition.dx < 96 && d.localPosition.dy < 96) {
+            _tapAdminCorner();
+            return;
+          }
+          if (!bloqueado) context.go('/catalogo');
+        },
         child: Stack(children: [
-          // portão admin invisível (canto sup. esquerdo)
-          Positioned(
-            left: 0, top: 0, width: 96, height: 96,
-            child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: _tapAdminCorner),
-          ),
           Center(
             child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
               AnimatedBuilder(
@@ -131,13 +133,6 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
                   Text('por favor, dirija-se ao balcao', style: t.bodyMedium),
                 ]),
               ),
-            ),
-          // portão admin continua acessível mesmo bloqueado
-          if (bloqueado)
-            Positioned(
-              left: 0, top: 0, width: 96, height: 96,
-              child: GestureDetector(
-                  behavior: HitTestBehavior.opaque, onTap: _tapAdminCorner),
             ),
         ]),
       ),

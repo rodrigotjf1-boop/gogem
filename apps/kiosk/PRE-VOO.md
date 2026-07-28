@@ -21,3 +21,11 @@ Regras aprendidas (não repetir):
 3. **Viewport do harness é 800x600:** taps por coordenada devem caber nele;
    preferir `tester.tap(find...)` a `tapAt` sempre que possível.
 4. Qualquer warning novo do analyze = corrigir antes do PR, não suprimir.
+5. **`.fold(0, ...)` é PROIBIDO** — sempre `.fold<int>(0, ...)` (o analyzer
+   estrito infere `num` e quebra na atribuição a `int`).
+6. **Teste com SQLite ffi: NUNCA `inMemoryDatabasePath` direto** — ele
+   compartilha a mesma base entre testes (estado vaza, contagens acumulam).
+   Usar `novaDbMemoria()` de `test/db_helper.dart` (path único por teste).
+7. **Assert de bytes ESC/POS: nunca filtrar por `c >= 0x20`** — parâmetros de
+   comandos (ESC @, ESC t, ESC a) são imprimíveis e contaminam a saída. Usar
+   `String.fromCharCodes(bytes)` + `contains(sequência exata)`.

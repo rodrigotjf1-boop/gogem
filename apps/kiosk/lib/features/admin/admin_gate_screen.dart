@@ -48,17 +48,22 @@ class _AdminGateScreenState extends State<AdminGateScreen> {
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
-          const SizedBox(height: 32),
+          const SizedBox(height: 12),
           Text('ACESSO RESTRITO', style: t.headlineMedium),
           const SizedBox(height: 8),
           Text('•' * _typed.length, style: t.displayLarge),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           Expanded(
             child: GridView.count(
               crossAxisCount: 3,
-              padding: const EdgeInsets.symmetric(horizontal: 80),
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              // achata p/ as 4 linhas (10 teclas) caberem COM FOLGA em 600px —
+              // senão o GridView (lazy) não constrói as teclas da linha cortada
+              // e os finders byKey('k$n') falham.
+              childAspectRatio: 2.8,
+              physics: const NeverScrollableScrollPhysics(),
               children: [
                 for (final n in _keys)
                   FilledButton(
@@ -72,7 +77,7 @@ class _AdminGateScreenState extends State<AdminGateScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(12),
             child: TextButton(
               onPressed: () => context.go('/descanso'),
               child: const Text('VOLTAR', style: TextStyle(color: GogemColors.inkDim)),

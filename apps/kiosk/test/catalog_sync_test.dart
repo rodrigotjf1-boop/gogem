@@ -4,17 +4,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/data/api/gogem_api.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_repository.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_sync.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 ProviderContainer containerCom(http.Client client) {
   sqfliteFfiInit();
   final repoFut = () async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     return CatalogRepository(db);
   }();
   return ProviderContainer(overrides: [
@@ -43,10 +42,14 @@ void main() {
     final c = containerCom(MockClient((req) async {
       chamadas++;
       if (chamadas == 1) {
-        return http.Response(jsonEncode(publicadoFixture), 200);
+        // charset utf-8: o corpo tem acentos; sem isso o body vira latin1 e o
+        // utf8.decode do cliente estoura (como faz um servidor real).
+        return http.Response(jsonEncode(publicadoFixture), 200,
+            headers: {'content-type': 'application/json; charset=utf-8'});
       }
       expect(req.url.queryParameters['desde'], '3'); // manda a versão local
-      return http.Response(jsonEncode({'atualizado': false}), 200);
+      return http.Response(jsonEncode({'atualizado': false}), 200,
+          headers: {'content-type': 'application/json; charset=utf-8'});
     }));
     final n = c.read(catalogSyncProvider.notifier);
     await n.sincronizar();
@@ -59,7 +62,10 @@ void main() {
     var chamadas = 0;
     final c = containerCom(MockClient((req) async {
       chamadas++;
-      if (chamadas == 1) return http.Response(jsonEncode(publicadoFixture), 200);
+      if (chamadas == 1) {
+        return http.Response(jsonEncode(publicadoFixture), 200,
+            headers: {'content-type': 'application/json; charset=utf-8'});
+      }
       throw Exception('sem rede');
     }));
     final n = c.read(catalogSyncProvider.notifier);

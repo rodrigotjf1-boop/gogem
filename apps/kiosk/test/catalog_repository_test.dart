@@ -1,15 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_repository.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 void main() {
   late CatalogRepository repo;
-  setUpAll(() => sqfliteFfiInit());
   setUp(() async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     repo = CatalogRepository(db);
   });
 

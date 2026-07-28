@@ -5,21 +5,18 @@ import 'package:go_router/go_router.dart';
 import 'package:gogem_kiosk/app.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_sync.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:gogem_kiosk/domain/order/cart.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 /// Ponta a ponta em widget: carrinho → pular CPF → pagar (mock) →
 /// confirmação com senha → carrinho limpo → pedido na fila local.
 void main() {
-  setUpAll(() => sqfliteFfiInit());
 
   testWidgets('checkout mock completo', (tester) async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     final repo = OrderRepository(db);
     final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
 

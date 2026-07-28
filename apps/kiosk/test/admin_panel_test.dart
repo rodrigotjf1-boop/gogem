@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'db_helper.dart';
 import 'package:gogem_escpos/escpos.dart';
 import 'package:gogem_kiosk/core/theme/gogem_theme.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
 import 'package:gogem_kiosk/features/admin/admin_panel_screen.dart';
 import 'package:gogem_kiosk/printing/fila_impressao.dart';
 import 'package:gogem_kiosk/printing/printer_providers.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 Future<void> bombear(WidgetTester t, [int n = 6]) async {
   for (var i = 0; i < n; i++) {
@@ -17,12 +16,10 @@ Future<void> bombear(WidgetTester t, [int n = 6]) async {
 }
 
 void main() {
-  setUpAll(() => sqfliteFfiInit());
 
   testWidgets('painel: teste de impressora escreve no transporte e '
       'reimprimir drena a fila', (tester) async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     final fila = FilaImpressao(db);
     await fila.enfileirar('u1', '001', [0x1B, 0x40, 0x41]);
     final fake = FakeTransport();
@@ -52,8 +49,7 @@ void main() {
   });
 
   testWidgets('reimprimir com SEM PAPEL não remove da fila', (tester) async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     final fila = FilaImpressao(db);
     await fila.enfileirar('u1', '001', [0x1B, 0x40]);
     final fake = FakeTransport()..semPapel = true;

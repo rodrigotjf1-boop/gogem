@@ -6,7 +6,6 @@ import 'package:gogem_kiosk/app.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
 import 'package:gogem_kiosk/data/api/gogem_api.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_sync.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:gogem_kiosk/domain/order/cart.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
@@ -15,7 +14,7 @@ import 'package:gogem_kiosk/printing/fila_impressao.dart';
 import 'package:gogem_kiosk/printing/printer_providers.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/testing.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 Future<void> bombear(WidgetTester t, [int n = 8]) async {
@@ -25,7 +24,6 @@ Future<void> bombear(WidgetTester t, [int n = 8]) async {
 }
 
 void main() {
-  setUpAll(() => sqfliteFfiInit());
 
   testWidgets('PORTÃO 1 — descanso: sem papel => FORA DE OPERAÇÃO e toque bloqueado',
       (tester) async {
@@ -77,8 +75,7 @@ void main() {
   testWidgets(
       'JANELA RESIDUAL — papel acaba após aprovar: pedido salvo, senha na tela, '
       'aviso e cupom na fila de reimpressão', (tester) async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     final repo = OrderRepository(db);
     final fila = FilaImpressao(db);
     final fake = FakeTransport();

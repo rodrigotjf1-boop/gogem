@@ -1,17 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
-import 'package:gogem_kiosk/data/db/kiosk_database.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'db_helper.dart';
 import 'fixtures.dart';
 
 void main() {
-  setUpAll(() => sqfliteFfiInit());
 
   test('senha sequencial 3 dígitos com reset diário', () async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     var dia = DateTime(2026, 7, 25);
     final repo = OrderRepository(db, clock: () => dia);
     expect(await repo.proximaSenha(), '001');
@@ -21,8 +18,7 @@ void main() {
   });
 
   test('salvarPedido entra na fila pendente_envio com o mesmo UUID', () async {
-    final db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
-    await KioskDatabase.ensureSchema(db);
+    final db = await novaDbMemoria();
     final repo = OrderRepository(db);
     final menu = MenuSnapshot.fromPublicadoJson(publicadoFixture);
     final pedido = PedidoLocal(
