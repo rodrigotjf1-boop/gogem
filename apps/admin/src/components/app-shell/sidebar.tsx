@@ -7,7 +7,7 @@ const NAV_ITEMS = [
   { to: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { to: '/importar', label: 'Importar', icon: Download },
   { to: '/publicar', label: 'Publicar', icon: UploadCloud },
-  { to: '/frota', label: 'Frota', icon: Radio },
+  { to: '/frota', label: 'Auto atendimentos', icon: Radio },
 ] as const;
 
 export function Sidebar() {

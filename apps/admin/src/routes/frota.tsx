@@ -35,7 +35,7 @@ export default function FrotaPage() {
     <section className="mx-auto max-w-4xl space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Frota</h1>
+          <h1 className="text-2xl font-bold">Auto atendimentos</h1>
           <p className="text-sm text-muted-foreground">
             Cadastre cada totem e pareie por código (6 dígitos, 15 min). O totem
             troca o código por um token próprio — sem depender de login.
