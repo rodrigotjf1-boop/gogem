@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'db_helper.dart';
 import 'package:gogem_escpos/escpos.dart';
 import 'package:gogem_kiosk/core/theme/gogem_theme.dart';
-import 'package:gogem_kiosk/data/catalog/catalog_sync.dart' show databaseProvider;
 import 'package:gogem_kiosk/domain/order/order_repository.dart';
 import 'package:gogem_kiosk/features/admin/admin_panel_screen.dart';
 import 'package:gogem_kiosk/printing/fila_impressao.dart';
@@ -23,22 +21,47 @@ Future<void> consumirSnackbar(WidgetTester t) async {
   await t.pump();
 }
 
-void main() {
+/// Fila em MEMÓRIA (Dart puro), sem sqflite. Queries reais de sqflite disparadas
+/// de dentro de um widget PENDURAM o widget test (a resposta do banco não é
+/// processada sob o relógio-falso do TestWidgetsFlutterBinding). Os fakes abaixo
+/// preservam a semântica do teste e mantêm tudo síncrono/em memória.
+class _FakeFila implements FilaImpressao {
+  final List<Map<String, Object?>> _rows = [];
+  @override
+  Future<void> enfileirar(String uuid, String senha, List<int> cupom) async {
+    _rows.add({'uuid': uuid, 'senha': senha, 'cupom': cupom, 'tentativas': 0});
+  }
 
+  @override
+  Future<int> pendentes() async => _rows.length;
+  @override
+  Future<List<Map<String, Object?>>> listar() async => List.of(_rows);
+  @override
+  Future<void> remover(String uuid) async =>
+      _rows.removeWhere((r) => r['uuid'] == uuid);
+}
+
+/// OrderRepository fake: o painel só lê `pendentes()` (via vendaSync). O resto
+/// da interface não é exercido neste teste → `noSuchMethod`.
+class _FakeOrder implements OrderRepository {
+  @override
+  Future<int> pendentes() async => 0;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+void main() {
   testWidgets('painel: teste de impressora escreve no transporte e '
       'reimprimir drena a fila', (tester) async {
-    final db = await novaDbMemoria();
-    final fila = FilaImpressao(db);
+    final fila = _FakeFila();
     await fila.enfileirar('u1', '001', [0x1B, 0x40, 0x41]);
     final fake = FakeTransport();
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
         printerTransportProvider.overrideWithValue(fake),
-        databaseProvider.overrideWith((ref) async => db),
-        filaImpressaoProvider.overrideWith((ref) async => fila),
-        orderRepositoryProvider
-            .overrideWith((ref) async => OrderRepository(db)),
+        filaImpressaoProvider.overrideWith((ref) => fila),
+        orderRepositoryProvider.overrideWith((ref) => _FakeOrder()),
       ],
       child: MaterialApp(theme: gogemTheme(), home: const AdminPanelScreen()),
     ));
@@ -48,11 +71,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('acao-teste-imp')));
     await bombear(tester);
     await consumirSnackbar(tester);
-    expect(
-        String.fromCharCodes(fake.tudoEscrito.where((c) => c >= 0x20)),
+    expect(String.fromCharCodes(fake.tudoEscrito.where((c) => c >= 0x20)),
         contains('TESTE DE IMPRESSORA'));
 
-    await tester.ensureVisible(find.byKey(const ValueKey('acao-reimprimir')));
+    // A ListView é lazy: o botão fica abaixo da dobra em 800x600 e não é
+    // construído até rolarmos até ele (ensureVisible exige o elemento já na
+    // árvore; scrollUntilVisible constrói+rola).
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('acao-reimprimir')), 120,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const ValueKey('acao-reimprimir')));
     await bombear(tester);
     await consumirSnackbar(tester);
@@ -60,23 +87,25 @@ void main() {
   });
 
   testWidgets('reimprimir com SEM PAPEL não remove da fila', (tester) async {
-    final db = await novaDbMemoria();
-    final fila = FilaImpressao(db);
+    final fila = _FakeFila();
     await fila.enfileirar('u1', '001', [0x1B, 0x40]);
     final fake = FakeTransport()..semPapel = true;
 
     await tester.pumpWidget(ProviderScope(
       overrides: [
         printerTransportProvider.overrideWithValue(fake),
-        databaseProvider.overrideWith((ref) async => db),
-        filaImpressaoProvider.overrideWith((ref) async => fila),
-        orderRepositoryProvider
-            .overrideWith((ref) async => OrderRepository(db)),
+        filaImpressaoProvider.overrideWith((ref) => fila),
+        orderRepositoryProvider.overrideWith((ref) => _FakeOrder()),
       ],
       child: MaterialApp(theme: gogemTheme(), home: const AdminPanelScreen()),
     ));
     await bombear(tester);
-    await tester.ensureVisible(find.byKey(const ValueKey('acao-reimprimir')));
+    // A ListView é lazy: o botão fica abaixo da dobra em 800x600 e não é
+    // construído até rolarmos até ele (ensureVisible exige o elemento já na
+    // árvore; scrollUntilVisible constrói+rola).
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('acao-reimprimir')), 120,
+        scrollable: find.byType(Scrollable).first);
     await tester.tap(find.byKey(const ValueKey('acao-reimprimir')));
     await bombear(tester);
     await consumirSnackbar(tester);

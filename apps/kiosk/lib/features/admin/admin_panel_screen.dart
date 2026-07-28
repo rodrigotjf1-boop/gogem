@@ -97,8 +97,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
       body: SafeArea(
         child: ListView(padding: const EdgeInsets.all(24), children: [
           Row(children: [
-            Text('PAINEL DO TOTEM', style: t.headlineMedium),
-            const Spacer(),
+            Expanded(
+              child: Text('PAINEL DO TOTEM',
+                  style: t.headlineMedium, overflow: TextOverflow.ellipsis),
+            ),
             TextButton(
               key: const ValueKey('voltar-totem'),
               onPressed: () => context.go('/descanso'),

@@ -1,56 +1,38 @@
-# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28, pós-17b)
+# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28, TUDO VERDE 🎉)
 
 > **Leia esta seção primeiro** (a partir da linha divisória vem o handoff amplo antigo).
-> PR **#17** (`feat/kiosk-completo`). Apliquei seu patch **17b** (5 arquivos) + validei com
-> o SDK e empurrei. **Dê `git pull` antes de mexer.** Jobs `admin`, `escpos`, `lint` **verdes**.
-> Seu 17b **fechou o `catalogo_screen`** ✅. Sobra **1 falha**: `admin_panel_test` (trava).
-> Não consigo iterar nela aqui — o sandbox congela em widget test de db (detalhe abaixo).
+> PR **#17** (`feat/kiosk-completo`). Apliquei seu patch **17b**, validei com o SDK e
+> **fechei a última falha (`admin_panel_test`) eu mesmo** — a suíte inteira do kiosk passa
+> local. **Dê `git pull` antes de mexer.** (Aguardando o CI confirmar p/ mesclar.)
 
-### ✅ Verde (confirmado local/CI, com seu patch + meus ajustes)
-`catalogo_screen` (2, seu 17b), `descanso_navegacao` (2), `catalog_sync` (4), `produto_screen`,
-`printer_gates`, `fila_impressao`, `catalog_repository`, `order_repository`, `venda_sync`,
-`cart`, `catalog_models`, `order_models`, `hardware_profile`, `moeda`, `recibo`, `robot_painter`,
-`escpos` (analyze + 9). `flutter analyze --fatal-infos` limpo.
+### ✅ Verde — suíte kiosk inteira + escpos + analyze `--fatal-infos` limpo.
 
-**Ajustes meus além do patch** (verificados; na branch):
-- `test/catalog_sync_test.dart`: os mocks com acento precisavam de
-  `content-type: application/json; charset=utf-8` — senão o body vira latin1 e o `utf8.decode`
-  do cliente estoura. Só passava antes por vazamento do banco compartilhado; o isolamento do
-  `novaDbMemoria` (seu, correto) expôs o bug do mock. **Este era o real motivo do `catalog_sync`.**
-- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` não cabia as 4 linhas do
-  keypad em 600px; `GridView` é **lazy** → teclas da linha cortada nem eram construídas e os
-  `find.byKey('k$n')` falhavam. Achatei p/ **2.8** + enxuguei espaçamentos.
-- `test/descanso_navegacao_test.dart`: `setUp(() => router.go('/descanso'))` — o `router` é
-  singleton global; sem reset o 1º teste terminava em `/catalogo` e o 2º começava lá.
-- `db_helper.dart` está no SEU original (`mode=memory&cache=private`); mantive.
-- `dart fix --apply`: imports órfãos + 1 unnecessary_import.
+**O que eu resolvi no `admin_panel_test` (a causa que te repassei era esta):** o teste travava
+porque exercitava **sqflite real de dentro de um widget** — sob o relógio-falso do
+`TestWidgetsFlutterBinding`, a query nunca completa e congela o event loop (nem `.timeout`
+dispara). Fix, como combinado (opção "não usar sqflite no widget test"):
+- `test/admin_panel_test.dart`: `FilaImpressao`/`OrderRepository` viram **fakes em memória Dart
+  pura** (`implements` + `noSuchMethod`), overrides **síncronos** (`(ref) => fake`), sem `db`/
+  `novaDbMemoria`/`databaseProvider`. Zero sqflite no widget test → sem freeze.
+- `lib/features/admin/admin_panel_screen.dart`: (1) header `Row` com o título em `Expanded`
+  (+`ellipsis`) — tirei o overflow em 800x600; (2) o teste usa `scrollUntilVisible` p/ o
+  `acao-reimprimir` (a `ListView` é lazy e o botão fica abaixo da dobra).
 
-### ❌ Falta 1 — `test/admin_panel_test.dart` TRAVA (event loop congela)
+**Regra nova pro PRE-VOO (vale o registro):** *widget test NÃO deve tocar sqflite real —
+mockar os repositórios com fakes em memória Dart; senão a query pendura o teste sob o
+relógio-falso.* (Sua regra 8 apontava a direção; o detalhe é que overridar `databaseProvider`
+não basta — o repo ainda roda sqflite. Tem que trocar o repo por um fake.)
 
-**Diagnóstico (instrumentei com log em ARQUIVO, que sobrevive ao kill):** o freeze é no
-`_refrescar()` (postFrame) exatamente em **`await ref.read(orderRepositoryProvider.future)`**
-dentro de `VendaSyncNotifier.atualizarContagem()` — o `.future` NUNCA resolve. E o
-`ref.read(filaImpressaoProvider.future)` logo antes (override IDÊNTICO, `(ref) async => x`)
-resolve normal. Não é await de rede: é um **congelamento síncrono** — pus `.timeout(4s)` nos
-awaits e **o timeout nem dispara** (nem timers rodam).
-
-**O que já DESCARTEI** (cada um custou uma rodada, então não repita):
-- Não é a fila (meu `Uint8List.fromList` já corrige).
-- Não é o `FakeTransport`/impressão (`escpos/driver_test` usa e passa).
-- Não é o `printerHealthProvider` (build só retorna `const`, não sobe timer).
-- Não é o factory de isolate: troquei `databaseFactoryFfi` → `databaseFactoryFfiNoIsolate`, **igual trava**.
-- Não é `:memory:` vs `cache=private`: **trava nos dois**.
-- Stubei o `vendaSyncProvider` (fake notifier com `atualizarContagem` no-op) → **ainda trava**
-  (o freeze migra pro fluxo de tap: `_reimprimirFila`/`fila.listar` — tudo db em widget test).
-
-**Conclusão / direção:** é a interação **`sqflite` (ffi) + `TestWidgetsFlutterBinding`**: queries
-disparadas de dentro do widget, sob o relógio-falso do teste, não completam. `sqflite`
-funciona nos testes de UNIDADE (order/catalog_repository passam), mas **quebra em WIDGET test**.
-Direção que eu tentaria com você rodando: (a) **não usar sqflite real no widget test** — mockar
-`FilaImpressao`/`OrderRepository` (fakes em memória Dart puro, sem sqflite) nos overrides, OU
-(b) envolver as interações que tocam db em `tester.runAsync(() async {...})` (roda em async real,
-fora do relógio-falso). A (a) é mais limpa e alinha com a sua regra 8. Rode, e se fechar me chama
-que a gente mescla o #17 verde.
+**Outros ajustes meus além do patch** (verificados):
+- `test/catalog_sync_test.dart`: mocks com acento precisavam de
+  `content-type: application/json; charset=utf-8` (senão latin1 → `utf8.decode` estoura). **Era
+  o real motivo do `catalog_sync`**, não a persistência do banco.
+- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` → **2.8** (keypad `GridView`
+  lazy não construía as teclas cortadas em 600px).
+- `test/descanso_navegacao_test.dart`: `setUp(() => router.go('/descanso'))` (router é singleton
+  global; sem reset o 2º teste começava em `/catalogo`).
+- `db_helper.dart` mantido no SEU original (`mode=memory&cache=private`).
+- `dart fix --apply`: imports órfãos.
 
 ### Gate de pré-voo (antes de empurrar)
 `cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`;
