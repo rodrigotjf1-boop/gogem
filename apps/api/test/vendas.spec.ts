@@ -97,7 +97,9 @@ describe('VendasService.registrarVendaTotem — relay de sucesso', () => {
     expect(regem.lancarVendaExterna).toHaveBeenCalledTimes(1);
     const body = regem.lancarVendaExterna.mock.calls[0][0];
     expect(body.plataforma).toBe('GoGeM Totem');
-    expect(body.senhaPlataforma).toBe(42);
+    // Contrato do Regem: senha em STRING e valor em REAIS (não centavos).
+    expect(body.senhaPlataforma).toBe('42');
+    expect(body.pagamentos[0].valor).toBe(59.8); // 5980 centavos → 59.80
     expect(body.idempotencyKey).toBe('idem-1');
 
     // Grava enviado com o resultado do Regem.
@@ -112,6 +114,22 @@ describe('VendasService.registrarVendaTotem — relay de sucesso', () => {
       total: 5980,
       nfce: { status: 'autorizada' },
     });
+  });
+
+  it('sem senhaLocal → senhaPlataforma omitida (não vira "undefined"/0)', async () => {
+    const { service, prisma, regem } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pedido.create.mockResolvedValue({ id: 'p-1' });
+    prisma.pedido.update.mockResolvedValue({});
+    regem.lancarVendaExterna.mockResolvedValue({
+      comandaId: 'cmd-1',
+      senha: 1,
+    });
+
+    await service.registrarVendaTotem(CTX, dto({ senhaLocal: undefined }));
+
+    const body = regem.lancarVendaExterna.mock.calls[0][0];
+    expect(body.senhaPlataforma).toBeUndefined();
   });
 
   it('grava o dispositivoId do contexto (não do body)', async () => {

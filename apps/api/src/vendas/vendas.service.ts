@@ -11,6 +11,14 @@ import { VendaTotemDto } from './dto/venda-totem.dto';
 const PLATAFORMA = 'GoGeM Totem';
 
 /**
+ * Converte centavos inteiros → reais decimais com 2 casas (formato do fio do
+ * Regem, que compara `somaPag` com o total em reais). Ex.: 2990 → 29.9.
+ */
+function centavosParaReais(centavos: number): number {
+  return Math.round(centavos) / 100;
+}
+
+/**
  * Contexto do dispositivo autenticado (do DeviceTokenGuard, via `@DeviceCtx()`).
  * Só usamos `deviceId` aqui; `tenantId` é aplicado pelo middleware do Prisma.
  */
@@ -116,11 +124,20 @@ export class VendasService {
       resposta = await this.regem.lancarVendaExterna({
         idempotencyKey: dto.idempotencyKey,
         itens: dto.itens,
-        pagamentos: dto.pagamentos,
+        // Borda de saída: o Regem espera REAIS decimais e senha em string
+        // (o GoGeM guarda tudo em centavos/inteiro internamente).
+        pagamentos: dto.pagamentos.map((p) => ({
+          forma: p.forma,
+          valor: centavosParaReais(p.valor),
+          nsu: p.nsu,
+          autorizacao: p.autorizacao,
+          formaPagamentoId: p.formaPagamentoId,
+        })),
         cpf: dto.cpf,
         taxaServicoPct: dto.taxaServicoPct,
         plataforma: PLATAFORMA,
-        senhaPlataforma: dto.senhaLocal,
+        senhaPlataforma:
+          dto.senhaLocal != null ? String(dto.senhaLocal) : undefined,
       });
     } catch (err) {
       const motivo = err instanceof Error ? err.message : String(err);
