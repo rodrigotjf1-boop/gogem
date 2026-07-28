@@ -54,6 +54,7 @@ export class ProdutoService {
       descricao: dto.descricao,
       precoCentavos: dto.precoCentavos,
       disponivel: dto.disponivel ?? true,
+      imagemUrl: dto.imagemUrl ?? null,
       categoriaId: dto.categoriaId,
       externalRefs: normalizeRefs(dto.externalRefs),
     } satisfies Omit<Prisma.ProdutoUncheckedCreateInput, 'tenantId'>;
@@ -75,6 +76,7 @@ export class ProdutoService {
         descricao: dto.descricao,
         precoCentavos: dto.precoCentavos,
         disponivel: dto.disponivel,
+        imagemUrl: dto.imagemUrl,
         categoriaId: dto.categoriaId,
         externalRefs:
           dto.externalRefs === undefined
