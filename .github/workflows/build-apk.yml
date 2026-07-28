@@ -1,0 +1,72 @@
+name: Build APK (totem)
+
+# Gera o APK do totem (app Flutter) sob demanda, sem precisar de SDK Android
+# local. Dispare em Actions → "Build APK (totem)" → Run workflow, informando a
+# URL da API publicada e um JWT de gestor (temporário, vale ~12h — até o
+# pareamento de dispositivo existir). Baixe o APK nos "Artifacts" do run.
+#
+# Os Tinker Board S são ARM 32-bit → instale o `app-armeabi-v7a-release.apk`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'URL base da API (ex.: https://api.gogem.com.br/api/v1)'
+        required: true
+        default: 'https://api.gogem.com.br/api/v1'
+      dev_jwt:
+        description: 'JWT de gestor (login na API → access_token). Temporário (~12h).'
+        required: true
+
+jobs:
+  apk:
+    name: Flutter build apk (release, split-per-abi)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/kiosk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        run: flutter pub get
+
+      # As pastas de plataforma não são versionadas (ver ci.yml): geramos o
+      # scaffold Android on-demand. Não toca em lib/ nem em pubspec.
+      - name: Gerar projeto Android
+        run: flutter create --platforms=android --org com.dms.gogem .
+
+      # `flutter create` NÃO declara INTERNET no manifesto principal (só nos de
+      # debug/profile). Sem isso o APK de release não alcança a API. Injeta a
+      # permissão como filha de <manifest>, antes de <application>.
+      - name: Permitir acesso à internet (release)
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$MANIFEST"
+          fi
+          grep -n 'INTERNET' "$MANIFEST"
+
+      - name: Build APK (armeabi-v7a + arm64)
+        run: >-
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64
+          --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
+          --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }}
+
+      - name: Publicar APKs como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gogem-totem-apk
+          path: apps/kiosk/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
