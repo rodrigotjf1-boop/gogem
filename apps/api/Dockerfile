@@ -1,6 +1,13 @@
 # apps/api/Dockerfile — build da API GoGeM no monorepo pnpm.
 # Contexto de build = RAIZ do repo. No EasyPanel: "Dockerfile path" = apps/api/Dockerfile.
-FROM node:20-alpine AS base
+#
+# Base Debian (slim), NÃO Alpine: no Alpine o Prisma não detecta a libssl e o
+# schema/migration engine quebra ("Could not parse schema engine response").
+# Debian tem OpenSSL 3.0 e o Prisma funciona out-of-the-box (+ openssl explícito).
+FROM node:20-slim AS base
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /app
 
@@ -15,7 +22,11 @@ RUN pnpm install --frozen-lockfile --filter @gogem/api... \
  && pnpm -F @gogem/api run build \
  && pnpm prune --prod
 
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
+# openssl também no runtime: o `prisma migrate deploy` do CMD roda aqui.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
