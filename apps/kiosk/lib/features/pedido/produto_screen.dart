@@ -5,6 +5,7 @@ import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
+import '../catalogo/produto_imagem.dart';
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 
@@ -70,6 +71,17 @@ class _ProdutoScreenState extends ConsumerState<ProdutoScreen> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               children: [
+                if (p.imagemUrl != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: ProdutoImagem(
+                        url: p.imagemUrl,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
                 if (p.descricao.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
