@@ -15,8 +15,9 @@ on:
         required: true
         default: 'https://api.gogem.com.br/api/v1'
       dev_jwt:
-        description: 'JWT de gestor (login na API → access_token). Temporário (~12h).'
-        required: true
+        description: 'OPCIONAL: JWT de gestor p/ pular o pareamento (dev). Em produção deixe VAZIO — o totem pareia no 1º boot (Frota).'
+        required: false
+        default: ''
 
 jobs:
   apk:

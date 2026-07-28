@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../core/config/app_config.dart';
+import '../../core/pareamento/device_token.dart';
 import '../api/gogem_api.dart';
 import '../db/kiosk_database.dart';
 import 'catalog_models.dart';
@@ -40,7 +41,10 @@ final catalogRepositoryProvider = FutureProvider<CatalogRepository>((ref) async 
 
 final gogemApiProvider = Provider<GogemApi>((ref) {
   final cfg = ref.watch(appConfigProvider);
-  return GogemApi(baseUrl: cfg.apiUrl, bearer: cfg.devJwt);
+  // Prefere o token de dispositivo (pareado) sobre o JWT de dev.
+  final deviceToken = ref.watch(deviceTokenProvider).token;
+  return GogemApi(
+      baseUrl: cfg.apiUrl, bearer: cfg.devJwt, deviceToken: deviceToken);
 });
 
 /// Cardápio corrente (recarrega quando a versão do sync muda).

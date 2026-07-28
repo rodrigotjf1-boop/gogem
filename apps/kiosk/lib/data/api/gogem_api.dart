@@ -21,19 +21,50 @@ class GogemApiException implements Exception {
   String toString() => 'GogemApiException($status): $mensagem';
 }
 
-/// Cliente HTTP do GoGeM. Auth temporária por JWT de dev (AppConfig) até o
-/// pareamento de dispositivo (§7.1) existir — trocar então por token de device.
+/// Cliente HTTP do GoGeM.
+///
+/// Auth: quando o totem está pareado, envia `X-Device-Token` (token de
+/// dispositivo, NÃO expira). Sem pareamento, cai no `Bearer <devJwt>` do
+/// AppConfig (ponte de dev/staging). O backend aceita os dois (JwtOrDeviceGuard).
 class GogemApi {
-  GogemApi({required this.baseUrl, required this.bearer, http.Client? client})
-      : _client = client ?? http.Client();
+  GogemApi({
+    required this.baseUrl,
+    required this.bearer,
+    this.deviceToken,
+    http.Client? client,
+  }) : _client = client ?? http.Client();
   final String baseUrl;
   final String bearer;
+
+  /// Token de dispositivo (pareamento). Preferido sobre o JWT quando presente.
+  final String? deviceToken;
   final http.Client _client;
 
   Map<String, String> get _headers => {
         'Accept': 'application/json',
-        if (bearer.isNotEmpty) 'Authorization': 'Bearer $bearer',
+        if (deviceToken != null && deviceToken!.isNotEmpty)
+          'X-Device-Token': deviceToken!
+        else if (bearer.isNotEmpty)
+          'Authorization': 'Bearer $bearer',
       };
+
+  /// POST /publico/dispositivos/parear — troca o código de 6 dígitos por um
+  /// token de dispositivo (endpoint público, sem auth). Retorna o token.
+  Future<String> parear(String codigo) async {
+    final uri = Uri.parse('$baseUrl/publico/dispositivos/parear');
+    final res = await _client
+        .post(uri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'codigo': codigo}))
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final b = jsonDecode(utf8.decode(res.bodyBytes));
+      final token = (b is Map ? b['token'] : null) as String?;
+      if (token != null && token.isNotEmpty) return token;
+      throw GogemApiException(200, 'resposta de pareamento sem token');
+    }
+    throw GogemApiException(res.statusCode, res.body);
+  }
 
   /// GET /catalogo/publicado?desde=<versao>
   /// `desde >= versão atual` → `{atualizado:false}` (checagem barata).

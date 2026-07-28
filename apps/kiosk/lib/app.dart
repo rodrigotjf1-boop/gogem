@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/pareamento/device_token.dart';
 import 'core/router.dart';
 import 'core/theme/gogem_theme.dart';
 import 'data/catalog/catalog_sync.dart';
@@ -19,6 +20,9 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
     super.initState();
     if (widget.iniciarSync) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Resolve o pareamento (token salvo ou JWT de dev) → destrava o portão
+        // do router; sem isso o app fica no descanso (carregando) até parear.
+        ref.read(deviceTokenProvider.notifier).carregar();
         ref.read(catalogSyncProvider.notifier).iniciarAgendador();
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();
       });
