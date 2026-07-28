@@ -75,26 +75,26 @@ No admin (local ou hospedado):
 
 Na aba **Actions** do GitHub → workflow **"Build APK (totem)"** → **Run workflow**:
 - `api_url`: `https://api.gogem.com.br/api/v1`
-- `dev_jwt`: um JWT de gestor (veja §5)
+- `dev_jwt`: **deixe VAZIO** (o totem pareia no 1º boot — §5). *(Só preencha com
+  um JWT de gestor se quiser pular o pareamento num teste de dev.)*
 
 Ao terminar, baixe o artifact **`gogem-totem-apk`**. Os Tinker Board S são
 **ARM 32-bit** → use o **`app-armeabi-v7a-release.apk`**.
 
 ---
 
-## 5. JWT do totem (temporário)
+## 5. Parear o totem (token de dispositivo — não expira)
 
-O app se autentica com um JWT de gestor **injetado no build** (ponte até o
-pareamento de dispositivo existir). Para obtê-lo:
-```bash
-curl -X POST https://api.gogem.com.br/api/v1/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"<gestor>","senha":"<senha>"}'
-# copie o campo "access_token"
-```
-> ⚠️ **Esse JWT expira em ~12h.** Serve para uma sessão de teste; se expirar,
-> gere outro e rebuild o APK. A solução definitiva (token de dispositivo que não
-> expira) é a **frente de pareamento** — ver "Próximas frentes".
+Sem JWT no build, o totem abre na **tela de pareamento** no 1º boot. O fluxo:
+
+1. No admin → **Frota** → **Novo totem** → dê um nome → aparece um **código de
+   6 dígitos** (vale **15 min**).
+2. No totem, digite esse código na tela de pareamento → **PAREAR**.
+3. O totem recebe um **token de dispositivo** (guardado no aparelho, **não
+   expira**) e cai direto no descanso. Não precisa mais de login.
+
+> Gerenciar depois: em **Frota** você vê o status (Aguardando/Pareado), pode
+> **revogar** (o token para de valer na hora) ou **reparear** (novo código).
 
 ---
 
@@ -115,7 +115,8 @@ curl -X POST https://api.gogem.com.br/api/v1/auth/login \
 2. Instale o APK:
    - via ADB (do seu PC): `adb install -r app-armeabi-v7a-release.apk`
    - ou copie o `.apk` para o totem (pen drive/rede) e abra para instalar.
-3. Abra o **GoGeM**.
+3. Abra o **GoGeM** → na 1ª vez cai na **tela de pareamento** → digite o código
+   da **Frota** (§5) → **PAREAR**.
    > O **modo quiosque** (launcher próprio / Device Owner) é provisionamento do
    > device, à parte — para **testar o fluxo**, abrir o app manualmente basta.
 
@@ -134,10 +135,9 @@ curl -X POST https://api.gogem.com.br/api/v1/auth/login \
 
 ## Próximas frentes (para o piloto ficar redondo)
 
-- **Pareamento de dispositivo** — o totem troca um código por um **token que não
-  expira** (backend pronto; falta a tela no kiosk + gerar o código no admin/Frota).
-  Elimina a dependência do JWT de 12h.
-- **Frota** (admin PR E) — listar totens, status/telemetria, gerar código de
-  pareamento, ligar/desligar módulos.
+- ✅ **Pareamento de dispositivo** — feito (token de dispositivo que não expira;
+  tela no kiosk + código na Frota).
+- **Frota — telemetria** — hoje a Frota faz cadastro/pareamento/revogar; falta
+  o heartbeat/status ao vivo (papel, fila, versão) dos totens.
 - **Modo quiosque** — launcher + watchdog (legado) / Device Owner (hardware novo).
 - **TEF/fiscal** — hardware + homologação (fora do piloto de fluxo).
