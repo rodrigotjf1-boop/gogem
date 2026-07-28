@@ -1,0 +1,11 @@
+name: gogem_escpos
+description: "Driver ESC/POS do GoGeM (Epson TM-T88 e compativeis): status ASB/DLE EOT, gestao de papel e builder de cupom"
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.2
+  lints: ^4.0.0

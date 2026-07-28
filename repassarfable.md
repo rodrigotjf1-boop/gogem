@@ -1,3 +1,46 @@
+# Repasse ao Fable — Kiosk PR #17 (atualizado 2026-07-28, TUDO VERDE 🎉)
+
+> **Leia esta seção primeiro** (a partir da linha divisória vem o handoff amplo antigo).
+> PR **#17** (`feat/kiosk-completo`). Apliquei seu patch **17b**, validei com o SDK e
+> **fechei a última falha (`admin_panel_test`) eu mesmo** — a suíte inteira do kiosk passa
+> local. **Dê `git pull` antes de mexer.** (Aguardando o CI confirmar p/ mesclar.)
+
+### ✅ Verde — suíte kiosk inteira + escpos + analyze `--fatal-infos` limpo.
+
+**O que eu resolvi no `admin_panel_test` (a causa que te repassei era esta):** o teste travava
+porque exercitava **sqflite real de dentro de um widget** — sob o relógio-falso do
+`TestWidgetsFlutterBinding`, a query nunca completa e congela o event loop (nem `.timeout`
+dispara). Fix, como combinado (opção "não usar sqflite no widget test"):
+- `test/admin_panel_test.dart`: `FilaImpressao`/`OrderRepository` viram **fakes em memória Dart
+  pura** (`implements` + `noSuchMethod`), overrides **síncronos** (`(ref) => fake`), sem `db`/
+  `novaDbMemoria`/`databaseProvider`. Zero sqflite no widget test → sem freeze.
+- `lib/features/admin/admin_panel_screen.dart`: (1) header `Row` com o título em `Expanded`
+  (+`ellipsis`) — tirei o overflow em 800x600; (2) o teste usa `scrollUntilVisible` p/ o
+  `acao-reimprimir` (a `ListView` é lazy e o botão fica abaixo da dobra).
+
+**Regra nova pro PRE-VOO (vale o registro):** *widget test NÃO deve tocar sqflite real —
+mockar os repositórios com fakes em memória Dart; senão a query pendura o teste sob o
+relógio-falso.* (Sua regra 8 apontava a direção; o detalhe é que overridar `databaseProvider`
+não basta — o repo ainda roda sqflite. Tem que trocar o repo por um fake.)
+
+**Outros ajustes meus além do patch** (verificados):
+- `test/catalog_sync_test.dart`: mocks com acento precisavam de
+  `content-type: application/json; charset=utf-8` (senão latin1 → `utf8.decode` estoura). **Era
+  o real motivo do `catalog_sync`**, não a persistência do banco.
+- `lib/features/admin/admin_gate_screen.dart`: `childAspectRatio 2.2` → **2.8** (keypad `GridView`
+  lazy não construía as teclas cortadas em 600px).
+- `test/descanso_navegacao_test.dart`: `setUp(() => router.go('/descanso'))` (router é singleton
+  global; sem reset o 2º teste começava em `/catalogo`).
+- `db_helper.dart` mantido no SEU original (`mode=memory&cache=private`).
+- `dart fix --apply`: imports órfãos.
+
+### Gate de pré-voo (antes de empurrar)
+`cd apps/kiosk && flutter analyze --fatal-infos && flutter test` — sem `withOpacity`/`withValues`;
+sem `pumpAndSettle` com `.repeat()`; tap dentro de 800x600; 1 commit pt-BR; **não** faça merge
+com o job do kiosk vermelho. Quando fechar os 2, me chame que confiro e a gente mescla.
+
+---
+
 # Repasse técnico — GoGeM (handoff para o Fable)
 
 > Documento de repasse do **GoGeM by DMS** (plataforma de autoatendimento/totem).

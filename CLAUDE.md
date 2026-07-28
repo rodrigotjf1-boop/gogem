@@ -52,6 +52,18 @@ O contrato de integração (auth de serviço, catálogo por `codigo_pdv`, lança
 - **Auth de serviço**: o Regem não tem `client_credentials`; o encaixe é o token de dispositivo (`X-Sync-Token`). Evoluir para client-credentials na API pública (S12).
 - **Lançamento de venda paga por `codigo_pdv`** é a lacuna #1 do piloto (L-VEN-1) — endpoint novo no Regem, adaptador fino sobre o fluxo externo existente.
 
+## Kiosk (Flutter) — pré-voo obrigatório antes de qualquer PR
+Código do kiosk/escpos gerado sem SDK no ambiente é **pré-validado só por análise estática**; o gate executável é `apps/kiosk/PRE-VOO.md`, rodado onde há SDK (máquina local / Claude Code / CI):
+```bash
+cd packages/escpos && dart pub get && dart analyze && dart test
+cd apps/kiosk && flutter pub get && flutter analyze --fatal-infos && flutter test
+```
+Regras aprendidas (inegociáveis):
+1. **Cor:** nunca `withOpacity` (deprecado no stable novo) nem `withValues` (inexistente em stables antigos) — usar `withAlpha(...)` p/ alfa dinâmico e `Color(0xAARRGGBB)` const p/ alfa fixo.
+2. **`pumpAndSettle` PROIBIDO** em teste com `AnimationController.repeat`/spinner na árvore — usar `tester.pump(Duration(...))` em passos fixos.
+3. **Viewport do harness = 800×600:** taps por coordenada dentro disso; preferir `tester.tap(find...)` a `tapAt`.
+4. Warning novo do analyze = corrigir antes do PR, nunca suprimir.
+
 ## O que NÃO fazer
 - Não usar bibliotecas de UI pesadas no kiosk (2GB RAM); nada de WebView para o fluxo principal.
 - Não acoplar o app a uma integradora TEF: tudo via `packages/payment` (contrato `PaymentProvider`).

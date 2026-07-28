@@ -60,12 +60,38 @@ jobs:
       - name: Test
         run: pnpm -F @gogem/admin run test
 
-  # Placeholder — habilitar quando apps/kiosk (Flutter) tiver código (S3).
-  # kiosk:
-  #   name: Flutter analyze
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: subosito/flutter-action@v2
-  #       with: { channel: stable }
-  #     - run: cd apps/kiosk && flutter pub get && flutter analyze
+  escpos:
+    name: ESC/POS (Dart) — analyze + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/escpos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - name: Pub get
+        run: dart pub get
+      - name: Analyze
+        run: dart analyze
+      - name: Test
+        run: dart test
+
+  kiosk:
+    name: Kiosk (Flutter) — analyze + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/kiosk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      # Testes de widget/unidade não exigem as pastas de plataforma
+      # (android/windows são geradas com `flutter create .` na máquina do dev).
+      - name: Pub get
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+      - name: Test
+        run: flutter test

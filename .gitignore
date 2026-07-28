@@ -16,7 +16,7 @@ out/
 *.key
 
 # Flutter / kiosk
-apps/kiosk/.dart_tool/
+**/.dart_tool/
 apps/kiosk/build/
 apps/kiosk/.flutter-plugins*
 apps/kiosk/android/.gradle/
