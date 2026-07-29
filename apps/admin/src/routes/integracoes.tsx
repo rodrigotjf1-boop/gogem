@@ -15,6 +15,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePodeEscrever } from '@/auth/auth-context';
+import { useCardapios } from '@/lib/cardapios';
 import { mensagemDeErro, type ImportResumo } from '@/lib/publicacao';
 import {
   useImportarConector,
@@ -74,17 +75,25 @@ function ConectorCard({
 }) {
   const [aberto, setAberto] = React.useState(false);
   const importar = useImportarConector();
+  const { data: cardapios } = useCardapios();
+  const [destino, setDestino] = React.useState('');
   const [resumo, setResumo] = React.useState<ImportResumo | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
 
   const podeImportar =
     integracao.disponivel && integracao.importaCatalogo && integracao.ativo;
+  const multiCardapio = (cardapios?.length ?? 0) > 1;
 
   async function onImportar() {
     setErro(null);
     setResumo(null);
     try {
-      setResumo(await importar.mutateAsync(integracao.tipo));
+      setResumo(
+        await importar.mutateAsync({
+          tipo: integracao.tipo,
+          cardapioId: destino || undefined,
+        }),
+      );
     } catch (e) {
       setErro(mensagemDeErro(e));
     }
@@ -131,24 +140,43 @@ function ConectorCard({
             Configurar
           </Button>
           {integracao.importaCatalogo && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onImportar}
-              disabled={!podeImportar || importar.isPending || !podeEscrever}
-              title={
-                podeImportar
-                  ? undefined
-                  : 'Configure e ative a integração para importar.'
-              }
-            >
-              {importar.isPending ? (
-                <Loader2 className="animate-spin" aria-hidden />
-              ) : (
-                <Download aria-hidden />
+            <>
+              {multiCardapio && podeImportar && podeEscrever && (
+                <select
+                  aria-label="Cardápio de destino da importação"
+                  value={destino}
+                  onChange={(e) => setDestino(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Cardápio ativo</option>
+                  {cardapios!
+                    .filter((c) => !c.ativo)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        → {c.nome}
+                      </option>
+                    ))}
+                </select>
               )}
-              Importar catálogo
-            </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onImportar}
+                disabled={!podeImportar || importar.isPending || !podeEscrever}
+                title={
+                  podeImportar
+                    ? undefined
+                    : 'Configure e ative a integração para importar.'
+                }
+              >
+                {importar.isPending ? (
+                  <Loader2 className="animate-spin" aria-hidden />
+                ) : (
+                  <Download aria-hidden />
+                )}
+                Importar catálogo
+              </Button>
+            </>
           )}
         </div>
 

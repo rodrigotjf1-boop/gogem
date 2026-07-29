@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, Plug, Radio, UploadCloud } from 'lucide-react';
+import { BookOpen, Layers, Plug, Radio, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { GogemMark } from '@/components/brand/gogem-mark';
 
 const NAV_ITEMS = [
+  { to: '/cardapios', label: 'Cardápios', icon: Layers },
   { to: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { to: '/integracoes', label: 'Integrações', icon: Plug },
   { to: '/publicar', label: 'Publicar', icon: UploadCloud },

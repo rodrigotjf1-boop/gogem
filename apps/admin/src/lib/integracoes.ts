@@ -84,7 +84,9 @@ export function useTestarIntegracao() {
 
 export function useImportarConector() {
   return useMutation({
-    mutationFn: (tipo: string) =>
-      apiPost<ImportResumo>(`/integracoes/${tipo}/importar`),
+    mutationFn: ({ tipo, cardapioId }: { tipo: string; cardapioId?: string }) =>
+      apiPost<ImportResumo>(`/integracoes/${tipo}/importar`, undefined, {
+        params: cardapioId ? { cardapioId } : undefined,
+      }),
   });
 }
