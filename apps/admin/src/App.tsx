@@ -7,6 +7,7 @@ import LoginPage from '@/routes/login';
 import RegistroPage from '@/routes/registro';
 import CatalogoPage from '@/routes/catalogo';
 import CardapiosPage from '@/routes/cardapios';
+import ConfiguracoesPage from '@/routes/configuracoes';
 import IntegracoesPage from '@/routes/integracoes';
 import PublicarPage from '@/routes/publicar';
 import FrotaPage from '@/routes/frota';
@@ -38,6 +39,7 @@ export default function App() {
                 element={<Navigate to="/integracoes" replace />}
               />
               <Route path="/publicar" element={<PublicarPage />} />
+              <Route path="/configuracoes" element={<ConfiguracoesPage />} />
               <Route path="/frota" element={<FrotaPage />} />
             </Route>
 
