@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUploadImagem } from '@/lib/catalogo';
+import { mensagemDeErro } from '@/lib/publicacao';
 
 /** Limite espelhado do backend (POST /midia): 5 MB, imagens comuns. */
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -44,8 +45,9 @@ export function ImageUploadTile({
     }
     try {
       onChange(await upload.mutateAsync(arquivo));
-    } catch {
-      setErro('Não foi possível subir a imagem. Tente novamente.');
+    } catch (err) {
+      // Mostra o motivo real do servidor (ex.: storage não configurado).
+      setErro(mensagemDeErro(err));
     }
   }
 

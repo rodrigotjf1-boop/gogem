@@ -24,6 +24,12 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token) {
     config.headers.set('Authorization', `Bearer ${token}`);
   }
+  // Upload multipart: remove o Content-Type padrão (application/json) para o
+  // axios/browser definir `multipart/form-data` COM boundary. Sem isto, o
+  // arquivo não chega ao servidor (o upload de imagem falha silenciosamente).
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    config.headers.delete('Content-Type');
+  }
   return config;
 });
 
