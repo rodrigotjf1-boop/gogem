@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Aparencia } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardapioService } from '../cardapio/cardapio.service';
+import { AparenciaService } from '../aparencia/aparencia.service';
 
 /** Totais do catálogo publicado (retornados no publicar). */
 export interface PublicarTotais {
@@ -35,6 +36,7 @@ export class CatalogoPublicacaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cardapios: CardapioService,
+    private readonly aparencia: AparenciaService,
   ) {}
 
   /**
@@ -104,12 +106,13 @@ export class CatalogoPublicacaoService {
    * sync do totem é um follow-up — TODO trocar o guard quando existir.
    */
   async getPublicado(desde?: number): Promise<
-    | { versao: number; atualizado: false }
+    | { versao: number; atualizado: false; aparencia: Aparencia }
     | {
         versao: number;
         publishedAt: Date;
         snapshot: Prisma.JsonValue;
         atualizado: true;
+        aparencia: Aparencia;
       }
   > {
     const latest = await this.prisma.menuVersion.findFirst({
@@ -120,14 +123,18 @@ export class CatalogoPublicacaoService {
         'Nenhuma versão do catálogo publicada ainda.',
       );
     }
+    // A aparência é LIVE (por loja): vai em toda resposta do sync — inclusive
+    // quando o catálogo não mudou — para o totem re-tematizar sem re-publicar.
+    const aparencia = await this.aparencia.obter();
     if (desde !== undefined && desde >= latest.versao) {
-      return { versao: latest.versao, atualizado: false };
+      return { versao: latest.versao, atualizado: false, aparencia };
     }
     return {
       versao: latest.versao,
       publishedAt: latest.publishedAt,
       snapshot: latest.snapshot,
       atualizado: true,
+      aparencia,
     };
   }
 

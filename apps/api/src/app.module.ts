@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { CardapioModule } from './cardapio/cardapio.module';
+import { AparenciaModule } from './aparencia/aparencia.module';
 import { CategoriaModule } from './categoria/categoria.module';
 import { ProdutoModule } from './produto/produto.module';
 import { ComplementoModule } from './complemento/complemento.module';
@@ -28,6 +29,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     HealthModule,
     AuthModule,
     CardapioModule,
+    AparenciaModule,
     CategoriaModule,
     ProdutoModule,
     ComplementoModule,

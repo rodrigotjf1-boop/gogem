@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogoPublicacaoService } from '../src/catalogo/catalogo-publicacao.service';
 import type { CardapioService } from '../src/cardapio/cardapio.service';
+import type { AparenciaService } from '../src/aparencia/aparencia.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 function makeService() {
@@ -18,11 +19,16 @@ function makeService() {
   };
   // Cardápio ativo resolvido para 'card-1' (Fase 3B).
   const cardapios = { ativoId: vi.fn().mockResolvedValue('card-1') };
+  // Aparência do tenant (Fase 6) — vai junto no /catalogo/publicado.
+  const aparencia = {
+    obter: vi.fn().mockResolvedValue({ id: 'ap-1', corPrimaria: '#FFC24B' }),
+  };
   const service = new CatalogoPublicacaoService(
     prisma as unknown as PrismaService,
     cardapios as unknown as CardapioService,
+    aparencia as unknown as AparenciaService,
   );
-  return { service, prisma, cardapios };
+  return { service, prisma, cardapios, aparencia };
 }
 
 /** Rascunho de exemplo: 2 categorias, 1 produto com 1 grupo de 2 opções. */
@@ -199,6 +205,7 @@ describe('CatalogoPublicacaoService — publicado / versoes', () => {
       publishedAt,
       snapshot: { geradoEm: 'x', categorias: [], produtos: [] },
       atualizado: true,
+      aparencia: { id: 'ap-1', corPrimaria: '#FFC24B' },
     });
     expect(prisma.menuVersion.findFirst).toHaveBeenCalledWith({
       orderBy: { versao: 'desc' },
@@ -214,7 +221,11 @@ describe('CatalogoPublicacaoService — publicado / versoes', () => {
     });
 
     const res = await service.getPublicado(7);
-    expect(res).toEqual({ versao: 7, atualizado: false });
+    expect(res).toEqual({
+      versao: 7,
+      atualizado: false,
+      aparencia: { id: 'ap-1', corPrimaria: '#FFC24B' },
+    });
     expect('snapshot' in res).toBe(false);
   });
 
