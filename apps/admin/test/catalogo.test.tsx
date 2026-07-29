@@ -194,12 +194,9 @@ describe('Catálogo — criar categoria', () => {
     );
     montarLogado('gerente');
 
-    // Vai para a aba Categorias.
-    fireEvent.click(await screen.findByRole('tab', { name: 'Categorias' }));
-
-    // Abre o formulário (há dois CTAs "Nova categoria": header + estado vazio).
+    // Abre o formulário pela ação "Nova categoria" na coluna de categorias.
     fireEvent.click(
-      (await screen.findAllByRole('button', { name: 'Nova categoria' }))[0],
+      await screen.findByRole('button', { name: 'Nova categoria' }),
     );
 
     const dialog = await screen.findByRole('dialog');
