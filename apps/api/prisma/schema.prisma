@@ -42,6 +42,7 @@ model Tenant {
   menuVersions       MenuVersion[]
   complementoGrupos  ComplementoGrupo[]
   complementoOpcoes  ComplementoOpcao[]
+  produtoComplementos ProdutoComplemento[]
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
   integracoes        Integracao[]
@@ -144,10 +145,10 @@ model Produto {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-  cardapio  Cardapio?  @relation(fields: [cardapioId], references: [id])
-  categoria Categoria? @relation(fields: [categoriaId], references: [id])
-  grupos    ComplementoGrupo[]
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  cardapio    Cardapio?  @relation(fields: [cardapioId], references: [id])
+  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+  complementos ProdutoComplemento[]
 
   @@index([tenantId])
   @@index([cardapioId])
@@ -155,27 +156,48 @@ model Produto {
   @@map("produtos")
 }
 
-// Grupo de complementos (etapa) de um produto — ex.: "Escolha a bebida".
-// min/max regem a seleção; max nulo = ilimitado. Tenant-scoped (§2).
+// Etapa/complemento REUTILIZÁVEL — ex.: "Escolha a bebida". Deixa de ser presa a
+// um produto (Fase etapas reutilizáveis): a mesma etapa pode ser vinculada a
+// vários produtos via `ProdutoComplemento`. min/max regem a seleção; max nulo =
+// ilimitado. Tenant-scoped (§2). A ORDEM da etapa é por produto (no vínculo).
 model ComplementoGrupo {
   id          String   @id @default(uuid())
   tenantId    String
-  produtoId   String
   nome        String
   min         Int      @default(0)
   max         Int?
   obrigatorio Boolean  @default(false)
-  ordem       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant  Tenant             @relation(fields: [tenantId], references: [id])
-  produto Produto            @relation(fields: [produtoId], references: [id])
-  opcoes  ComplementoOpcao[]
+  tenant   Tenant               @relation(fields: [tenantId], references: [id])
+  opcoes   ComplementoOpcao[]
+  produtos ProdutoComplemento[]
 
   @@index([tenantId])
-  @@index([produtoId])
   @@map("complemento_grupos")
+}
+
+// Vínculo N:N produto ↔ etapa (reutilizável). `ordem` = posição da etapa NESTE
+// produto. Uma etapa aparece no máximo uma vez por produto.
+model ProdutoComplemento {
+  id        String   @id @default(uuid())
+  tenantId  String
+  produtoId String
+  grupoId   String
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [id])
+  produto Produto          @relation(fields: [produtoId], references: [id])
+  grupo   ComplementoGrupo @relation(fields: [grupoId], references: [id])
+
+  @@unique([produtoId, grupoId])
+  @@index([tenantId])
+  @@index([produtoId])
+  @@index([grupoId])
+  @@map("produto_complementos")
 }
 
 // Opção de um grupo de complementos. `precoCentavosDelta` é um delta (inteiro,
@@ -188,6 +210,8 @@ model ComplementoOpcao {
   nome               String
   precoCentavosDelta Int      @default(0)
   disponivel         Boolean  @default(true)
+  // Foto da opção (Supabase Storage). Nulo = sem foto.
+  imagemUrl          String?
   ordem              Int      @default(0)
   // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
   externalRefs       Json     @default("[]")

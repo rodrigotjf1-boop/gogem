@@ -160,10 +160,15 @@ export class CatalogoPublicacaoService {
         where: { cardapioId },
         orderBy: { nome: 'asc' },
         include: {
-          grupos: {
-            orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
+          // Etapas via vínculo (reutilizáveis), na ordem do produto.
+          complementos: {
+            orderBy: { ordem: 'asc' },
             include: {
-              opcoes: { orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] },
+              grupo: {
+                include: {
+                  opcoes: { orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] },
+                },
+              },
             },
           },
         },
@@ -186,18 +191,20 @@ export class CatalogoPublicacaoService {
         imagemUrl: p.imagemUrl,
         categoriaId: p.categoriaId,
         externalRefs: p.externalRefs,
-        grupos: p.grupos.map((g) => ({
-          id: g.id,
-          nome: g.nome,
-          min: g.min,
-          max: g.max,
-          obrigatorio: g.obrigatorio,
-          ordem: g.ordem,
-          opcoes: g.opcoes.map((o) => ({
+        // Shape do totem inalterado: `grupos` (agora resolvidos do vínculo).
+        grupos: p.complementos.map((pc) => ({
+          id: pc.grupo.id,
+          nome: pc.grupo.nome,
+          min: pc.grupo.min,
+          max: pc.grupo.max,
+          obrigatorio: pc.grupo.obrigatorio,
+          ordem: pc.ordem,
+          opcoes: pc.grupo.opcoes.map((o) => ({
             id: o.id,
             nome: o.nome,
             precoCentavosDelta: o.precoCentavosDelta,
             disponivel: o.disponivel,
+            imagemUrl: o.imagemUrl,
             ordem: o.ordem,
             externalRefs: o.externalRefs,
           })),
@@ -205,9 +212,10 @@ export class CatalogoPublicacaoService {
       })),
     };
 
-    const grupos = produtos.reduce((n, p) => n + p.grupos.length, 0);
+    const grupos = produtos.reduce((n, p) => n + p.complementos.length, 0);
     const opcoes = produtos.reduce(
-      (n, p) => n + p.grupos.reduce((m, g) => m + g.opcoes.length, 0),
+      (n, p) =>
+        n + p.complementos.reduce((m, pc) => m + pc.grupo.opcoes.length, 0),
       0,
     );
 
@@ -256,6 +264,7 @@ interface CatalogoSnapshot {
         nome: string;
         precoCentavosDelta: number;
         disponivel: boolean;
+        imagemUrl: string | null;
         ordem: number;
         externalRefs: Prisma.JsonValue;
       }>;

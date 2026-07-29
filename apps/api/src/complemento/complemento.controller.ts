@@ -15,16 +15,13 @@ import { RolesGuard } from '../auth/roles.guard';
 import { ComplementoService } from './complemento.service';
 import { CreateGrupoDto } from './dto/create-grupo.dto';
 import { CreateOpcaoDto } from './dto/create-opcao.dto';
+import { ReordenarDto } from './dto/reordenar.dto';
 import { UpdateGrupoDto } from './dto/update-grupo.dto';
 import { UpdateOpcaoDto } from './dto/update-opcao.dto';
 
 /**
- * Complementos do catálogo (fatia 2b): grupos (etapas) aninhados no produto e
- * suas opções. Todas as rotas exigem autenticação (contexto de tenant).
- * Leitura: qualquer usuário. Escrita: gerente ou acima.
- *
- * Sem prefixo de classe: cada método declara sua rota (produtos/:id/grupos,
- * grupos/:id, grupos/:id/opcoes, opcoes/:id).
+ * Complementos do catálogo — etapas REUTILIZÁVEIS + opções. Leitura: qualquer
+ * usuário autenticado. Escrita: gerente+.
  */
 @ApiTags('catalogo')
 @ApiBearerAuth()
@@ -33,17 +30,17 @@ import { UpdateOpcaoDto } from './dto/update-opcao.dto';
 export class ComplementoController {
   constructor(private readonly complementos: ComplementoService) {}
 
-  // --- Grupos (aninhados no produto) --------------------------------------
+  // --- Etapas de um produto (via vínculo) ---------------------------------
 
   @Get('produtos/:produtoId/grupos')
-  @ApiOkResponse({ description: 'Grupos do produto (com opções), ordenados.' })
+  @ApiOkResponse({ description: 'Etapas vinculadas ao produto (com opções).' })
   listGrupos(@Param('produtoId') produtoId: string) {
     return this.complementos.listGrupos(produtoId);
   }
 
   @Post('produtos/:produtoId/grupos')
   @Roles('gerente')
-  @ApiOkResponse({ description: 'Grupo criado sob o produto.' })
+  @ApiOkResponse({ description: 'Etapa nova criada e vinculada ao produto.' })
   createGrupo(
     @Param('produtoId') produtoId: string,
     @Body() dto: CreateGrupoDto,
@@ -51,25 +48,77 @@ export class ComplementoController {
     return this.complementos.createGrupo(produtoId, dto);
   }
 
+  @Post('produtos/:produtoId/grupos/:grupoId/anexar')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Vincula uma etapa existente (reutilizar).' })
+  anexar(
+    @Param('produtoId') produtoId: string,
+    @Param('grupoId') grupoId: string,
+  ) {
+    return this.complementos.anexar(produtoId, grupoId);
+  }
+
+  @Delete('produtos/:produtoId/grupos/:grupoId')
+  @Roles('gerente')
+  @ApiOkResponse({
+    description: 'Desvincula a etapa do produto (não a apaga).',
+  })
+  desanexar(
+    @Param('produtoId') produtoId: string,
+    @Param('grupoId') grupoId: string,
+  ) {
+    return this.complementos.desanexar(produtoId, grupoId);
+  }
+
+  @Patch('produtos/:produtoId/grupos/:grupoId/ordem')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Reordena a etapa dentro do produto.' })
+  reordenar(
+    @Param('produtoId') produtoId: string,
+    @Param('grupoId') grupoId: string,
+    @Body() dto: ReordenarDto,
+  ) {
+    return this.complementos.reordenar(produtoId, grupoId, dto.ordem);
+  }
+
+  // --- Catálogo de etapas reutilizáveis -----------------------------------
+
+  @Get('complementos')
+  @ApiOkResponse({ description: 'Etapas reutilizáveis do tenant (com usos).' })
+  listReutilizaveis() {
+    return this.complementos.listReutilizaveis();
+  }
+
+  @Post('complementos')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Cria uma etapa reutilizável (sem vincular).' })
+  createReutilizavel(@Body() dto: CreateGrupoDto) {
+    return this.complementos.createReutilizavel(dto);
+  }
+
   @Patch('grupos/:id')
   @Roles('gerente')
-  @ApiOkResponse({ description: 'Grupo atualizado.' })
+  @ApiOkResponse({
+    description: 'Atualiza a etapa (reflete em todos os usos).',
+  })
   updateGrupo(@Param('id') id: string, @Body() dto: UpdateGrupoDto) {
     return this.complementos.updateGrupo(id, dto);
   }
 
   @Delete('grupos/:id')
   @Roles('gerente')
-  @ApiOkResponse({ description: 'Grupo removido (com suas opções).' })
+  @ApiOkResponse({
+    description: 'Exclui a etapa reutilizável (opções+vínculos).',
+  })
   removeGrupo(@Param('id') id: string) {
     return this.complementos.removeGrupo(id);
   }
 
-  // --- Opções (aninhadas no grupo) ----------------------------------------
+  // --- Opções (aninhadas na etapa) ----------------------------------------
 
   @Post('grupos/:grupoId/opcoes')
   @Roles('gerente')
-  @ApiOkResponse({ description: 'Opção criada sob o grupo.' })
+  @ApiOkResponse({ description: 'Opção criada sob a etapa.' })
   createOpcao(@Param('grupoId') grupoId: string, @Body() dto: CreateOpcaoDto) {
     return this.complementos.createOpcao(grupoId, dto);
   }
