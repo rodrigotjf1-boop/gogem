@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { RegemConfigResolver } from './regem-config.resolver';
 
 /**
  * Cliente HTTP de venda do Regem (issue #12.2).
@@ -72,22 +72,16 @@ const FETCH_TIMEOUT_MS = 15_000;
 
 @Injectable()
 export class RegemSalesClient {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly resolver: RegemConfigResolver) {}
 
   /**
-   * Lança a venda de totem no Regem. Lança erro claro quando a config está
-   * ausente ou a resposta não é 2xx (inclui status + corpo).
+   * Lança a venda de totem no Regem (config resolvida por tenant). Lança erro
+   * claro quando a config está ausente ou a resposta não é 2xx (status + corpo).
    */
   async lancarVendaExterna(
     body: RegemVendaExternaBody,
   ): Promise<RegemVendaExternaResposta> {
-    const base = this.config.get<string>('REGEM_API_BASE');
-    const token = this.config.get<string>('REGEM_SYNC_TOKEN');
-    if (!base || !token) {
-      throw new Error(
-        'Integração Regem não configurada: defina REGEM_API_BASE e REGEM_SYNC_TOKEN.',
-      );
-    }
+    const { base, token } = await this.resolver.resolve();
 
     const url = `${base.replace(/\/$/, '')}/vendas/externa-pdv`;
     const controller = new AbortController();

@@ -37,61 +37,97 @@ const RESUMO = {
   opcoes: { criados: 4, atualizados: 0 },
 };
 
+/** Lista de conectores como a API a devolve (segredos mascarados). */
+const INTEGRACOES = [
+  {
+    tipo: 'regem',
+    nome: 'Regem',
+    descricao: 'ERP da família DMS.',
+    disponivel: true,
+    importaCatalogo: true,
+    ativo: true,
+    configurado: true,
+    campos: [
+      { key: 'apiBase', label: 'URL da API', secret: false, url: true, preenchido: true, valor: 'https://api.x/api/v1' },
+      { key: 'token', label: 'Token de sincronização', secret: true, preenchido: true, valor: '••••••••' },
+    ],
+    nomePersonalizado: null,
+    ultimoTeste: null,
+  },
+  {
+    tipo: 'open_delivery',
+    nome: 'Open Delivery',
+    descricao: 'Padrão aberto de delivery.',
+    disponivel: false,
+    importaCatalogo: true,
+    ativo: false,
+    configurado: false,
+    campos: [],
+    nomePersonalizado: null,
+    ultimoTeste: null,
+  },
+];
+
+function comIntegracoes() {
+  server.use(
+    http.get(`${API}/integracoes`, () => HttpResponse.json(INTEGRACOES)),
+  );
+}
+
 beforeEach(() => {
   clearToken();
   queryClient.clear();
 });
 
-describe('Importar do Regem', () => {
-  it('importa e mostra o resumo com criados/atualizados', async () => {
-    server.use(
-      http.post(`${API}/import/regem`, () => HttpResponse.json(RESUMO)),
-    );
-    montar('/importar', 'gerente');
+describe('Integrações', () => {
+  it('lista os conectores (Regem ativo; Open Delivery em breve)', async () => {
+    comIntegracoes();
+    montar('/integracoes', 'gerente');
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Importar do Regem' }),
-    );
-
-    expect(await screen.findByText('Import concluído')).toBeInTheDocument();
-    // produtos: 5 criados / 3 atualizados
-    expect(screen.getByText('Produtos')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
-    expect(
-      screen.getByText(/1 produto\(s\) do Regem foram ignorados/),
-    ).toBeInTheDocument();
+    // "Open Delivery" só existe nos cards (dependente da query), diferente de
+    // "Regem", que também aparece no cabeçalho.
+    expect(await screen.findByText('Open Delivery')).toBeInTheDocument();
+    expect(screen.getByText('Ativo')).toBeInTheDocument();
+    expect(screen.getByText('Em breve')).toBeInTheDocument();
   });
 
-  it('execução não vê o botão de importar', async () => {
-    montar('/importar', 'execucao');
-    expect(
-      await screen.findByText('Apenas gerentes ou acima podem importar.'),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Importar do Regem' }),
-    ).not.toBeInTheDocument();
-  });
-
-  it('erro 400 (Regem não configurado) aparece como alerta', async () => {
+  it('importa o catálogo pelo conector Regem e mostra o resumo', async () => {
+    comIntegracoes();
     server.use(
-      http.post(`${API}/import/regem`, () =>
-        HttpResponse.json(
-          { message: 'Integração Regem não configurada', statusCode: 400 },
-          { status: 400 },
-        ),
+      http.post(`${API}/integracoes/regem/importar`, () =>
+        HttpResponse.json(RESUMO),
       ),
     );
-    montar('/importar', 'gerente');
+    montar('/integracoes', 'gerente');
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Importar do Regem' }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Integração Regem não configurada',
-      );
+    // Regem está ativo → seu botão de importar está habilitado (o do Open
+    // Delivery está desabilitado por ser "em breve").
+    const botoes = await screen.findAllByRole('button', {
+      name: 'Importar catálogo',
     });
+    const habilitado = botoes.find((b) => !(b as HTMLButtonElement).disabled)!;
+    fireEvent.click(habilitado);
+
+    expect(await screen.findByText('Import concluído')).toBeInTheDocument();
+    expect(screen.getByText(/5\+\/3~/)).toBeInTheDocument(); // produtos
+  });
+
+  it('/importar redireciona para a área de Integrações', async () => {
+    comIntegracoes();
+    montar('/importar', 'gerente');
+    expect(
+      await screen.findByRole('heading', { name: 'Integrações' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Open Delivery')).toBeInTheDocument();
+  });
+
+  it('execução vê os cards mas sem poder configurar', async () => {
+    comIntegracoes();
+    montar('/integracoes', 'execucao');
+    const configurar = await screen.findAllByRole('button', {
+      name: 'Configurar',
+    });
+    expect(configurar[0]).toBeDisabled();
   });
 });
 

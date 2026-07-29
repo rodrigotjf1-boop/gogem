@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { RegemConfigResolver, type RegemConfig } from './regem-config.resolver';
 
 /**
  * Cliente HTTP do catálogo do Regem (fatia 3).
  *
  * Puxa o catálogo publicado do Regem por `codigo_pdv` (contrato real do
  * endpoint `GET {REGEM_API_BASE}/sync/catalogo`, autenticado por
- * `X-Sync-Token`). Base e token vêm do ConfigService (`REGEM_API_BASE`,
- * `REGEM_SYNC_TOKEN`). Usa o `fetch` global (Node 20+) com timeout via
- * AbortController.
+ * `X-Sync-Token`). Base e token são resolvidos POR TENANT pelo
+ * `RegemConfigResolver` (Integração do tenant → fallback env). Usa o `fetch`
+ * global (Node 20+) com timeout via AbortController.
  *
  * IMPORTANTE (contrato do Regem): `precoVenda`/`precoDelta` chegam como
  * DECIMAL em reais serializado como string (numeric do Postgres), ex.
@@ -76,21 +76,25 @@ const FETCH_TIMEOUT_MS = 15_000;
 
 @Injectable()
 export class RegemCatalogClient {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly resolver: RegemConfigResolver) {}
 
   /**
-   * Busca o catálogo publicado do Regem. Lança erro claro quando a config
-   * está ausente ou a resposta não é 2xx (inclui o status).
+   * Busca o catálogo publicado do Regem (config resolvida por tenant). Lança
+   * erro claro quando a config está ausente ou a resposta não é 2xx.
    */
   async fetchCatalogo(): Promise<RegemCatalogo> {
-    const base = this.config.get<string>('REGEM_API_BASE');
-    const token = this.config.get<string>('REGEM_SYNC_TOKEN');
-    if (!base || !token) {
-      throw new Error(
-        'Integração Regem não configurada: defina REGEM_API_BASE e REGEM_SYNC_TOKEN.',
-      );
-    }
+    return this.fetchCatalogoWith(await this.resolver.resolve());
+  }
 
+  /**
+   * Igual a `fetchCatalogo`, mas com config explícita — usado pelo "testar
+   * conexão" (que valida credenciais AINDA não ativadas, sem passar pelo
+   * resolver, que só considera integrações ativas).
+   */
+  async fetchCatalogoWith({
+    base,
+    token,
+  }: RegemConfig): Promise<RegemCatalogo> {
     const url = `${base.replace(/\/$/, '')}/sync/catalogo`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
