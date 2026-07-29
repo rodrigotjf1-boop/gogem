@@ -4,7 +4,9 @@ import {
   ListTree,
   Loader2,
   Package,
+  Pause,
   Pencil,
+  Play,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -16,6 +18,7 @@ import { formatarBRL } from '@/lib/money';
 import {
   codigoPdvRegem,
   useCategorias,
+  usePausarProduto,
   useProdutos,
   useRemoverProduto,
   type Produto,
@@ -32,6 +35,7 @@ export function ProdutosPanel() {
     filtroCategoria || undefined,
   );
   const remover = useRemoverProduto();
+  const pausar = usePausarProduto();
 
   const categoriasData = categoriasQuery.data;
   const categorias = React.useMemo(
@@ -206,6 +210,33 @@ export function ProdutosPanel() {
                     {podeEscrever && (
                       <td className="px-4 py-2">
                         <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={
+                              p.disponivel
+                                ? `Pausar ${p.nome}`
+                                : `Despausar ${p.nome}`
+                            }
+                            title={
+                              p.disponivel
+                                ? 'Pausar no totem (propaga ao Regem)'
+                                : 'Despausar'
+                            }
+                            disabled={pausar.isPending}
+                            onClick={() =>
+                              pausar.mutate({
+                                id: p.id,
+                                pausado: p.disponivel,
+                              })
+                            }
+                          >
+                            {p.disponivel ? (
+                              <Pause className="size-4" aria-hidden />
+                            ) : (
+                              <Play className="size-4 text-primary" aria-hidden />
+                            )}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"

@@ -6,6 +6,7 @@ import {
 import { Prisma, type Produto } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardapioService } from '../cardapio/cardapio.service';
+import { RegemPauseClient } from '../integracoes/regem/regem-pause.client';
 import { CreateProdutoDto } from './dto/create-produto.dto';
 import { ExternalRefDto } from './dto/external-ref.dto';
 import { ListProdutosQuery } from './dto/list-produtos.query';
@@ -23,6 +24,7 @@ export class ProdutoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cardapios: CardapioService,
+    private readonly regemPause: RegemPauseClient,
   ) {}
 
   /**
@@ -103,6 +105,27 @@ export class ProdutoService {
     return { id };
   }
 
+  /**
+   * Pausa/despausa o produto no totem (Fase 4). Aplica a disponibilidade LOCAL
+   * (disponivel = !pausado) e, se o produto tem código PDV do Regem, propaga a
+   * pausa ao Regem (best-effort: falha remota não desfaz a pausa local).
+   */
+  async pausar(
+    id: string,
+    pausado: boolean,
+  ): Promise<{ produto: Produto; propagadoRegem: boolean }> {
+    const atual = await this.getOne(id);
+    const produto = await this.prisma.produto.update({
+      where: { id },
+      data: { disponivel: !pausado },
+    });
+    const codigo = codigoPdvRegem(atual.externalRefs);
+    const propagadoRegem = codigo
+      ? await this.regemPause.pausar(codigo, pausado)
+      : false;
+    return { produto, propagadoRegem };
+  }
+
   /** Substitui o de-para PDV inteiro do produto (§4). */
   async setExternalRefs(id: string, refs: ExternalRefDto[]): Promise<Produto> {
     await this.getOne(id);
@@ -121,6 +144,20 @@ export class ProdutoService {
       throw new BadRequestException('categoriaId inexistente neste tenant.');
     }
   }
+}
+
+/** Extrai o código PDV do Regem do de-para (Json) do produto, ou null. */
+function codigoPdvRegem(externalRefs: Prisma.JsonValue): string | null {
+  if (!Array.isArray(externalRefs)) return null;
+  for (const r of externalRefs) {
+    if (r && typeof r === 'object' && !Array.isArray(r)) {
+      const ref = r as Record<string, unknown>;
+      if (ref.sistema === 'regem' && typeof ref.codigo_pdv === 'string') {
+        return ref.codigo_pdv;
+      }
+    }
+  }
+  return null;
 }
 
 /**

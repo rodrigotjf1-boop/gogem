@@ -6,6 +6,7 @@ import { CreateProdutoDto } from '../src/produto/dto/create-produto.dto';
 import { SetExternalRefsDto } from '../src/produto/dto/set-external-refs.dto';
 import { ProdutoService } from '../src/produto/produto.service';
 import type { CardapioService } from '../src/cardapio/cardapio.service';
+import type { RegemPauseClient } from '../src/integracoes/regem/regem-pause.client';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 function makeService() {
@@ -20,11 +21,13 @@ function makeService() {
     categoria: { findFirst: vi.fn() },
   };
   const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
+  const regemPause = { pausar: vi.fn().mockResolvedValue(true) };
   const service = new ProdutoService(
     prisma as unknown as PrismaService,
     cardapios as unknown as CardapioService,
+    regemPause as unknown as RegemPauseClient,
   );
-  return { service, prisma, cardapios };
+  return { service, prisma, cardapios, regemPause };
 }
 
 describe('ProdutoService', () => {
@@ -86,6 +89,39 @@ describe('ProdutoService', () => {
       { sistema: 'regem', codigo_pdv: 'PROD-1' },
     ]);
     expect('tenantId' in data).toBe(false);
+  });
+
+  it('pausar: disponivel=false local + propaga ao Regem (tem código)', async () => {
+    const { service, prisma, regemPause } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({
+      id: 'p-1',
+      externalRefs: [{ sistema: 'regem', codigo_pdv: 'PROD-1' }],
+    });
+    prisma.produto.update.mockResolvedValue({ id: 'p-1', disponivel: false });
+
+    const res = await service.pausar('p-1', true);
+
+    expect(prisma.produto.update).toHaveBeenCalledWith({
+      where: { id: 'p-1' },
+      data: { disponivel: false },
+    });
+    expect(regemPause.pausar).toHaveBeenCalledWith('PROD-1', true);
+    expect(res.propagadoRegem).toBe(true);
+  });
+
+  it('pausar sem código Regem: não propaga (só local)', async () => {
+    const { service, prisma, regemPause } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({ id: 'p-2', externalRefs: [] });
+    prisma.produto.update.mockResolvedValue({ id: 'p-2', disponivel: true });
+
+    const res = await service.pausar('p-2', false);
+
+    expect(prisma.produto.update).toHaveBeenCalledWith({
+      where: { id: 'p-2' },
+      data: { disponivel: true },
+    });
+    expect(regemPause.pausar).not.toHaveBeenCalled();
+    expect(res.propagadoRegem).toBe(false);
   });
 
   it('setExternalRefs confere existência e persiste refs normalizados', async () => {

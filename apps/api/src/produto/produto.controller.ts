@@ -16,6 +16,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CreateProdutoDto } from './dto/create-produto.dto';
 import { ListProdutosQuery } from './dto/list-produtos.query';
+import { PausarProdutoDto } from './dto/pausar-produto.dto';
 import { SetExternalRefsDto } from './dto/set-external-refs.dto';
 import { UpdateProdutoDto } from './dto/update-produto.dto';
 import { ProdutoService } from './produto.service';
@@ -55,6 +56,15 @@ export class ProdutoController {
   @ApiOkResponse({ description: 'Produto atualizado.' })
   update(@Param('id') id: string, @Body() dto: UpdateProdutoDto) {
     return this.produtos.update(id, dto);
+  }
+
+  @Post(':id/pausa')
+  @Roles('gerente')
+  @ApiOkResponse({
+    description: 'Pausa/despausa o produto (propaga ao Regem).',
+  })
+  pausar(@Param('id') id: string, @Body() dto: PausarProdutoDto) {
+    return this.produtos.pausar(id, dto.pausado);
   }
 
   @Delete(':id')
