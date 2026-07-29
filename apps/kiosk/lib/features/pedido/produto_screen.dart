@@ -179,6 +179,18 @@ class _OpcaoTile extends StatelessWidget {
           Icon(marcada ? Icons.check_box : Icons.check_box_outline_blank,
               color: marcada ? GogemColors.mint : GogemColors.inkDim, size: 30),
           const SizedBox(width: 12),
+          // Foto da opção (quando houver) — dá cara ao complemento.
+          if (opcao.imagemUrl != null) ...[
+            SizedBox(
+              width: 44,
+              height: 44,
+              child: ProdutoImagem(
+                url: opcao.imagemUrl,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Expanded(child: Text(opcao.nome, style: t.bodyLarge)),
           if (opcao.precoCentavosDelta != 0)
             Text('+ ${formatCentavos(opcao.precoCentavosDelta)}',
