@@ -110,6 +110,12 @@ export class VendaTotemDto {
   @MaxLength(20)
   cpf?: string;
 
+  @ApiPropertyOptional({ description: 'Nome informado no totem (opcional).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  cliente?: string;
+
   @ApiPropertyOptional({
     description: 'Percentual de taxa de serviço (inteiro), ex.: 10 = 10%.',
     example: 10,

@@ -85,6 +85,11 @@ export class VendasService {
     //    o padrão do DispositivoService (satisfies Omit<...,'tenantId'>).
     const itens = dto.itens as unknown as Prisma.InputJsonValue;
     const pagamentos = dto.pagamentos as unknown as Prisma.InputJsonValue;
+    // Total do pedido (centavos) = soma dos pagamentos — base do faturamento.
+    const totalCentavos = dto.pagamentos.reduce(
+      (s, p) => s + (p.valor || 0),
+      0,
+    );
 
     let pedido: { id: string };
     if (existente) {
@@ -94,9 +99,11 @@ export class VendasService {
           status: 'pendente',
           erro: null,
           cpf: dto.cpf ?? null,
+          cliente: dto.cliente ?? null,
           dispositivoId: ctx.deviceId,
           itens,
           pagamentos,
+          totalCentavos,
           taxaServicoPct: dto.taxaServicoPct ?? null,
           senhaLocal: dto.senhaLocal ?? null,
         },
@@ -106,9 +113,11 @@ export class VendasService {
         idempotencyKey: dto.idempotencyKey,
         status: 'pendente',
         cpf: dto.cpf ?? null,
+        cliente: dto.cliente ?? null,
         dispositivoId: ctx.deviceId,
         itens,
         pagamentos,
+        totalCentavos,
         taxaServicoPct: dto.taxaServicoPct ?? null,
         senhaLocal: dto.senhaLocal ?? null,
       } satisfies Omit<Prisma.PedidoUncheckedCreateInput, 'tenantId'>;
