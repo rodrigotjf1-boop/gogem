@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { RegemConfigResolver } from './regem-config.resolver';
 import { RegemCatalogClient } from './regem-catalog.client';
 import { RegemSalesClient } from './regem-sales.client';
+import { RegemPauseClient } from './regem-pause.client';
 
 /**
  * RegemModule — peças compartilhadas do conector Regem: o resolver de config
@@ -11,7 +12,17 @@ import { RegemSalesClient } from './regem-sales.client';
  * globais.
  */
 @Module({
-  providers: [RegemConfigResolver, RegemCatalogClient, RegemSalesClient],
-  exports: [RegemConfigResolver, RegemCatalogClient, RegemSalesClient],
+  providers: [
+    RegemConfigResolver,
+    RegemCatalogClient,
+    RegemSalesClient,
+    RegemPauseClient,
+  ],
+  exports: [
+    RegemConfigResolver,
+    RegemCatalogClient,
+    RegemSalesClient,
+    RegemPauseClient,
+  ],
 })
 export class RegemModule {}

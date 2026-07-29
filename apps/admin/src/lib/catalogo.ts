@@ -155,6 +155,19 @@ export function useAtualizarProduto() {
   });
 }
 
+/** Pausa/despausa o produto no totem (propaga ao Regem no servidor). */
+export function usePausarProduto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pausado }: { id: string; pausado: boolean }) =>
+      apiPost<{ propagadoRegem: boolean }, { pausado: boolean }>(
+        `/produtos/${id}/pausa`,
+        { pausado },
+      ),
+    onSuccess: () => invalidarProdutos(qc),
+  });
+}
+
 export function useRemoverProduto() {
   const qc = useQueryClient();
   return useMutation({
