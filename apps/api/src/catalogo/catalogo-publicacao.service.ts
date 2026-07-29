@@ -214,7 +214,8 @@ export class CatalogoPublicacaoService {
 
     const grupos = produtos.reduce((n, p) => n + p.complementos.length, 0);
     const opcoes = produtos.reduce(
-      (n, p) => n + p.complementos.reduce((m, pc) => m + pc.grupo.opcoes.length, 0),
+      (n, p) =>
+        n + p.complementos.reduce((m, pc) => m + pc.grupo.opcoes.length, 0),
       0,
     );
 
