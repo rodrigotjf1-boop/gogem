@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
+import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
 import 'produto_imagem.dart';
@@ -24,6 +25,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     final t = Theme.of(context).textTheme;
     final menu = ref.watch(menuProvider);
     final sync = ref.watch(catalogSyncProvider);
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    final lateral = ap.cardLateral;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -95,15 +98,22 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                           ? const _Vazio(titulo: 'Nada disponível nesta categoria')
                           : GridView.builder(
                               padding: const EdgeInsets.only(bottom: 16),
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 320,
-                                mainAxisExtent: 288,
-                                mainAxisSpacing: 16,
-                                crossAxisSpacing: 16,
-                              ),
+                              gridDelegate: lateral
+                                  ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 520,
+                                      mainAxisExtent: 112,
+                                      mainAxisSpacing: 12,
+                                      crossAxisSpacing: 12,
+                                    )
+                                  : const SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 320,
+                                      mainAxisExtent: 288,
+                                      mainAxisSpacing: 16,
+                                      crossAxisSpacing: 16,
+                                    ),
                               itemCount: produtos.length,
-                              itemBuilder: (_, i) => _ProdutoCard(p: produtos[i]),
+                              itemBuilder: (_, i) =>
+                                  _ProdutoCard(p: produtos[i], lateral: lateral),
                             ),
                     ),
                   ]);
@@ -118,8 +128,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
 }
 
 class _ProdutoCard extends StatelessWidget {
-  const _ProdutoCard({required this.p});
+  const _ProdutoCard({required this.p, this.lateral = false});
   final Produto p;
+  final bool lateral;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
@@ -136,62 +148,83 @@ class _ProdutoCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(raio),
           border: Border.all(color: GogemColors.line),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Vitrine: a foto ocupa o topo e puxa a vontade de consumir.
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ProdutoImagem(url: p.imagemUrl),
-                  // Preço em selo, legível sobre qualquer foto.
-                  Positioned(
-                    right: 10,
-                    bottom: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: GogemColors.cheese,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        formatCentavos(p.precoCentavos),
-                        style: const TextStyle(
-                          fontFamily: 'Tektur',
-                          fontWeight: FontWeight.w600,
-                          fontSize: 18,
-                          color: Color(0xFF1A1206),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+        child: lateral ? _lateral(context, t) : _cheia(context, t),
+      ),
+    );
+  }
+
+  /// Foto-cheia: imagem no topo + selo de preço + nome/descrição embaixo.
+  Widget _cheia(BuildContext context, TextTheme t) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ProdutoImagem(url: p.imagemUrl),
+                Positioned(right: 10, bottom: 10, child: _selo(context)),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(p.nome, style: t.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
+                if (p.descricao.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(p.descricao,
+                        style: t.bodyMedium, maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  /// Foto-lateral: miniatura à esquerda + nome/descrição + preço à direita.
+  Widget _lateral(BuildContext context, TextTheme t) => Row(
+        children: [
+          SizedBox(width: 112, height: double.infinity, child: ProdutoImagem(url: p.imagemUrl)),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(p.nome,
-                      style: t.titleLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                  Text(p.nome, style: t.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
                   if (p.descricao.isNotEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.only(top: 2),
                       child: Text(p.descricao,
-                          style: t.bodyMedium,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
+                          style: t.bodyMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
                     ),
+                  const SizedBox(height: 8),
+                  _selo(context),
                 ],
               ),
             ),
-          ],
+          ),
+        ],
+      );
+
+  /// Selo de preço na cor primária da loja (segue o tema dinâmico).
+  Widget _selo(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(999)),
+      child: Text(
+        formatCentavos(p.precoCentavos),
+        style: TextStyle(
+          fontFamily: 'Tektur',
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
+          color: cs.onPrimary,
         ),
       ),
     );

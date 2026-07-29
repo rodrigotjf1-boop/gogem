@@ -38,17 +38,22 @@ class OpcaoComplemento {
     required this.id,
     required this.nome,
     required this.precoCentavosDelta,
+    required this.imagemUrl,
     required this.externalRefs,
   });
   final String id;
   final String nome;
   final int precoCentavosDelta;
+
+  /// Foto da opção (Supabase Storage) ou `null`.
+  final String? imagemUrl;
   final List<ExternalRef> externalRefs;
 
   factory OpcaoComplemento.fromJson(Map j) => OpcaoComplemento(
         id: _id(j['id']),
         nome: '${j['nome'] ?? ''}',
         precoCentavosDelta: _int(j['precoCentavosDelta']),
+        imagemUrl: _urlOuNull(j['imagemUrl'] ?? j['imagem_url']),
         externalRefs: ExternalRef.listFrom(j['externalRefs']),
       );
 }
