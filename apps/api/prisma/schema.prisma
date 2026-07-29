@@ -327,16 +327,23 @@ model Pedido {
   dispositivoId  String?
   idempotencyKey String
   cpf            String?
+  // Nome informado na hora do pedido (opcional) — para o relatório.
+  cliente        String?
   // Itens do pedido: [{ codigoPdv, quantidade, observacao? }] (de-para §4).
   itens          Json
   // Split de pagamento: [{ forma, valor(centavos), nsu?, autorizacao?, formaPagamentoId? }].
   pagamentos     Json
+  // Total do pedido em centavos (soma dos pagamentos) — para faturamento.
+  totalCentavos  Int      @default(0)
   // Percentual de taxa de serviço (inteiro), ex.: 10 = 10%.
   taxaServicoPct Int?
   // Senha local exibida no totem (repassada ao Regem como senhaPlataforma).
   senhaLocal     Int?
-  // pendente | enviado | falha — ciclo de vida do repasse ao Regem.
+  // pendente | enviado | falha | cancelado — ciclo de vida.
   status         String   @default("pendente")
+  // Cancelamento (relatório de cancelados).
+  canceladoEm    DateTime?
+  canceladoMotivo String?
   // Resultado do Regem (preenchido no sucesso).
   regemComandaId String?
   regemSenha     Int?
@@ -351,6 +358,8 @@ model Pedido {
   // Idempotência local: uma venda por chave, por tenant (§1).
   @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
   @@map("pedidos")
 }
 
