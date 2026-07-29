@@ -3,6 +3,7 @@ import { LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GogemMark } from '@/components/brand/gogem-mark';
 import { useAuth } from '@/auth/auth-context';
+import { SelectedCardapioProvider } from '@/lib/cardapios';
 import { Sidebar } from './sidebar';
 
 /**
@@ -13,6 +14,7 @@ export function Shell() {
   const { user, logout, podeEscrever } = useAuth();
 
   return (
+    <SelectedCardapioProvider>
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
 
@@ -52,5 +54,6 @@ export function Shell() {
         </main>
       </div>
     </div>
+    </SelectedCardapioProvider>
   );
 }

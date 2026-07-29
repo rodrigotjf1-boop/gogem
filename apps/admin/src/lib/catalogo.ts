@@ -1,10 +1,12 @@
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
+import { useSelectedCardapio } from '@/lib/cardapios';
 
 /**
  * Camada de dados do catálogo (categorias + produtos) sobre a API real.
@@ -40,6 +42,7 @@ export interface Produto {
 export interface CategoriaInput {
   nome: string;
   ordem?: number;
+  cardapioId?: string;
 }
 
 export interface ProdutoInput {
@@ -49,30 +52,43 @@ export interface ProdutoInput {
   disponivel?: boolean;
   imagemUrl?: string | null;
   categoriaId?: string;
+  cardapioId?: string;
   externalRefs?: ExternalRef[];
 }
 
-/** Chaves de cache do react-query — centralizadas para invalidação coerente. */
+/** Chaves de cache do react-query — incluem o cardápio para refetch ao trocar. */
 export const catalogoKeys = {
-  categorias: ['categorias'] as const,
-  produtos: (categoriaId?: string) => ['produtos', categoriaId ?? null] as const,
+  categorias: (cardapioId?: string | null) =>
+    ['categorias', cardapioId ?? null] as const,
+  produtos: (cardapioId?: string | null, categoriaId?: string) =>
+    ['produtos', cardapioId ?? null, categoriaId ?? null] as const,
 };
 
 // ————————————————————————— Categorias —————————————————————————
 
 export function useCategorias(): UseQueryResult<Categoria[]> {
+  const { id: cardapioId } = useSelectedCardapio();
   return useQuery({
-    queryKey: catalogoKeys.categorias,
-    queryFn: () => apiGet<Categoria[]>('/categorias'),
+    queryKey: catalogoKeys.categorias(cardapioId),
+    queryFn: () =>
+      apiGet<Categoria[]>('/categorias', {
+        params: cardapioId ? { cardapioId } : undefined,
+      }),
+    // Mantém a lista durante a troca de cardápio (sem flicker).
+    placeholderData: keepPreviousData,
   });
 }
 
 export function useCriarCategoria() {
   const qc = useQueryClient();
+  const { id: cardapioId } = useSelectedCardapio();
   return useMutation({
     mutationFn: (input: CategoriaInput) =>
-      apiPost<Categoria, CategoriaInput>('/categorias', input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: catalogoKeys.categorias }),
+      apiPost<Categoria, CategoriaInput>('/categorias', {
+        ...input,
+        cardapioId: cardapioId ?? undefined,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categorias'] }),
   });
 }
 
@@ -81,7 +97,7 @@ export function useAtualizarCategoria() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: CategoriaInput }) =>
       apiPatch<Categoria, CategoriaInput>(`/categorias/${id}`, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: catalogoKeys.categorias }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categorias'] }),
   });
 }
 
@@ -89,32 +105,43 @@ export function useRemoverCategoria() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiDelete<{ id: string }>(`/categorias/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: catalogoKeys.categorias }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categorias'] }),
   });
 }
 
 // ————————————————————————— Produtos —————————————————————————
 
 export function useProdutos(categoriaId?: string): UseQueryResult<Produto[]> {
+  const { id: cardapioId } = useSelectedCardapio();
   return useQuery({
-    queryKey: catalogoKeys.produtos(categoriaId),
-    queryFn: () =>
-      apiGet<Produto[]>('/produtos', {
-        params: categoriaId ? { categoriaId } : undefined,
-      }),
+    queryKey: catalogoKeys.produtos(cardapioId, categoriaId),
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (cardapioId) params.cardapioId = cardapioId;
+      if (categoriaId) params.categoriaId = categoriaId;
+      return apiGet<Produto[]>('/produtos', {
+        params: Object.keys(params).length ? params : undefined,
+      });
+    },
+    // Mantém a lista durante a troca de cardápio (sem flicker).
+    placeholderData: keepPreviousData,
   });
 }
 
-/** Invalida TODAS as listas de produtos (qualquer filtro de categoria). */
+/** Invalida TODAS as listas de produtos (qualquer cardápio/categoria). */
 function invalidarProdutos(qc: ReturnType<typeof useQueryClient>) {
   return qc.invalidateQueries({ queryKey: ['produtos'] });
 }
 
 export function useCriarProduto() {
   const qc = useQueryClient();
+  const { id: cardapioId } = useSelectedCardapio();
   return useMutation({
     mutationFn: (input: ProdutoInput) =>
-      apiPost<Produto, ProdutoInput>('/produtos', input),
+      apiPost<Produto, ProdutoInput>('/produtos', {
+        ...input,
+        cardapioId: cardapioId ?? undefined,
+      }),
     onSuccess: () => invalidarProdutos(qc),
   });
 }
