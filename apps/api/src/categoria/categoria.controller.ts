@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
@@ -29,9 +30,9 @@ export class CategoriaController {
   constructor(private readonly categorias: CategoriaService) {}
 
   @Get()
-  @ApiOkResponse({ description: 'Lista de categorias do tenant.' })
-  list() {
-    return this.categorias.list();
+  @ApiOkResponse({ description: 'Categorias do cardápio (ativo por padrão).' })
+  list(@Query('cardapioId') cardapioId?: string) {
+    return this.categorias.list(cardapioId);
   }
 
   @Get(':id')

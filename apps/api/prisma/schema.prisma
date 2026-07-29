@@ -45,8 +45,31 @@ model Tenant {
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
   integracoes        Integracao[]
+  cardapios          Cardapio[]
 
   @@map("tenants")
+}
+
+// Cardápio (Fase 3B): um conjunto INDEPENDENTE de categorias+produtos. Um tenant
+// pode ter até 2 (regra no service); exatamente 1 fica `ativo`. O totem recebe
+// SEMPRE o cardápio ativo (a publicação snapshota o ativo). O inativo serve para
+// preparar uma migração de sistema / testes antes de ativar (criado vazio,
+// duplicando o ativo, ou importando de um sistema integrado).
+model Cardapio {
+  id        String   @id @default(uuid())
+  tenantId  String
+  nome      String
+  ativo     Boolean  @default(false)
+  ordem     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  categorias Categoria[]
+  produtos   Produto[]
+
+  @@index([tenantId])
+  @@map("cardapios")
 }
 
 // Loja (unidade operacional de um tenant).
@@ -85,23 +108,30 @@ model Usuario {
 }
 
 model Categoria {
-  id        String   @id @default(uuid())
-  tenantId  String
-  nome      String
-  ordem     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  // Cardápio ao qual a categoria pertence (Fase 3B). Nulo só em dados legados
+  // pré-migração; o service sempre resolve o cardápio ativo.
+  cardapioId String?
+  nome       String
+  ordem      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  cardapio Cardapio? @relation(fields: [cardapioId], references: [id])
   produtos Produto[]
 
   @@index([tenantId])
+  @@index([cardapioId])
   @@map("categorias")
 }
 
 model Produto {
   id           String   @id @default(uuid())
   tenantId     String
+  // Cardápio ao qual o produto pertence (Fase 3B). Nulo só em legado.
+  cardapioId   String?
   categoriaId  String?
   nome         String
   descricao    String?
@@ -115,10 +145,12 @@ model Produto {
   updatedAt    DateTime @updatedAt
 
   tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  cardapio  Cardapio?  @relation(fields: [cardapioId], references: [id])
   categoria Categoria? @relation(fields: [categoriaId], references: [id])
   grupos    ComplementoGrupo[]
 
   @@index([tenantId])
+  @@index([cardapioId])
   @@index([categoriaId])
   @@map("produtos")
 }

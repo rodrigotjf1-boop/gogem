@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardapioService } from '../cardapio/cardapio.service';
 
 /** Totais do catálogo publicado (retornados no publicar). */
 export interface PublicarTotais {
@@ -31,7 +32,10 @@ export interface VersaoMeta {
  */
 @Injectable()
 export class CatalogoPublicacaoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cardapios: CardapioService,
+  ) {}
 
   /**
    * Publica o rascunho: monta o snapshot, calcula `versao = max + 1` (começa em
@@ -145,11 +149,15 @@ export class CatalogoPublicacaoService {
     snapshot: CatalogoSnapshot;
     totais: PublicarTotais;
   }> {
+    // O totem recebe SEMPRE o cardápio ativo (Fase 3B).
+    const cardapioId = await this.cardapios.ativoId();
     const [categorias, produtos] = await Promise.all([
       this.prisma.categoria.findMany({
+        where: { cardapioId },
         orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
       }),
       this.prisma.produto.findMany({
+        where: { cardapioId },
         orderBy: { nome: 'asc' },
         include: {
           grupos: {

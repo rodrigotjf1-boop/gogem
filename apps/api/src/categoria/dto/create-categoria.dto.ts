@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
   MinLength,
@@ -29,4 +30,12 @@ export class CreateCategoriaDto {
   @IsInt()
   @Min(0)
   ordem?: number;
+
+  @ApiProperty({
+    description: 'Cardápio-alvo (Fase 3B). Ausente = cardápio ativo.',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  cardapioId?: string;
 }

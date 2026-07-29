@@ -71,6 +71,14 @@ export class CreateProdutoDto {
   categoriaId?: string;
 
   @ApiProperty({
+    description: 'Cardápio-alvo (Fase 3B). Ausente = cardápio ativo.',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  cardapioId?: string;
+
+  @ApiProperty({
     description: 'De-para PDV (§4): array de { sistema, codigo_pdv, loja? }.',
     required: false,
     type: [ExternalRefDto],

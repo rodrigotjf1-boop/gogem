@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateProdutoDto } from '../src/produto/dto/create-produto.dto';
 import { SetExternalRefsDto } from '../src/produto/dto/set-external-refs.dto';
 import { ProdutoService } from '../src/produto/produto.service';
+import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 function makeService() {
@@ -18,8 +19,12 @@ function makeService() {
     },
     categoria: { findFirst: vi.fn() },
   };
-  const service = new ProdutoService(prisma as unknown as PrismaService);
-  return { service, prisma };
+  const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
+  const service = new ProdutoService(
+    prisma as unknown as PrismaService,
+    cardapios as unknown as CardapioService,
+  );
+  return { service, prisma, cardapios };
 }
 
 describe('ProdutoService', () => {
@@ -30,7 +35,7 @@ describe('ProdutoService', () => {
     prisma.produto.findMany.mockResolvedValue([]);
     await service.list({ categoriaId: 'c-1', disponivel: true });
     expect(prisma.produto.findMany).toHaveBeenCalledWith({
-      where: { categoriaId: 'c-1', disponivel: true },
+      where: { cardapioId: 'card-1', categoriaId: 'c-1', disponivel: true },
       orderBy: { nome: 'asc' },
     });
     // SEM tenantId manual (delegado ao middleware).
@@ -44,7 +49,7 @@ describe('ProdutoService', () => {
     prisma.produto.findMany.mockResolvedValue([]);
     await service.list({});
     expect(prisma.produto.findMany).toHaveBeenCalledWith({
-      where: {},
+      where: { cardapioId: 'card-1' },
       orderBy: { nome: 'asc' },
     });
   });

@@ -5,6 +5,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -52,9 +53,12 @@ export class IntegracaoController {
     return this.service.testar(tipo);
   }
 
-  /** Importa o catálogo do sistema externo para o rascunho do GoGeM. */
+  /** Importa o catálogo do sistema externo para o cardápio-alvo (ou o ativo). */
   @Post(':tipo/importar')
-  importar(@Param('tipo') tipo: string): Promise<RegemImportResumo> {
-    return this.service.importar(tipo);
+  importar(
+    @Param('tipo') tipo: string,
+    @Query('cardapioId') cardapioId?: string,
+  ): Promise<RegemImportResumo> {
+    return this.service.importar(tipo, cardapioId);
   }
 }
