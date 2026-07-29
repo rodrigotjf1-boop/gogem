@@ -171,6 +171,47 @@ Base: `https://api.gogem.com.br/api/v1`. Auth do totem: header **`X-Device-Token
 
 ---
 
+## 3b) NOVO: Aparência do totem (`/catalogo/publicado`) — para o Fable plugar o render
+
+O admin ganhou **Configurações · Aparência** (por loja). A API expõe a aparência
+**LIVE em toda resposta** do `GET /catalogo/publicado` (inclusive quando
+`atualizado:false`) — o totem deve **aplicar a aparência a cada sync**, sem
+depender da versão do catálogo. Campo novo na resposta:
+
+```jsonc
+{
+  "versao": 12, "atualizado": true|false, "snapshot": { ... },
+  "aparencia": {
+    "corPrimaria": "#FFC24B",   // CTA / preço
+    "corDestaque": "#3ECF8E",   // positivo
+    "corFundo":    "#0F1713",
+    "corPainel":   "#16211B",
+    "raio": 16,                  // raio dos cantos (px)
+    "nomeLoja": "MISTER BURGERS",
+    "logoUrl": "https://.../logo.png",   // ou null
+    "fonteDisplay": "Tektur",    // 'Tektur' | 'Poppins' | 'Montserrat'
+    "descansoTipo": "padrao",    // 'padrao' (robô GoGeM) | 'carrossel'
+    "descansoIntervaloSeg": 6,
+    "descansoMidias": [{ "url": "https://...", "tipo": "imagem|gif|video" }],
+    "chamada": "TOQUE PARA PEDIR",
+    "precoIsca": "combos a partir de R$ 19,90",  // ou null
+    "estiloCard": "cheia",       // 'cheia' | 'lateral'
+    "animacoes": "cheio"         // 'cheio' | 'reduzido' | 'off'
+  }
+}
+```
+
+**Mapeamento pro tema do totem** (bate com o protótipo `prototipo-vitrine-gogem.html`):
+`corPrimaria→--primaria`, `corDestaque→--destaque`, `corFundo→--fundo`,
+`corPainel→--painel`, `raio→--raio`, `fonteDisplay→--fdisplay`. `descansoTipo`
+escolhe carrossel (usa `descansoMidias`+`descansoIntervaloSeg`) vs robô padrão;
+`estiloCard` alterna foto-cheia/lateral; `animacoes` combina com o
+`HardwareCaps` (off/reduzido força; senão respeita o hardware). `logoUrl`/`nomeLoja`
+na tela de descanso; `chamada`/`precoIsca` nos textos do descanso.
+
+> A aparência **não** entra no snapshot versionado — é config viva por loja.
+> Editar em Configurações reflete no totem no próximo sync (≤60s), sem publicar.
+
 ## 4) Resumo do que mudou recentemente (relevante pro kiosk)
 - **`opcoes[].imagemUrl`** no snapshot → renderizar foto da opção (TODO no kiosk).
 - **Disponibilidade reflete pausa do Regem** (inativo/esgotado/canal) — o totem só
