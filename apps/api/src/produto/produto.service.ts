@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, type Produto } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardapioService } from '../cardapio/cardapio.service';
 import { CreateProdutoDto } from './dto/create-produto.dto';
 import { ExternalRefDto } from './dto/external-ref.dto';
 import { ListProdutosQuery } from './dto/list-produtos.query';
@@ -19,11 +20,18 @@ import { UpdateProdutoDto } from './dto/update-produto.dto';
  */
 @Injectable()
 export class ProdutoService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cardapios: CardapioService,
+  ) {}
 
-  /** Lista produtos do tenant, com filtros opcionais, ordenados por nome. */
-  list(query: ListProdutosQuery): Promise<Produto[]> {
-    const where: Prisma.ProdutoWhereInput = {};
+  /**
+   * Lista produtos do cardápio-alvo (informado ou ativo), com filtros opcionais,
+   * ordenados por nome.
+   */
+  async list(query: ListProdutosQuery): Promise<Produto[]> {
+    const cardapioId = await this.cardapios.resolverAlvo(query.cardapioId);
+    const where: Prisma.ProdutoWhereInput = { cardapioId };
     if (query.categoriaId !== undefined) where.categoriaId = query.categoriaId;
     if (query.disponivel !== undefined) where.disponivel = query.disponivel;
     return this.prisma.produto.findMany({
@@ -41,7 +49,7 @@ export class ProdutoService {
     return produto;
   }
 
-  /** Cria um produto; valida `categoriaId` (se informado) no tenant. */
+  /** Cria um produto no cardápio-alvo; valida `categoriaId` se informado. */
   async create(dto: CreateProdutoDto): Promise<Produto> {
     if (dto.categoriaId) {
       await this.assertCategoria(dto.categoriaId);
@@ -49,6 +57,7 @@ export class ProdutoService {
     // `tenantId` é injetado pelo middleware (§2); os tipos do Prisma o exigem
     // estaticamente, então validamos os campos com `satisfies` e omitimos o
     // tenant do payload.
+    const cardapioId = await this.cardapios.resolverAlvo(dto.cardapioId);
     const data = {
       nome: dto.nome,
       descricao: dto.descricao,
@@ -56,6 +65,7 @@ export class ProdutoService {
       disponivel: dto.disponivel ?? true,
       imagemUrl: dto.imagemUrl ?? null,
       categoriaId: dto.categoriaId,
+      cardapioId,
       externalRefs: normalizeRefs(dto.externalRefs),
     } satisfies Omit<Prisma.ProdutoUncheckedCreateInput, 'tenantId'>;
     return this.prisma.produto.create({

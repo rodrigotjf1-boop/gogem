@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { reaisToCentavos } from '../src/integracoes/regem/reais-to-centavos';
 import { RegemImportService } from '../src/integracoes/regem/regem-import.service';
 import type { RegemCatalogClient } from '../src/integracoes/regem/regem-catalog.client';
+import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 /** Monta o serviço com Prisma e client 100% mockados (sem rede, sem DB). */
@@ -35,11 +36,13 @@ function makeService() {
     },
   };
   const client = { fetchCatalogo: vi.fn() };
+  const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
   const service = new RegemImportService(
     prisma as unknown as PrismaService,
     client as unknown as RegemCatalogClient,
+    cardapios as unknown as CardapioService,
   );
-  return { service, prisma, client };
+  return { service, prisma, client, cardapios };
 }
 
 /** Payload fixo: 2 categorias, 3 produtos (1 sem codigo → skip), 1 com grupo+opção. */

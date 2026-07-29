@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, type Categoria } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardapioService } from '../cardapio/cardapio.service';
 import { CreateCategoriaDto } from './dto/create-categoria.dto';
 import { UpdateCategoriaDto } from './dto/update-categoria.dto';
 
@@ -18,11 +19,19 @@ import { UpdateCategoriaDto } from './dto/update-categoria.dto';
  */
 @Injectable()
 export class CategoriaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cardapios: CardapioService,
+  ) {}
 
-  /** Lista as categorias do tenant, ordenadas por `ordem` e depois `nome`. */
-  list(): Promise<Categoria[]> {
+  /**
+   * Lista as categorias do cardápio-alvo (informado ou ativo), ordenadas por
+   * `ordem` e depois `nome`.
+   */
+  async list(cardapioId?: string): Promise<Categoria[]> {
+    const alvo = await this.cardapios.resolverAlvo(cardapioId);
     return this.prisma.categoria.findMany({
+      where: { cardapioId: alvo },
       orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
     });
   }
@@ -36,14 +45,16 @@ export class CategoriaService {
     return categoria;
   }
 
-  /** Cria uma categoria. */
-  create(dto: CreateCategoriaDto): Promise<Categoria> {
+  /** Cria uma categoria no cardápio-alvo (informado ou ativo). */
+  async create(dto: CreateCategoriaDto): Promise<Categoria> {
     // `tenantId` é injetado pelo middleware (§2); os tipos do Prisma o exigem
     // estaticamente, então validamos os campos com `satisfies` e omitimos o
     // tenant do payload.
+    const cardapioId = await this.cardapios.resolverAlvo(dto.cardapioId);
     const data = {
       nome: dto.nome,
       ordem: dto.ordem ?? 0,
+      cardapioId,
     } satisfies Omit<Prisma.CategoriaUncheckedCreateInput, 'tenantId'>;
     return this.prisma.categoria.create({
       data: data as Prisma.CategoriaUncheckedCreateInput,

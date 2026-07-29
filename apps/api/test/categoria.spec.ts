@@ -1,6 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CategoriaService } from '../src/categoria/categoria.service';
+import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 function makeService() {
@@ -14,8 +15,13 @@ function makeService() {
     },
     produto: { count: vi.fn() },
   };
-  const service = new CategoriaService(prisma as unknown as PrismaService);
-  return { service, prisma };
+  // Cardápio-alvo resolvido para 'card-1' (Fase 3B).
+  const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
+  const service = new CategoriaService(
+    prisma as unknown as PrismaService,
+    cardapios as unknown as CardapioService,
+  );
+  return { service, prisma, cardapios };
 }
 
 describe('CategoriaService', () => {
@@ -26,6 +32,7 @@ describe('CategoriaService', () => {
     prisma.categoria.findMany.mockResolvedValue([]);
     await service.list();
     expect(prisma.categoria.findMany).toHaveBeenCalledWith({
+      where: { cardapioId: 'card-1' },
       orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
     });
     // Prova: o service não injeta tenantId (delega ao middleware).
@@ -38,7 +45,7 @@ describe('CategoriaService', () => {
     prisma.categoria.create.mockResolvedValue({ id: 'c-1' });
     await service.create({ nome: 'Bebidas', ordem: 2 });
     expect(prisma.categoria.create).toHaveBeenCalledWith({
-      data: { nome: 'Bebidas', ordem: 2 },
+      data: { nome: 'Bebidas', ordem: 2, cardapioId: 'card-1' },
     });
     expect('tenantId' in prisma.categoria.create.mock.calls[0][0].data).toBe(
       false,
@@ -50,7 +57,7 @@ describe('CategoriaService', () => {
     prisma.categoria.create.mockResolvedValue({ id: 'c-2' });
     await service.create({ nome: 'Lanches' });
     expect(prisma.categoria.create).toHaveBeenCalledWith({
-      data: { nome: 'Lanches', ordem: 0 },
+      data: { nome: 'Lanches', ordem: 0, cardapioId: 'card-1' },
     });
   });
 

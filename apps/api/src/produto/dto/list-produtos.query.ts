@@ -7,6 +7,11 @@ import { IsBoolean, IsOptional, IsUUID } from 'class-validator';
  * é normalizado para boolean.
  */
 export class ListProdutosQuery {
+  @ApiPropertyOptional({ description: 'Cardápio (Fase 3B). Ausente = ativo.' })
+  @IsOptional()
+  @IsUUID()
+  cardapioId?: string;
+
   @ApiPropertyOptional({ description: 'Filtra por categoria.' })
   @IsOptional()
   @IsUUID()

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CardapioModule } from '../../cardapio/cardapio.module';
 import { RegemModule } from './regem.module';
 import { RegemImportController } from './regem-import.controller';
 import { RegemImportService } from './regem-import.service';
@@ -9,7 +10,7 @@ import { RegemImportService } from './regem-import.service';
  * tenant vêm do RegemModule.
  */
 @Module({
-  imports: [RegemModule],
+  imports: [RegemModule, CardapioModule],
   controllers: [RegemImportController],
   providers: [RegemImportService],
   exports: [RegemImportService],

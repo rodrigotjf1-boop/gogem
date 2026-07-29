@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CardapioService } from '../../cardapio/cardapio.service';
 import {
   RegemCatalogClient,
   type RegemGrupo,
@@ -52,10 +53,16 @@ export class RegemImportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly client: RegemCatalogClient,
+    private readonly cardapios: CardapioService,
   ) {}
 
-  /** Executa o import para o tenant do contexto atual. */
-  async importar(): Promise<RegemImportResumo> {
+  /**
+   * Executa o import para o tenant do contexto. `cardapioId` = cardápio-alvo
+   * (Fase 3B): permite importar para o cardápio em preparação (migração de
+   * sistema) sem tocar o ativo; ausente = cardápio ativo.
+   */
+  async importar(cardapioId?: string): Promise<RegemImportResumo> {
+    const alvo = await this.cardapios.resolverAlvo(cardapioId);
     const catalogo = await this.client.fetchCatalogo();
 
     const resumo: RegemImportResumo = {
@@ -69,8 +76,9 @@ export class RegemImportService {
     const categoriaMap = await this.importCategorias(
       catalogo.categorias,
       resumo,
+      alvo,
     );
-    const produtoPorCodigo = await this.carregarProdutosPorCodigo();
+    const produtoPorCodigo = await this.carregarProdutosPorCodigo(alvo);
 
     for (const rp of catalogo.produtos) {
       const codigo = (rp.codigo ?? '').trim();
@@ -84,6 +92,7 @@ export class RegemImportService {
         categoriaMap,
         produtoPorCodigo,
         resumo,
+        alvo,
       );
       await this.importGruposOpcoes(gogemProdutoId, rp.grupos, resumo);
     }
@@ -99,8 +108,11 @@ export class RegemImportService {
   private async importCategorias(
     categorias: { id: string; nome: string; ordem: number }[],
     resumo: RegemImportResumo,
+    cardapioId: string,
   ): Promise<Map<string, string>> {
-    const existentes = await this.prisma.categoria.findMany();
+    const existentes = await this.prisma.categoria.findMany({
+      where: { cardapioId },
+    });
     const porNome = new Map<string, { id: string }>();
     for (const c of existentes) porNome.set(normalizar(c.nome), { id: c.id });
 
@@ -119,6 +131,7 @@ export class RegemImportService {
         const data = {
           nome: rc.nome,
           ordem: rc.ordem ?? 0,
+          cardapioId,
         } satisfies Omit<Prisma.CategoriaUncheckedCreateInput, 'tenantId'>;
         const criada = await this.prisma.categoria.create({
           data: data as Prisma.CategoriaUncheckedCreateInput,
@@ -131,11 +144,13 @@ export class RegemImportService {
     return map;
   }
 
-  /** Carrega TODOS os produtos do tenant e indexa por `codigo_pdv` do de-para regem. */
-  private async carregarProdutosPorCodigo(): Promise<
-    Map<string, { id: string; externalRefs: ExternalRef[] }>
-  > {
-    const produtos = await this.prisma.produto.findMany();
+  /** Carrega os produtos do cardápio-alvo e indexa por `codigo_pdv` (de-para regem). */
+  private async carregarProdutosPorCodigo(
+    cardapioId: string,
+  ): Promise<Map<string, { id: string; externalRefs: ExternalRef[] }>> {
+    const produtos = await this.prisma.produto.findMany({
+      where: { cardapioId },
+    });
     const map = new Map<string, { id: string; externalRefs: ExternalRef[] }>();
     for (const p of produtos) {
       const refs = lerRefs(p.externalRefs);
@@ -157,6 +172,7 @@ export class RegemImportService {
     categoriaMap: Map<string, string>,
     produtoPorCodigo: Map<string, { id: string; externalRefs: ExternalRef[] }>,
     resumo: RegemImportResumo,
+    cardapioId: string,
   ): Promise<string> {
     const precoCentavos = reaisToCentavos(rp.precoVenda);
     const disponivel = !!rp.disponivelCardapio;
@@ -189,6 +205,7 @@ export class RegemImportService {
       precoCentavos,
       disponivel,
       categoriaId,
+      cardapioId,
       externalRefs: externalRefs as unknown as Prisma.InputJsonValue,
     } satisfies Omit<Prisma.ProdutoUncheckedCreateInput, 'tenantId'>;
     const criado = await this.prisma.produto.create({

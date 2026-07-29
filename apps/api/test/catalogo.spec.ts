@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogoPublicacaoService } from '../src/catalogo/catalogo-publicacao.service';
+import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 function makeService() {
@@ -15,10 +16,13 @@ function makeService() {
       findFirst: vi.fn(),
     },
   };
+  // Cardápio ativo resolvido para 'card-1' (Fase 3B).
+  const cardapios = { ativoId: vi.fn().mockResolvedValue('card-1') };
   const service = new CatalogoPublicacaoService(
     prisma as unknown as PrismaService,
+    cardapios as unknown as CardapioService,
   );
-  return { service, prisma };
+  return { service, prisma, cardapios };
 }
 
 /** Rascunho de exemplo: 2 categorias, 1 produto com 1 grupo de 2 opções. */

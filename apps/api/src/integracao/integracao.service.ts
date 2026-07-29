@@ -162,15 +162,21 @@ export class IntegracaoService {
     return resultado;
   }
 
-  /** Importa o catálogo do sistema externo para o rascunho do GoGeM. */
-  async importar(tipo: string): Promise<RegemImportResumo> {
+  /**
+   * Importa o catálogo do sistema externo para o cardápio-alvo do GoGeM
+   * (Fase 3B: `cardapioId` = cardápio em preparação; ausente = ativo).
+   */
+  async importar(
+    tipo: string,
+    cardapioId?: string,
+  ): Promise<RegemImportResumo> {
     const conector = this.conectorDisponivel(tipo);
     if (!conector.importaCatalogo || tipo !== 'regem') {
       throw new BadRequestException(
         `Importar catálogo ainda não disponível para "${conector.nome}".`,
       );
     }
-    return this.regemImport.importar();
+    return this.regemImport.importar(cardapioId);
   }
 
   // ── internos ──────────────────────────────────────────────────────────────
