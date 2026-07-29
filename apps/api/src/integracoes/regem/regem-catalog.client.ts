@@ -54,6 +54,10 @@ export interface RegemProduto {
   disponivelCardapio: boolean;
   disponivelBalcao: boolean;
   ativo: boolean;
+  /** Canais de delivery pausados p/ este produto (ex.: ['ifood','gogem']). */
+  canaisPausados?: string[];
+  /** Pausado por estoque (esgotado) no Regem. */
+  pausadoEstoque?: boolean;
   grupos: RegemGrupo[];
 }
 

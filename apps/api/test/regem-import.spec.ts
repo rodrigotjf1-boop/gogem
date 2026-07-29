@@ -270,6 +270,75 @@ describe('RegemImportService.importar — idempotência (refresh)', () => {
   });
 });
 
+describe('RegemImportService.importar — reflexo de pausa (Fase 4)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('canal gogem / inativo / esgotado → disponivel=false; ifood não afeta', async () => {
+    const { service, prisma, client } = makeService();
+    client.fetchCatalogo.mockResolvedValue({
+      geradoEm: 'x',
+      categorias: [{ id: 'rc', nome: 'Cat', ordem: 1 }],
+      produtos: [
+        {
+          id: 'a',
+          codigo: 'A',
+          nome: 'Pausado canal',
+          precoVenda: '10.00',
+          categoriaId: 'rc',
+          disponivelCardapio: true,
+          ativo: true,
+          canaisPausados: ['gogem'],
+          grupos: [],
+        },
+        {
+          id: 'b',
+          codigo: 'B',
+          nome: 'Inativo',
+          precoVenda: '10.00',
+          categoriaId: 'rc',
+          disponivelCardapio: true,
+          ativo: false,
+          grupos: [],
+        },
+        {
+          id: 'c',
+          codigo: 'C',
+          nome: 'Esgotado',
+          precoVenda: '10.00',
+          categoriaId: 'rc',
+          disponivelCardapio: true,
+          ativo: true,
+          pausadoEstoque: true,
+          grupos: [],
+        },
+        {
+          id: 'd',
+          codigo: 'D',
+          nome: 'Ok',
+          precoVenda: '10.00',
+          categoriaId: 'rc',
+          disponivelCardapio: true,
+          ativo: true,
+          canaisPausados: ['ifood'],
+          grupos: [],
+        },
+      ],
+    });
+
+    await service.importar();
+
+    const porCodigo: Record<string, any> = {};
+    for (const c of prisma.produto.create.mock.calls) {
+      const data = (c as any)[0].data;
+      porCodigo[data.externalRefs[0].codigo_pdv] = data;
+    }
+    expect(porCodigo['A'].disponivel).toBe(false); // canal gogem pausado
+    expect(porCodigo['B'].disponivel).toBe(false); // inativo
+    expect(porCodigo['C'].disponivel).toBe(false); // esgotado (estoque)
+    expect(porCodigo['D'].disponivel).toBe(true); // ifood pausado não afeta o totem
+  });
+});
+
 describe('reaisToCentavos — helper puro', () => {
   it('arredonda reais (string) para centavos inteiros', () => {
     expect(reaisToCentavos('29.90')).toBe(2990);
