@@ -175,7 +175,7 @@ export class RegemImportService {
     cardapioId: string,
   ): Promise<string> {
     const precoCentavos = reaisToCentavos(rp.precoVenda);
-    const disponivel = !!rp.disponivelCardapio;
+    const disponivel = disponivelNoGogem(rp);
     const categoriaId = rp.categoriaId
       ? (categoriaMap.get(rp.categoriaId) ?? null)
       : null;
@@ -324,6 +324,25 @@ export class RegemImportService {
       }
     }
   }
+}
+
+/** Canais do Regem que representam o totem/GoGeM (pausa reflete no GoGeM). */
+const CANAIS_GOGEM = ['gogem', 'totem'];
+
+/**
+ * Disponibilidade do produto no GoGeM a partir do estado do Regem (Fase 4,
+ * Regem→GoGeM): indisponível se inativo, fora do cardápio, esgotado (estoque)
+ * ou com o canal do totem pausado. Pausar no Regem some do totem no próximo sync.
+ */
+function disponivelNoGogem(rp: RegemProduto): boolean {
+  if (rp.ativo === false) return false;
+  if (!rp.disponivelCardapio) return false;
+  if (rp.pausadoEstoque === true) return false;
+  const canais = Array.isArray(rp.canaisPausados)
+    ? rp.canaisPausados.map((c) => String(c).toLowerCase())
+    : [];
+  if (canais.some((c) => CANAIS_GOGEM.includes(c))) return false;
+  return true;
 }
 
 /** Normaliza um nome para casamento: trim + lower-case. */
