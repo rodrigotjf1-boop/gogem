@@ -14,6 +14,22 @@ class CatalogRepository {
     return int.tryParse(r.first['valor'] as String);
   }
 
+  /// Aparência do totem (por loja) — persistida no kv p/ aplicar offline no boot.
+  Future<void> salvarAparencia(Object? aparencia) async {
+    if (aparencia == null) return;
+    await _db.insert(
+      'kv',
+      {'chave': 'aparencia', 'valor': jsonEncode(aparencia)},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Object?> carregarAparencia() async {
+    final r = await _db.query('kv', where: 'chave = ?', whereArgs: ['aparencia']);
+    if (r.isEmpty) return null;
+    return jsonDecode(r.first['valor'] as String);
+  }
+
   Future<void> salvarSnapshot(Map<String, dynamic> corpo) async {
     final versao = (corpo['versao'] as num).toInt();
     await _db.transaction((tx) async {

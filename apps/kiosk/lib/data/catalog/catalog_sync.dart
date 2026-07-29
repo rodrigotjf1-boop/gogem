@@ -5,6 +5,7 @@ import '../../core/config/app_config.dart';
 import '../../core/pareamento/device_token.dart';
 import '../api/gogem_api.dart';
 import '../db/kiosk_database.dart';
+import 'aparencia.dart';
 import 'catalog_models.dart';
 import 'catalog_repository.dart';
 
@@ -54,6 +55,15 @@ final menuProvider = FutureProvider<MenuSnapshot?>((ref) async {
   return repo.carregarCorrente();
 });
 
+/// Aparência do totem (por loja). Recarrega a cada sync (a aparência é LIVE,
+/// muda mesmo sem catálogo novo). Padrão GoGeM até o 1º sync / offline sem dado.
+final aparenciaProvider = FutureProvider<Aparencia>((ref) async {
+  ref.watch(catalogSyncProvider.select((s) => s.ultimaSync)); // recarga por sync
+  final repo = await ref.watch(catalogRepositoryProvider.future);
+  final j = await repo.carregarAparencia();
+  return j == null ? Aparencia.padrao : Aparencia.fromJson(j);
+});
+
 /// Orquestra o sync: checagem barata por `desde=<versao>`, offline-first
 /// (falha de rede NUNCA apaga o snapshot local) e agendador com backoff.
 class CatalogSyncNotifier extends Notifier<SyncState> {
@@ -94,12 +104,15 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       final api = ref.read(gogemApiProvider);
       final res = await api.getCatalogoPublicado(desde: atual);
       switch (res) {
-        case MenuJaAtualizado():
+        case MenuJaAtualizado(:final aparenciaJson):
+          // Aparência é LIVE: persiste mesmo sem catálogo novo.
+          await repo.salvarAparencia(aparenciaJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
               status: SyncStatus.atualizado, versao: atual, ultimaSync: DateTime.now());
-        case MenuAtualizado(:final body, :final snapshot):
+        case MenuAtualizado(:final body, :final snapshot, :final aparenciaJson):
           await repo.salvarSnapshot(body);
+          await repo.salvarAparencia(aparenciaJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
               status: SyncStatus.atualizado,

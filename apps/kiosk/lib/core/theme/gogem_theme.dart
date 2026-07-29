@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../data/catalog/aparencia.dart';
 
 /// Paleta oficial GoGeM (manual da marca v2 — Robô-Totem).
 abstract final class GogemColors {
@@ -17,42 +18,53 @@ abstract final class GogemColors {
   static const paper = Color(0xFFF7F5EC);
 }
 
-/// Tema dark "game menu" do totem.
-ThemeData gogemTheme() {
+/// Tema dark "game menu" do totem, com os padrões da marca GoGeM.
+ThemeData gogemTheme() => temaDe(Aparencia.padrao);
+
+/// Tema do totem DERIVADO da aparência da loja (Fase 6): cores/raio/fonte
+/// configuráveis no admin re-tematizam o app. `onPrimary` é calculado pelo
+/// contraste (texto escuro em cores claras, claro em escuras). A fonte só troca
+/// de fato se o asset existir no bundle (Tektur vem embutido); senão degrada
+/// para a fonte padrão — sem quebrar.
+ThemeData temaDe(Aparencia ap) {
+  final onPrimary = ap.corPrimaria.computeLuminance() > 0.5
+      ? const Color(0xFF1A1206)
+      : Colors.white;
   final base = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
-    scaffoldBackgroundColor: GogemColors.bg,
-    colorScheme: const ColorScheme.dark(
-      surface: GogemColors.panel,
-      primary: GogemColors.cheese,
-      onPrimary: Color(0xFF1A1206),
-      secondary: GogemColors.mint,
+    scaffoldBackgroundColor: ap.corFundo,
+    colorScheme: ColorScheme.dark(
+      surface: ap.corPainel,
+      primary: ap.corPrimaria,
+      onPrimary: onPrimary,
+      secondary: ap.corDestaque,
       error: GogemColors.heat,
     ),
-    fontFamily: 'Tektur',
+    fontFamily: ap.fonteDisplay,
   );
+  final r = ap.raio;
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
-      displayLarge: const TextStyle(
-          fontFamily: 'Tektur', fontWeight: FontWeight.w600, fontSize: 64, color: GogemColors.ink),
-      headlineMedium: const TextStyle(
-          fontFamily: 'Tektur', fontWeight: FontWeight.w600, fontSize: 34, color: GogemColors.ink),
-      titleLarge: const TextStyle(
-          fontFamily: 'Tektur', fontWeight: FontWeight.w600, fontSize: 22, color: GogemColors.ink),
+      displayLarge: TextStyle(
+          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 64, color: GogemColors.ink),
+      headlineMedium: TextStyle(
+          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 34, color: GogemColors.ink),
+      titleLarge: TextStyle(
+          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 22, color: GogemColors.ink),
       bodyLarge: const TextStyle(fontSize: 18, color: GogemColors.ink),
       bodyMedium: const TextStyle(fontSize: 16, color: GogemColors.inkDim),
-      labelLarge: const TextStyle(
-          fontFamily: 'Tektur', fontWeight: FontWeight.w600, fontSize: 18, letterSpacing: 1.2),
+      labelLarge: TextStyle(
+          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 18, letterSpacing: 1.2),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: GogemColors.cheese,
-        foregroundColor: const Color(0xFF1A1206),
+        backgroundColor: ap.corPrimaria,
+        foregroundColor: onPrimary,
         minimumSize: const Size(220, 72), // alvo de toque generoso p/ totem
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        textStyle: const TextStyle(
-            fontFamily: 'Tektur', fontWeight: FontWeight.w600, fontSize: 22, letterSpacing: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(r + 2)),
+        textStyle: TextStyle(
+            fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 22, letterSpacing: 1),
       ),
     ),
   );
