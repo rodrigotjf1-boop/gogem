@@ -1,5 +1,13 @@
 import * as React from 'react';
-import { ImageOff, Loader2, Package, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  ImageOff,
+  ListTree,
+  Loader2,
+  Package,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -13,6 +21,7 @@ import {
   type Produto,
 } from '@/lib/catalogo';
 import { ProdutoDialog } from './produto-dialog';
+import { ComplementosDialog } from './complementos-dialog';
 
 /** Lista + CRUD de produtos, com filtro por categoria e de-para PDV visível. */
 export function ProdutosPanel() {
@@ -38,6 +47,9 @@ export function ProdutosPanel() {
   const [editando, setEditando] = React.useState<Produto | undefined>();
   const [dialogAberto, setDialogAberto] = React.useState(false);
   const [removendo, setRemovendo] = React.useState<Produto | undefined>();
+  const [complementosDe, setComplementosDe] = React.useState<
+    Produto | undefined
+  >();
 
   function abrirNovo() {
     setEditando(undefined);
@@ -197,6 +209,14 @@ export function ProdutosPanel() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={`Complementos de ${p.nome}`}
+                            onClick={() => setComplementosDe(p)}
+                          >
+                            <ListTree className="size-4" aria-hidden />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             aria-label={`Editar ${p.nome}`}
                             onClick={() => abrirEdicao(p)}
                           >
@@ -230,6 +250,14 @@ export function ProdutosPanel() {
         categorias={categorias}
         produto={editando}
       />
+
+      {complementosDe && (
+        <ComplementosDialog
+          aberto={Boolean(complementosDe)}
+          onFechar={() => setComplementosDe(undefined)}
+          produto={complementosDe}
+        />
+      )}
 
       <ConfirmDialog
         aberto={Boolean(removendo)}
