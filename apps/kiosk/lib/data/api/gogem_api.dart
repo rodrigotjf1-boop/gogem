@@ -4,13 +4,22 @@ import '../catalog/catalog_models.dart';
 
 sealed class PublicadoResult {}
 
-class MenuJaAtualizado extends PublicadoResult {}
+class MenuJaAtualizado extends PublicadoResult {
+  MenuJaAtualizado(this.aparenciaJson);
+
+  /// Aparência (por loja) — vem LIVE em toda resposta, mesmo sem catálogo novo.
+  final Object? aparenciaJson;
+}
 
 class MenuAtualizado extends PublicadoResult {
-  MenuAtualizado(this.body, this.snapshot);
+  MenuAtualizado(this.body, this.snapshot, this.aparenciaJson);
+
   /// Corpo bruto (persistido como fonte da verdade local).
   final Map<String, dynamic> body;
   final MenuSnapshot snapshot;
+
+  /// Aparência (por loja).
+  final Object? aparenciaJson;
 }
 
 class GogemApiException implements Exception {
@@ -79,9 +88,12 @@ class GogemApi {
       throw GogemApiException(res.statusCode, res.body);
     }
     final body = jsonDecode(utf8.decode(res.bodyBytes));
-    if (body is Map && body['atualizado'] == false) return MenuJaAtualizado();
+    final aparencia = body is Map ? body['aparencia'] : null;
+    if (body is Map && body['atualizado'] == false) {
+      return MenuJaAtualizado(aparencia);
+    }
     if (body is Map<String, dynamic>) {
-      return MenuAtualizado(body, MenuSnapshot.fromPublicadoJson(body));
+      return MenuAtualizado(body, MenuSnapshot.fromPublicadoJson(body), aparencia);
     }
     throw GogemApiException(200, 'corpo inesperado');
   }

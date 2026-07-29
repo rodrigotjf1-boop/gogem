@@ -5,6 +5,7 @@ import 'core/pareamento/device_token.dart';
 import 'core/router.dart';
 import 'core/telemetria/heartbeat.dart';
 import 'core/theme/gogem_theme.dart';
+import 'data/catalog/aparencia.dart';
 import 'data/catalog/catalog_sync.dart';
 import 'domain/order/venda_sync.dart';
 
@@ -36,10 +37,15 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
-        title: 'GoGeM',
-        debugShowCheckedModeBanner: false,
-        theme: gogemTheme(),
-        routerConfig: router,
-      );
+  Widget build(BuildContext context) {
+    // Tema DINÂMICO por loja (Fase 6): re-tematiza quando a aparência muda no
+    // sync. Padrão GoGeM até carregar / offline sem dado salvo.
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    return MaterialApp.router(
+      title: 'GoGeM',
+      debugShowCheckedModeBanner: false,
+      theme: temaDe(ap),
+      routerConfig: router,
+    );
+  }
 }
