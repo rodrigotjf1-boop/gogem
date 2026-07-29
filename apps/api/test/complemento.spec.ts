@@ -16,6 +16,14 @@ function makeService() {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    produtoComplemento: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn().mockResolvedValue({ id: 'pc-1' }),
+      delete: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      aggregate: vi.fn().mockResolvedValue({ _max: { ordem: null } }),
+    },
     complementoOpcao: {
       findFirst: vi.fn(),
       create: vi.fn(),
@@ -31,18 +39,22 @@ function makeService() {
 describe('ComplementoService — grupos', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('listGrupos valida produto e inclui opções ordenadas, SEM tenantId manual', async () => {
+  it('listGrupos valida produto e lê as etapas VINCULADAS ordenadas, SEM tenantId manual', async () => {
     const { service, prisma } = makeService();
     prisma.produto.findFirst.mockResolvedValue({ id: 'p-1' });
-    prisma.complementoGrupo.findMany.mockResolvedValue([]);
+    prisma.produtoComplemento.findMany.mockResolvedValue([]);
     await service.listGrupos('p-1');
-    expect(prisma.complementoGrupo.findMany).toHaveBeenCalledWith({
+    expect(prisma.produtoComplemento.findMany).toHaveBeenCalledWith({
       where: { produtoId: 'p-1' },
-      orderBy: [{ ordem: 'asc' }, { nome: 'asc' }],
-      include: { opcoes: { orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] } },
+      orderBy: { ordem: 'asc' },
+      include: {
+        grupo: {
+          include: { opcoes: { orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] } },
+        },
+      },
     });
     expect(
-      JSON.stringify(prisma.complementoGrupo.findMany.mock.calls[0][0]),
+      JSON.stringify(prisma.produtoComplemento.findMany.mock.calls[0][0]),
     ).not.toContain('tenantId');
   });
 
@@ -63,7 +75,7 @@ describe('ComplementoService — grupos', () => {
     expect(prisma.complementoGrupo.create).not.toHaveBeenCalled();
   });
 
-  it('createGrupo com produto válido cria SEM tenantId manual, max nulo default', async () => {
+  it('createGrupo cria a etapa (sem produtoId) e a VINCULA ao produto, SEM tenantId manual', async () => {
     const { service, prisma } = makeService();
     prisma.produto.findFirst.mockResolvedValue({ id: 'p-1' });
     prisma.complementoGrupo.create.mockResolvedValue({ id: 'g-1' });
@@ -73,11 +85,17 @@ describe('ComplementoService — grupos', () => {
       obrigatorio: true,
     });
     const data = prisma.complementoGrupo.create.mock.calls[0][0].data;
-    expect(data.produtoId).toBe('p-1');
+    // A etapa é reutilizável: NÃO carrega produtoId.
+    expect('produtoId' in data).toBe(false);
     expect(data.min).toBe(1);
     expect(data.max).toBeNull();
     expect(data.obrigatorio).toBe(true);
     expect('tenantId' in data).toBe(false);
+    // O vínculo produto↔etapa é criado.
+    expect(prisma.produtoComplemento.create).toHaveBeenCalledTimes(1);
+    const link = prisma.produtoComplemento.create.mock.calls[0][0].data;
+    expect(link.produtoId).toBe('p-1');
+    expect(link.grupoId).toBe('g-1');
   });
 
   it('createGrupo rejeita min/max incoerente (max < min) → BadRequest', async () => {

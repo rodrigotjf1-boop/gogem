@@ -14,6 +14,7 @@ export const TENANT_SCOPED_MODELS = new Set([
   'MenuVersion',
   'ComplementoGrupo',
   'ComplementoOpcao',
+  'ProdutoComplemento',
   'Dispositivo',
   'Pedido',
   'Integracao',

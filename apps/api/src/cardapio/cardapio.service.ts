@@ -183,7 +183,11 @@ export class CardapioService {
     };
   }
 
-  /** Cópia profunda: categorias → produtos → grupos → opções de origem→destino. */
+  /**
+   * Cópia do cardápio: categorias + produtos. As ETAPAS são reutilizáveis
+   * (tenant-wide), então os novos produtos são VINCULADOS às mesmas etapas
+   * (compartilha; não duplica etapas/opções).
+   */
   private async duplicarConteudo(origemId: string, destinoId: string) {
     const categorias = await this.prisma.categoria.findMany({
       where: { cardapioId: origemId },
@@ -202,7 +206,7 @@ export class CardapioService {
 
     const produtos = await this.prisma.produto.findMany({
       where: { cardapioId: origemId },
-      include: { grupos: { include: { opcoes: true } } },
+      include: { complementos: true },
     });
     for (const p of produtos) {
       const novo = await this.prisma.produto.create({
@@ -217,49 +221,32 @@ export class CardapioService {
           externalRefs: p.externalRefs as Prisma.InputJsonValue,
         } as Prisma.ProdutoUncheckedCreateInput,
       });
-      for (const g of p.grupos) {
-        const novoG = await this.prisma.complementoGrupo.create({
+      for (const pc of p.complementos) {
+        await this.prisma.produtoComplemento.create({
           data: {
             produtoId: novo.id,
-            nome: g.nome,
-            min: g.min,
-            max: g.max,
-            obrigatorio: g.obrigatorio,
-            ordem: g.ordem,
-          } as Prisma.ComplementoGrupoUncheckedCreateInput,
+            grupoId: pc.grupoId,
+            ordem: pc.ordem,
+          } as Prisma.ProdutoComplementoUncheckedCreateInput,
         });
-        for (const o of g.opcoes) {
-          await this.prisma.complementoOpcao.create({
-            data: {
-              grupoId: novoG.id,
-              nome: o.nome,
-              precoCentavosDelta: o.precoCentavosDelta,
-              disponivel: o.disponivel,
-              ordem: o.ordem,
-              externalRefs: o.externalRefs as Prisma.InputJsonValue,
-            } as Prisma.ComplementoOpcaoUncheckedCreateInput,
-          });
-        }
       }
     }
   }
 
-  /** Apaga o conteúdo de um cardápio (respeita as FKs: opções→grupos→...). */
+  /**
+   * Apaga o conteúdo de um cardápio: os VÍNCULOS de etapas dos produtos +
+   * produtos + categorias. NÃO apaga as etapas reutilizáveis (compartilhadas).
+   */
   private async apagarConteudo(cardapioId: string) {
     const produtos = await this.prisma.produto.findMany({
       where: { cardapioId },
-      include: { grupos: true },
+      select: { id: true },
     });
-    for (const p of produtos) {
-      const grupoIds = p.grupos.map((g) => g.id);
-      if (grupoIds.length) {
-        await this.prisma.complementoOpcao.deleteMany({
-          where: { grupoId: { in: grupoIds } },
-        });
-        await this.prisma.complementoGrupo.deleteMany({
-          where: { produtoId: p.id },
-        });
-      }
+    const produtoIds = produtos.map((p) => p.id);
+    if (produtoIds.length) {
+      await this.prisma.produtoComplemento.deleteMany({
+        where: { produtoId: { in: produtoIds } },
+      });
     }
     await this.prisma.produto.deleteMany({ where: { cardapioId } });
     await this.prisma.categoria.deleteMany({ where: { cardapioId } });

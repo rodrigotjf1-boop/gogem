@@ -218,21 +218,24 @@ export class RegemImportService {
   }
 
   /**
-   * Importa grupos (casados por `(produtoId, nome)`) e suas opções (casadas por
-   * `(grupoId, nome)`) de um produto já materializado no GoGeM.
+   * Importa etapas e opções de um produto. Etapas são REUTILIZÁVEIS: casa por
+   * nome entre as JÁ VINCULADAS ao produto (via `ProdutoComplemento`); cria uma
+   * etapa nova + vínculo quando não existe. Opções casam por `(grupoId, nome)`.
    */
   private async importGruposOpcoes(
     produtoId: string,
     grupos: RegemGrupo[],
     resumo: RegemImportResumo,
   ): Promise<void> {
-    const gruposExistentes = await this.prisma.complementoGrupo.findMany({
+    const links = await this.prisma.produtoComplemento.findMany({
       where: { produtoId },
+      include: { grupo: true },
     });
     const grupoPorNome = new Map<string, { id: string }>();
-    for (const g of gruposExistentes) {
-      grupoPorNome.set(normalizar(g.nome), { id: g.id });
+    for (const l of links) {
+      grupoPorNome.set(normalizar(l.grupo.nome), { id: l.grupo.id });
     }
+    let proximaOrdem = links.length;
 
     for (const rg of grupos ?? []) {
       let grupoId: string;
@@ -245,25 +248,33 @@ export class RegemImportService {
             min: rg.min ?? 0,
             max: rg.max ?? null,
             obrigatorio: rg.obrigatorio ?? false,
-            ordem: rg.ordem ?? 0,
           },
         });
         resumo.grupos.atualizados += 1;
         grupoId = existente.id;
       } else {
-        const data = {
-          produtoId,
+        const grupoData = {
           nome: rg.nome,
           min: rg.min ?? 0,
           max: rg.max ?? null,
           obrigatorio: rg.obrigatorio ?? false,
-          ordem: rg.ordem ?? 0,
         } satisfies Omit<
           Prisma.ComplementoGrupoUncheckedCreateInput,
           'tenantId'
         >;
         const criado = await this.prisma.complementoGrupo.create({
-          data: data as Prisma.ComplementoGrupoUncheckedCreateInput,
+          data: grupoData as Prisma.ComplementoGrupoUncheckedCreateInput,
+        });
+        const linkData = {
+          produtoId,
+          grupoId: criado.id,
+          ordem: rg.ordem ?? proximaOrdem++,
+        } satisfies Omit<
+          Prisma.ProdutoComplementoUncheckedCreateInput,
+          'tenantId'
+        >;
+        await this.prisma.produtoComplemento.create({
+          data: linkData as Prisma.ProdutoComplementoUncheckedCreateInput,
         });
         resumo.grupos.criados += 1;
         grupoId = criado.id;

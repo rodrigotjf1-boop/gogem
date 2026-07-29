@@ -55,6 +55,15 @@ export class CreateOpcaoDto {
   ordem?: number;
 
   @ApiProperty({
+    description: 'URL pública da foto da opção (Supabase Storage).',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imagemUrl?: string;
+
+  @ApiProperty({
     description: 'De-para PDV (§4): array de { sistema, codigo_pdv, loja? }.',
     required: false,
     type: [ExternalRefDto],

@@ -29,6 +29,10 @@ function makeService() {
       create: vi.fn().mockResolvedValue({ id: 'gg-1' }),
       update: vi.fn().mockResolvedValue({}),
     },
+    produtoComplemento: {
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: 'pc-1' }),
+    },
     complementoOpcao: {
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({ id: 'go-1' }),
