@@ -159,3 +159,124 @@ export function useUploadImagem() {
     },
   });
 }
+
+// ———————————————————— Complementos (grupos + opções) ————————————————————
+// Espelha a árvore do Regem: produto → grupo (etapa) → opção. A OPÇÃO carrega
+// o de-para PDV (`externalRefs`); opção SEM código PDV = "informativa".
+
+export interface Opcao {
+  id: string;
+  grupoId: string;
+  nome: string;
+  precoCentavosDelta: number;
+  disponivel: boolean;
+  ordem: number;
+  externalRefs: ExternalRef[];
+}
+
+export interface Grupo {
+  id: string;
+  produtoId: string;
+  nome: string;
+  min: number;
+  max: number | null;
+  obrigatorio: boolean;
+  ordem: number;
+  opcoes: Opcao[];
+}
+
+export interface GrupoInput {
+  nome: string;
+  min?: number;
+  max?: number;
+  obrigatorio?: boolean;
+  ordem?: number;
+}
+
+export interface OpcaoInput {
+  nome: string;
+  precoCentavosDelta?: number;
+  disponivel?: boolean;
+  ordem?: number;
+  externalRefs?: ExternalRef[];
+}
+
+/** Código PDV do Regem de uma opção (null = opção informativa). */
+export function codigoPdvOpcao(opcao: Opcao): string | null {
+  const ref = opcao.externalRefs?.find((r) => r.sistema === 'regem');
+  return ref?.codigo_pdv ?? null;
+}
+
+export const complementoKeys = {
+  grupos: (produtoId: string) => ['grupos', produtoId] as const,
+};
+
+export function useGrupos(
+  produtoId: string,
+  habilitado = true,
+): UseQueryResult<Grupo[]> {
+  return useQuery({
+    queryKey: complementoKeys.grupos(produtoId),
+    queryFn: () => apiGet<Grupo[]>(`/produtos/${produtoId}/grupos`),
+    enabled: habilitado && Boolean(produtoId),
+  });
+}
+
+function invalidarGrupos(
+  qc: ReturnType<typeof useQueryClient>,
+  produtoId: string,
+) {
+  return qc.invalidateQueries({ queryKey: complementoKeys.grupos(produtoId) });
+}
+
+export function useCriarGrupo(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: GrupoInput) =>
+      apiPost<Grupo, GrupoInput>(`/produtos/${produtoId}/grupos`, input),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+export function useAtualizarGrupo(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: GrupoInput }) =>
+      apiPatch<Grupo, GrupoInput>(`/grupos/${id}`, input),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+export function useRemoverGrupo(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<{ id: string }>(`/grupos/${id}`),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+export function useCriarOpcao(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ grupoId, input }: { grupoId: string; input: OpcaoInput }) =>
+      apiPost<Opcao, OpcaoInput>(`/grupos/${grupoId}/opcoes`, input),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+export function useAtualizarOpcao(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: OpcaoInput }) =>
+      apiPatch<Opcao, OpcaoInput>(`/opcoes/${id}`, input),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+export function useRemoverOpcao(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<{ id: string }>(`/opcoes/${id}`),
+    onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}

@@ -90,6 +90,95 @@ describe('Catálogo — RBAC no front', () => {
   });
 });
 
+const GRUPO = {
+  id: 'g1',
+  produtoId: 'p1',
+  nome: 'Escolha a bebida',
+  min: 1,
+  max: 1,
+  obrigatorio: true,
+  ordem: 0,
+  opcoes: [
+    {
+      id: 'o1',
+      grupoId: 'g1',
+      nome: 'Coca lata',
+      precoCentavosDelta: 500,
+      disponivel: true,
+      ordem: 0,
+      externalRefs: [{ sistema: 'regem', codigo_pdv: 'BEB-1' }],
+    },
+    {
+      id: 'o2',
+      grupoId: 'g1',
+      nome: 'Sem bebida',
+      precoCentavosDelta: 0,
+      disponivel: true,
+      ordem: 1,
+      externalRefs: [],
+    },
+  ],
+};
+
+describe('Catálogo — complementos', () => {
+  it('abre o editor e mostra etapa, opções, código PDV e "informativa"', async () => {
+    server.use(
+      http.get(`${API}/categorias`, () => HttpResponse.json([CATEGORIA])),
+      http.get(`${API}/produtos`, () => HttpResponse.json([PRODUTO])),
+      http.get(`${API}/produtos/p1/grupos`, () => HttpResponse.json([GRUPO])),
+    );
+    montarLogado('gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Complementos de X-Salada' }),
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    // A etapa carrega assíncrona (GET grupos).
+    expect(await within(dialog).findByText('Escolha a bebida')).toBeInTheDocument();
+    expect(within(dialog).getByText('obrigatória')).toBeInTheDocument();
+    expect(within(dialog).getByText('Coca lata')).toBeInTheDocument();
+    expect(within(dialog).getByText('BEB-1')).toBeInTheDocument(); // opção com código
+    // opção sem código = informativa
+    expect(within(dialog).getByText('informativa')).toBeInTheDocument();
+  });
+
+  it('cria uma opção enviando o código PDV como externalRefs', async () => {
+    let recebido: { nome?: string; externalRefs?: unknown } | null = null;
+    server.use(
+      http.get(`${API}/categorias`, () => HttpResponse.json([CATEGORIA])),
+      http.get(`${API}/produtos`, () => HttpResponse.json([PRODUTO])),
+      http.get(`${API}/produtos/p1/grupos`, () => HttpResponse.json([GRUPO])),
+      http.post(`${API}/grupos/g1/opcoes`, async ({ request }) => {
+        recebido = (await request.json()) as typeof recebido;
+        return HttpResponse.json({ id: 'o3', grupoId: 'g1', ...recebido });
+      }),
+    );
+    montarLogado('gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Complementos de X-Salada' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('Escolha a bebida'); // aguarda o load
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Adicionar opção' }));
+
+    fireEvent.change(within(dialog).getByLabelText('Nome da opção'), {
+      target: { value: 'Guaraná' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Código PDV (Regem)'), {
+      target: { value: 'BEB-2' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Criar opção' }));
+
+    await waitFor(() => expect(recebido).not.toBeNull());
+    expect(recebido!.nome).toBe('Guaraná');
+    expect(recebido!.externalRefs).toEqual([
+      { sistema: 'regem', codigo_pdv: 'BEB-2' },
+    ]);
+  });
+});
+
 describe('Catálogo — criar categoria', () => {
   it('cria uma categoria e ela aparece na lista', async () => {
     const categorias: Array<{ id: string; nome: string; ordem: number }> = [];
