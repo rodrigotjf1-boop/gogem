@@ -47,8 +47,38 @@ model Tenant {
   pedidos            Pedido[]
   integracoes        Integracao[]
   cardapios          Cardapio[]
+  aparencia          Aparencia?
 
   @@map("tenants")
+}
+
+// Aparência do totem POR LOJA (Fase 6). O admin configura e o totem aplica no
+// próximo sync (vai no `/catalogo/publicado`). O render é do app do totem; aqui
+// só guardamos os tokens. Cores em hex; `descansoMidias` = [{ url, tipo }].
+model Aparencia {
+  id                   String   @id @default(uuid())
+  tenantId             String   @unique
+  corPrimaria          String   @default("#FFC24B")
+  corDestaque          String   @default("#3ECF8E")
+  corFundo             String   @default("#0F1713")
+  corPainel            String   @default("#16211B")
+  raio                 Int      @default(16)
+  nomeLoja             String?
+  logoUrl              String?
+  fonteDisplay         String   @default("Tektur")
+  descansoTipo         String   @default("padrao") // 'padrao' | 'carrossel'
+  descansoIntervaloSeg Int      @default(6)
+  descansoMidias       Json     @default("[]")
+  chamada              String   @default("TOQUE PARA PEDIR")
+  precoIsca            String?
+  estiloCard           String   @default("cheia") // 'cheia' | 'lateral'
+  animacoes            String   @default("cheio") // 'cheio' | 'reduzido' | 'off'
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("aparencias")
 }
 
 // Cardápio (Fase 3B): um conjunto INDEPENDENTE de categorias+produtos. Um tenant
