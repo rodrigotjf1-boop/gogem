@@ -35,7 +35,9 @@ class OrderRepository {
     await _db.insert('pedidos_locais', {
       'uuid': pedido.uuid,
       'senha': senha,
-      'corpo_json': jsonEncode(pedido.toJson()),
+      // A senha de retirada (sequencial diário) segue ao backend/Regem como
+      // senhaLocal — só é conhecida aqui, após proximaSenha().
+      'corpo_json': jsonEncode(pedido.toJson(senhaLocal: int.tryParse(senha))),
       'status': 'pendente_envio',
       'criado_em': pedido.criadoEm.toIso8601String(),
     });

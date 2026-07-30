@@ -63,6 +63,8 @@ class PedidoLocal {
     required this.itens,
     required this.forma,
     this.cpf,
+    this.cliente,
+    this.consumo = 'local',
     DateTime? criadoEm,
   })  : uuid = uuid ?? uuidV4(),
         criadoEm = criadoEm ?? DateTime.now();
@@ -71,34 +73,45 @@ class PedidoLocal {
   final List<ItemCarrinho> itens;
   final FormaPagamento forma;
   final String? cpf;
+
+  /// Nome informado no totem (opcional; coletado na F4).
+  final String? cliente;
+
+  /// Tipo de consumo: 'local' (comer aqui) | 'viagem'.
+  final String consumo;
   final DateTime criadoEm;
 
   int get totalCentavos => itens.fold<int>(0, (s, i) => s + i.totalCentavos);
 
-  /// Corpo F6-ready: de-para SEMPRE por codigo_pdv, nunca id interno.
-  Map<String, dynamic> toJson() => {
-        'uuid': uuid,
-        'criadoEm': criadoEm.toIso8601String(),
-        'forma': forma.name,
+  /// Corpo canônico do `VendaTotemDto` do backend (`POST /vendas`):
+  /// - idempotência via `idempotencyKey` (= uuid do pedido);
+  /// - pagamento único no split `pagamentos[]`, `valor` em CENTAVOS;
+  /// - itens SEMPRE por `codigoPdv` (de-para §4). Opção COM código PDV vira uma
+  ///   linha vendável (qtd = qtd do item); opção SEM código é **informativa** e
+  ///   não é enviada. `senhaLocal` (senha de retirada) segue ao Regem.
+  Map<String, dynamic> toJson({int? senhaLocal}) => {
+        'idempotencyKey': uuid,
         if (cpf != null && cpf!.isNotEmpty) 'cpf': cpf,
-        'totalCentavos': totalCentavos,
+        if (cliente != null && cliente!.isNotEmpty) 'cliente': cliente,
+        'consumo': consumo,
+        if (senhaLocal != null) 'senhaLocal': senhaLocal,
+        'pagamentos': [
+          {'forma': forma.name, 'valor': totalCentavos},
+        ],
         'itens': [
-          for (final i in itens)
+          for (final i in itens) ...[
             {
               'codigoPdv': i.produto.codigoPdvRegem,
-              'nome': i.produto.nome,
               'quantidade': i.quantidade,
-              'precoUnitarioCentavos': i.precoUnitarioCentavos,
               if (i.observacao.isNotEmpty) 'observacao': i.observacao,
-              'opcoes': [
-                for (final o in i.todasOpcoes)
-                  {
-                    'codigoPdv': ExternalRef.codigoRegem(o.externalRefs),
-                    'nome': o.nome,
-                    'deltaCentavos': o.precoCentavosDelta,
-                  }
-              ],
-            }
+            },
+            for (final o in i.todasOpcoes)
+              if ((ExternalRef.codigoRegem(o.externalRefs) ?? '').isNotEmpty)
+                {
+                  'codigoPdv': ExternalRef.codigoRegem(o.externalRefs),
+                  'quantidade': i.quantidade,
+                },
+          ],
         ],
       };
 }

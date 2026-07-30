@@ -97,6 +97,7 @@ class CarrinhoScreen extends ConsumerWidget {
                     },
                   ),
           ),
+          if (!cart.vazio) const _ConsumoToggle(),
           if (!cart.vazio)
             Container(
               padding: const EdgeInsets.all(20),
@@ -122,6 +123,72 @@ class CarrinhoScreen extends ConsumerWidget {
             ),
         ]),
       ),
+    );
+  }
+}
+
+/// Escolha do tipo de consumo (comer aqui / para viagem) — segue ao Regem.
+class _ConsumoToggle extends ConsumerWidget {
+  const _ConsumoToggle();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final consumo = ref.watch(checkoutProvider.select((c) => c.consumo));
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+      child: Row(children: [
+        Expanded(
+          child: _ConsumoOpcao(
+            chave: 'consumo-local',
+            rotulo: 'COMER AQUI',
+            icone: Icons.restaurant,
+            ativo: consumo == 'local',
+            onTap: () => ref.read(checkoutProvider.notifier).setConsumo('local'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _ConsumoOpcao(
+            chave: 'consumo-viagem',
+            rotulo: 'PARA VIAGEM',
+            icone: Icons.shopping_bag_outlined,
+            ativo: consumo == 'viagem',
+            onTap: () =>
+                ref.read(checkoutProvider.notifier).setConsumo('viagem'),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ConsumoOpcao extends StatelessWidget {
+  const _ConsumoOpcao({
+    required this.chave,
+    required this.rotulo,
+    required this.icone,
+    required this.ativo,
+    required this.onTap,
+  });
+  final String chave;
+  final String rotulo;
+  final IconData icone;
+  final bool ativo;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: ValueKey(chave),
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(64),
+        backgroundColor: ativo ? GogemColors.cheese : GogemColors.panel,
+        foregroundColor: ativo ? GogemColors.panel : GogemColors.ink,
+        side: BorderSide(
+            color: ativo ? GogemColors.cheese : GogemColors.line, width: 2),
+      ),
+      icon: Icon(icone, size: 26),
+      label: Text(rotulo,
+          style: const TextStyle(fontFamily: 'Tektur', fontSize: 18)),
     );
   }
 }

@@ -61,10 +61,13 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     setState(() => _processando = true);
     await Future<void>.delayed(widget.processamento); // simula a integradora
 
+    final checkout = ref.read(checkoutProvider);
     final pedido = PedidoLocal(
       itens: cart.itens,
       forma: forma,
-      cpf: ref.read(checkoutProvider).cpf,
+      cpf: checkout.cpf,
+      cliente: checkout.cliente,
+      consumo: checkout.consumo,
     );
     final repo = await ref.read(orderRepositoryProvider.future);
     final senha = await repo.salvarPedido(pedido);

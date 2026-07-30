@@ -29,16 +29,27 @@ void main() {
     expect(selecaoValida(livre, [op, op, op, op]), isFalse);
   });
 
-  test('PedidoLocal.toJson usa codigo_pdv (nunca id interno) e UUID v4', () {
+  test('PedidoLocal.toJson emite o VendaTotemDto (codigo_pdv, pagamentos, '
+      'consumo) e UUID v4', () {
     final bacon = burger.grupos.single.opcoes.single;
     final p = PedidoLocal(
         itens: [ItemCarrinho(produto: burger, selecoes: {'g1': [bacon]})],
         forma: FormaPagamento.pix,
-        cpf: '52998224725');
-    final j = p.toJson();
+        cpf: '52998224725',
+        consumo: 'viagem');
+    final j = p.toJson(senhaLocal: 7);
+    // idempotência canônica + tipo de consumo.
+    expect(j['idempotencyKey'], p.uuid);
+    expect(j['consumo'], 'viagem');
+    expect(j['senhaLocal'], 7);
+    expect(j['cpf'], '52998224725');
+    // produto vira 1ª linha; opção COM código PDV vira linha vendável separada.
     expect(j['itens'][0]['codigoPdv'], '101');
-    expect(j['itens'][0]['opcoes'][0]['codigoPdv'], '201');
-    expect(j['totalCentavos'], 3390);
+    expect(j['itens'][0]['quantidade'], 1);
+    expect(j['itens'][1]['codigoPdv'], '201');
+    // pagamento único no split, valor em CENTAVOS (produto 2990 + bacon 400).
+    expect(j['pagamentos'][0]['forma'], 'pix');
+    expect(j['pagamentos'][0]['valor'], 3390);
     expect(RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
             .hasMatch(p.uuid),
         isTrue);
