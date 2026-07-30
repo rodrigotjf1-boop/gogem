@@ -10,6 +10,11 @@ const API = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1';
 
 const APARENCIA = {
   id: 'ap-1',
+  // O GET devolve o registro inteiro — inclui campos que o DTO de update
+  // rejeita (whitelist). O patch NÃO pode reenviá-los.
+  tenantId: 't1',
+  createdAt: '2026-07-01T00:00:00.000Z',
+  updatedAt: '2026-07-01T00:00:00.000Z',
   corPrimaria: '#FFC24B',
   corDestaque: '#3ECF8E',
   corFundo: '#0F1713',
@@ -65,7 +70,11 @@ describe('Configurações · Aparência', () => {
 
     await waitFor(() => expect(recebido).not.toBeNull());
     expect(recebido!.nomeLoja).toBe('BURGER TOP');
-    expect('id' in recebido!).toBe(false); // não manda o id no patch
+    // Só campos editáveis: nada de id/tenantId/createdAt/updatedAt (whitelist).
+    expect('id' in recebido!).toBe(false);
+    expect('tenantId' in recebido!).toBe(false);
+    expect('createdAt' in recebido!).toBe(false);
+    expect('updatedAt' in recebido!).toBe(false);
     expect(await screen.findByText('Aparência salva.')).toBeInTheDocument();
   });
 
