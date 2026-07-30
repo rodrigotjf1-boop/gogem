@@ -14,6 +14,8 @@ const publicadoFixture = <String, dynamic>{
         'descricao': 'Pão, carne 160g, queijo',
         'precoCentavos': 2990,
         'disponivel': true,
+        // Upsell "Peça também" (F2): sugere Refri (p2) e Esgotado (p3).
+        'upsell': ['p2', 'p3'],
         'externalRefs': [
           {'sistema': 'regem', 'codigo_pdv': '101'}
         ],
