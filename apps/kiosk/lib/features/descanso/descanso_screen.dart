@@ -74,7 +74,12 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
         child: Stack(children: [
           // Fundo: carrossel da loja OU o robô/branding padrão.
           if (ap.carrossel)
-            _Carrossel(midias: ap.descansoMidias, intervalo: ap.descansoIntervaloSeg, anima: anima)
+            _Carrossel(
+                midias: ap.descansoMidias,
+                intervalo: ap.descansoIntervaloSeg,
+                anima: anima,
+                brasa: ap.brasa,
+                corKicker: ap.corPrimaria)
           else
             _FundoRobo(idle: _idle, caps: caps, anima: anima),
 
@@ -222,10 +227,18 @@ class _FundoRobo extends StatelessWidget {
 /// Carrossel de mídias da loja (imagens/gifs) com auto-avanço + escurecimento
 /// para os textos ficarem legíveis por cima.
 class _Carrossel extends StatefulWidget {
-  const _Carrossel({required this.midias, required this.intervalo, required this.anima});
-  final List<String> midias;
+  const _Carrossel({
+    required this.midias,
+    required this.intervalo,
+    required this.anima,
+    required this.brasa,
+    required this.corKicker,
+  });
+  final List<DescansoMidia> midias;
   final int intervalo;
   final bool anima;
+  final bool brasa;
+  final Color corKicker;
   @override
   State<_Carrossel> createState() => _CarrosselState();
 }
@@ -252,14 +265,18 @@ class _CarrosselState extends State<_Carrossel> {
 
   @override
   Widget build(BuildContext context) {
-    final url = widget.midias[_i % widget.midias.length];
+    final t = Theme.of(context).textTheme;
+    final midia = widget.midias[_i % widget.midias.length];
+    // Preset "brasa": escurece mais embaixo (look editorial/steakhouse).
+    final topAlpha = widget.brasa ? 0.35 : 0.25;
+    final bottomAlpha = widget.brasa ? 0.9 : 0.75;
     return Positioned.fill(
       child: Stack(fit: StackFit.expand, children: [
         AnimatedSwitcher(
           duration: Duration(milliseconds: widget.anima ? 500 : 0),
           child: CachedNetworkImage(
-            key: ValueKey(url),
-            imageUrl: url,
+            key: ValueKey(midia.url),
+            imageUrl: midia.url,
             fit: BoxFit.cover,
             errorWidget: (_, __, ___) => const SizedBox.shrink(),
           ),
@@ -271,12 +288,44 @@ class _CarrosselState extends State<_Carrossel> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.black.withValues(alpha: 0.25),
-                Colors.black.withValues(alpha: 0.75),
+                Colors.black.withValues(alpha: topAlpha),
+                Colors.black.withValues(alpha: bottomAlpha),
               ],
             ),
           ),
         ),
+        // Legenda editorial do slide (F3): chapéu + título + subtítulo.
+        if (midia.temLegenda)
+          Positioned(
+            left: 40,
+            right: 40,
+            bottom: 200,
+            child: Column(
+              key: const ValueKey('descanso-legenda'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (midia.kicker != null)
+                  Text(midia.kicker!.toUpperCase(),
+                      style: t.titleLarge?.copyWith(
+                          color: widget.corKicker,
+                          letterSpacing: 3,
+                          fontSize: 22)),
+                if (midia.titulo != null) ...[
+                  const SizedBox(height: 6),
+                  Text(midia.titulo!,
+                      style: t.displayLarge?.copyWith(
+                          color: Colors.white, fontSize: 54, height: 1.0)),
+                ],
+                if (midia.subtitulo != null) ...[
+                  const SizedBox(height: 6),
+                  Text(midia.subtitulo!,
+                      style: t.bodyLarge
+                          ?.copyWith(color: Colors.white70, fontSize: 22)),
+                ],
+              ],
+            ),
+          ),
       ]),
     );
   }

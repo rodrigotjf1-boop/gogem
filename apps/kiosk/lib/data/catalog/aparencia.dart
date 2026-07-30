@@ -1,5 +1,24 @@
 import 'package:flutter/material.dart';
 
+/// Uma mídia do descanso (F3): url + legendas editoriais opcionais por slide.
+class DescansoMidia {
+  const DescansoMidia({
+    required this.url,
+    this.kicker,
+    this.titulo,
+    this.subtitulo,
+  });
+  final String url;
+  final String? kicker;
+  final String? titulo;
+  final String? subtitulo;
+
+  bool get temLegenda =>
+      (kicker != null && kicker!.isNotEmpty) ||
+      (titulo != null && titulo!.isNotEmpty) ||
+      (subtitulo != null && subtitulo!.isNotEmpty);
+}
+
 /// Aparência do totem (Fase 6) — vem do `/catalogo/publicado` (por loja) e
 /// re-tematiza o app no sync. Parsing defensivo: campo ausente cai no padrão
 /// GoGeM. Cores chegam em hex ("#RRGGBB"); aqui viram `Color`.
@@ -13,6 +32,7 @@ class Aparencia {
     required this.nomeLoja,
     required this.logoUrl,
     required this.fonteDisplay,
+    required this.temaPreset,
     required this.descansoTipo,
     required this.descansoIntervaloSeg,
     required this.descansoMidias,
@@ -30,9 +50,10 @@ class Aparencia {
   final String? nomeLoja;
   final String? logoUrl;
   final String fonteDisplay; // 'Tektur' | 'Poppins' | 'Montserrat'
+  final String temaPreset; // 'padrao' | 'brasa'
   final String descansoTipo; // 'padrao' | 'carrossel'
   final int descansoIntervaloSeg;
-  final List<String> descansoMidias; // urls
+  final List<DescansoMidia> descansoMidias;
   final String chamada;
   final String? precoIsca;
   final String estiloCard; // 'cheia' | 'lateral'
@@ -48,6 +69,7 @@ class Aparencia {
     nomeLoja: null,
     logoUrl: null,
     fonteDisplay: 'Tektur',
+    temaPreset: 'padrao',
     descansoTipo: 'padrao',
     descansoIntervaloSeg: 6,
     descansoMidias: [],
@@ -58,6 +80,7 @@ class Aparencia {
   );
 
   bool get carrossel => descansoTipo == 'carrossel' && descansoMidias.isNotEmpty;
+  bool get brasa => temaPreset == 'brasa';
   bool get cardLateral => estiloCard == 'lateral';
   bool get semAnimacao => animacoes == 'off';
   bool get animacaoReduzida => animacoes == 'reduzido';
@@ -70,15 +93,27 @@ class Aparencia {
       return (t == null || t.isEmpty) ? null : t;
     }
 
-    final midias = <String>[];
+    String? txt(Object? v) {
+      final t = v?.toString().trim();
+      return (t == null || t.isEmpty) ? null : t;
+    }
+
+    final midias = <DescansoMidia>[];
     final m = raw['descansoMidias'];
     if (m is List) {
       for (final e in m) {
         if (e is Map && e['url'] != null) {
           final u = e['url'].toString().trim();
-          if (u.isNotEmpty) midias.add(u);
+          if (u.isNotEmpty) {
+            midias.add(DescansoMidia(
+              url: u,
+              kicker: txt(e['kicker']),
+              titulo: txt(e['titulo']),
+              subtitulo: txt(e['subtitulo']),
+            ));
+          }
         } else if (e is String && e.trim().isNotEmpty) {
-          midias.add(e.trim());
+          midias.add(DescansoMidia(url: e.trim()));
         }
       }
     }
@@ -94,6 +129,7 @@ class Aparencia {
       nomeLoja: s('nomeLoja'),
       logoUrl: s('logoUrl'),
       fonteDisplay: s('fonteDisplay') ?? 'Tektur',
+      temaPreset: s('temaPreset') ?? 'padrao',
       descansoTipo: s('descansoTipo') ?? 'padrao',
       descansoIntervaloSeg:
           (raw['descansoIntervaloSeg'] is num ? (raw['descansoIntervaloSeg'] as num).toInt() : 6)
