@@ -38,6 +38,7 @@ export class AparenciaService {
         nomeLoja: dto.nomeLoja,
         logoUrl: dto.logoUrl,
         fonteDisplay: dto.fonteDisplay,
+        temaPreset: dto.temaPreset,
         descansoTipo: dto.descansoTipo,
         descansoIntervaloSeg: dto.descansoIntervaloSeg,
         descansoMidias:

@@ -42,15 +42,32 @@ describe('AparenciaService', () => {
     prisma.aparencia.update.mockResolvedValue({ id: 'ap-1' });
     await service.atualizar({
       corPrimaria: '#FF0000',
+      temaPreset: 'brasa',
       descansoTipo: 'carrossel',
-      descansoMidias: [{ url: 'https://x/img.png', tipo: 'imagem' }],
+      descansoMidias: [
+        {
+          url: 'https://x/img.png',
+          tipo: 'imagem',
+          kicker: 'Feito na brasa',
+          titulo: 'Mister Double',
+          subtitulo: 'Dois blends',
+        },
+      ],
     });
     const arg = prisma.aparencia.update.mock.calls[0][0];
     expect(arg.where).toEqual({ id: 'ap-1' });
     expect(arg.data.corPrimaria).toBe('#FF0000');
+    expect(arg.data.temaPreset).toBe('brasa'); // preset de tema (F3)
     expect(arg.data.descansoTipo).toBe('carrossel');
+    // Legendas por slide (F3) preservadas no Json.
     expect(arg.data.descansoMidias).toEqual([
-      { url: 'https://x/img.png', tipo: 'imagem' },
+      {
+        url: 'https://x/img.png',
+        tipo: 'imagem',
+        kicker: 'Feito na brasa',
+        titulo: 'Mister Double',
+        subtitulo: 'Dois blends',
+      },
     ]);
   });
 

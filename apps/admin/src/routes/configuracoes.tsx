@@ -52,6 +52,7 @@ export default function ConfiguracoesPage() {
       nomeLoja: form.nomeLoja,
       logoUrl: form.logoUrl,
       fonteDisplay: form.fonteDisplay,
+      temaPreset: form.temaPreset,
       descansoTipo: form.descansoTipo,
       descansoIntervaloSeg: form.descansoIntervaloSeg,
       descansoMidias: form.descansoMidias,
@@ -122,6 +123,13 @@ export default function ConfiguracoesPage() {
               value={form.fonteDisplay}
               options={['Tektur', 'Poppins', 'Montserrat']}
               onChange={(v) => set('fonteDisplay', v as Aparencia['fonteDisplay'])}
+            />
+            <SelectField
+              label="Estilo do totem"
+              value={form.temaPreset}
+              options={['padrao', 'brasa']}
+              rotulos={{ padrao: 'Padrão GoGeM', brasa: 'Brasa (steakhouse)' }}
+              onChange={(v) => set('temaPreset', v as Aparencia['temaPreset'])}
             />
           </CardContent>
         </Card>
@@ -265,12 +273,21 @@ function MidiasEditor({
   midias: DescansoMidia[];
   onChange: (m: DescansoMidia[]) => void;
 }) {
+  function patch(i: number, campo: keyof DescansoMidia, valor: string) {
+    const novo = [...midias];
+    novo[i] = { ...novo[i], [campo]: valor };
+    onChange(novo);
+  }
+
   return (
     <div className="space-y-2">
       <Label>Mídias do carrossel</Label>
       <div className="flex flex-wrap gap-3">
         {midias.map((m, i) => (
-          <div key={i} className="relative">
+          <div
+            key={i}
+            className="w-40 space-y-2 rounded-lg border border-border p-2"
+          >
             <ImageUploadTile
               value={m.url || null}
               onChange={(url) => {
@@ -279,6 +296,28 @@ function MidiasEditor({
                 else novo.splice(i, 1);
                 onChange(novo);
               }}
+            />
+            {/* Legendas do slide (F3) — opcionais. */}
+            <Input
+              aria-label={`Chapéu do slide ${i + 1}`}
+              value={m.kicker ?? ''}
+              onChange={(e) => patch(i, 'kicker', e.target.value)}
+              placeholder="Chapéu (ex.: Na brasa)"
+              className="h-8 text-xs"
+            />
+            <Input
+              aria-label={`Título do slide ${i + 1}`}
+              value={m.titulo ?? ''}
+              onChange={(e) => patch(i, 'titulo', e.target.value)}
+              placeholder="Título"
+              className="h-8 text-xs"
+            />
+            <Input
+              aria-label={`Subtítulo do slide ${i + 1}`}
+              value={m.subtitulo ?? ''}
+              onChange={(e) => patch(i, 'subtitulo', e.target.value)}
+              placeholder="Subtítulo"
+              className="h-8 text-xs"
             />
           </div>
         ))}
