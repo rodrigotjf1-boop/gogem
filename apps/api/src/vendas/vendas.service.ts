@@ -100,6 +100,7 @@ export class VendasService {
           erro: null,
           cpf: dto.cpf ?? null,
           cliente: dto.cliente ?? null,
+          consumo: dto.consumo ?? 'local',
           dispositivoId: ctx.deviceId,
           itens,
           pagamentos,
@@ -114,6 +115,7 @@ export class VendasService {
         status: 'pendente',
         cpf: dto.cpf ?? null,
         cliente: dto.cliente ?? null,
+        consumo: dto.consumo ?? 'local',
         dispositivoId: ctx.deviceId,
         itens,
         pagamentos,
@@ -145,6 +147,7 @@ export class VendasService {
         cpf: dto.cpf,
         taxaServicoPct: dto.taxaServicoPct,
         plataforma: PLATAFORMA,
+        consumo: dto.consumo ?? 'local',
         senhaPlataforma:
           dto.senhaLocal != null ? String(dto.senhaLocal) : undefined,
       });

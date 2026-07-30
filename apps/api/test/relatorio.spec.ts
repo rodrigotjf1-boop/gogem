@@ -29,6 +29,7 @@ describe('RelatorioService', () => {
         dispositivoId: 'd1',
         cliente: 'Ana',
         cpf: null,
+        consumo: 'viagem',
         senhaLocal: 7,
         status: 'enviado',
         totalCentavos: 2990,
@@ -49,6 +50,7 @@ describe('RelatorioService', () => {
     expect(out[0].dispositivo).toBe('Totem 1');
     expect(out[0].formas).toEqual(['cartao']);
     expect(out[0].itens).toBe(1);
+    expect(out[0].consumo).toBe('viagem');
   });
 
   it('faturamento soma só o total e calcula o ticket médio', async () => {

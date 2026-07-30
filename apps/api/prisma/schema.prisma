@@ -329,6 +329,9 @@ model Pedido {
   cpf            String?
   // Nome informado na hora do pedido (opcional) — para o relatório.
   cliente        String?
+  // Tipo de consumo: 'local' (comer aqui) | 'viagem' (para viagem). Segue ao
+  // Regem e afeta cozinha/embalagem. Default 'local' (retrocompat).
+  consumo        String   @default("local")
   // Itens do pedido: [{ codigoPdv, quantidade, observacao? }] (de-para §4).
   itens          Json
   // Split de pagamento: [{ forma, valor(centavos), nsu?, autorizacao?, formaPagamentoId? }].

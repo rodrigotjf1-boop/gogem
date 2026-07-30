@@ -101,6 +101,9 @@ describe('VendasService.registrarVendaTotem — relay de sucesso', () => {
     expect(body.senhaPlataforma).toBe('42');
     expect(body.pagamentos[0].valor).toBe(59.8); // 5980 centavos → 59.80
     expect(body.idempotencyKey).toBe('idem-1');
+    // Consumo default 'local' vai ao Regem e é gravado no Pedido.
+    expect(body.consumo).toBe('local');
+    expect(prisma.pedido.create.mock.calls[0][0].data.consumo).toBe('local');
 
     // Grava enviado com o resultado do Regem.
     const updateData = prisma.pedido.update.mock.calls.at(-1)?.[0].data;
@@ -114,6 +117,22 @@ describe('VendasService.registrarVendaTotem — relay de sucesso', () => {
       total: 5980,
       nfce: { status: 'autorizada' },
     });
+  });
+
+  it('consumo "viagem" é gravado e repassado ao Regem', async () => {
+    const { service, prisma, regem } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pedido.create.mockResolvedValue({ id: 'p-1' });
+    prisma.pedido.update.mockResolvedValue({});
+    regem.lancarVendaExterna.mockResolvedValue({
+      comandaId: 'cmd-2',
+      senha: 1,
+    });
+
+    await service.registrarVendaTotem(CTX, dto({ consumo: 'viagem' }));
+
+    expect(prisma.pedido.create.mock.calls[0][0].data.consumo).toBe('viagem');
+    expect(regem.lancarVendaExterna.mock.calls[0][0].consumo).toBe('viagem');
   });
 
   it('sem senhaLocal → senhaPlataforma omitida (não vira "undefined"/0)', async () => {
