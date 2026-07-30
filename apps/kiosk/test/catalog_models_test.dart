@@ -21,6 +21,14 @@ void main() {
     expect(burgers.map((p) => p.id), ['p1']); // p3 indisponível fica fora
   });
 
+  test('upsell (F2): parse dos ids sugeridos e porId', () {
+    final m = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+    expect(m.produtos.first.upsell, ['p2', 'p3']);
+    expect(m.produtos[1].upsell, isEmpty); // sem upsell → lista vazia
+    expect(m.porId('p2')?.nome, 'Refri Lata');
+    expect(m.porId('inexistente'), isNull);
+  });
+
   test('parsing defensivo: campos ausentes não explodem', () {
     final m = MenuSnapshot.fromPublicadoJson(const {
       'versao': 1,

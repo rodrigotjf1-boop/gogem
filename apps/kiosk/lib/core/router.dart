@@ -7,6 +7,7 @@ import '../features/admin/admin_panel_screen.dart';
 import '../features/pareamento/pareamento_screen.dart';
 import '../features/pedido/produto_screen.dart';
 import '../features/pedido/carrinho_screen.dart';
+import '../features/pedido/peca_tambem_screen.dart';
 import '../features/pedido/identificacao_screen.dart';
 import '../features/pedido/pagamento_screen.dart';
 import '../features/pedido/confirmacao_screen.dart';
@@ -35,6 +36,8 @@ final router = GoRouter(
         path: '/produto/:id',
         builder: (_, s) => ProdutoScreen(produtoId: s.pathParameters['id']!)),
     GoRoute(path: '/carrinho', builder: (_, __) => const CarrinhoScreen()),
+    GoRoute(
+        path: '/peca-tambem', builder: (_, __) => const PecaTambemScreen()),
     GoRoute(path: '/identificacao', builder: (_, __) => const IdentificacaoScreen()),
     GoRoute(path: '/pagamento', builder: (_, __) => const PagamentoScreen()),
     GoRoute(

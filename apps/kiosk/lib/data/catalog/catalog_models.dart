@@ -98,6 +98,7 @@ class Produto {
     required this.imagemUrl,
     required this.externalRefs,
     required this.grupos,
+    this.upsell = const [],
   });
   final String id;
   final String categoriaId;
@@ -110,6 +111,9 @@ class Produto {
   final String? imagemUrl;
   final List<ExternalRef> externalRefs;
   final List<GrupoComplemento> grupos;
+
+  /// IDs de produtos sugeridos no checkout ("Peça também", F2).
+  final List<String> upsell;
 
   String? get codigoPdvRegem => ExternalRef.codigoRegem(externalRefs);
 
@@ -125,6 +129,9 @@ class Produto {
         grupos: [
           for (final g in (j['grupos'] as List? ?? const []).whereType<Map>())
             GrupoComplemento.fromJson(g)
+        ],
+        upsell: [
+          for (final u in (j['upsell'] as List? ?? const [])) _id(u)
         ],
       );
 }
@@ -153,6 +160,14 @@ class MenuSnapshot {
         for (final p in produtos)
           if (p.categoriaId == categoriaId && p.disponivel) p
       ];
+
+  /// Produto por id (ou `null`) — usado para resolver upsell (F2).
+  Produto? porId(String id) {
+    for (final p in produtos) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
 
   factory MenuSnapshot.fromPublicadoJson(Map body) {
     final snap = (body['snapshot'] as Map?) ?? const {};

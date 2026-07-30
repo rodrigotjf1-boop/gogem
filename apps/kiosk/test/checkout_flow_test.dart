@@ -75,6 +75,50 @@ void main() {
     await bombear(tester);
     expect(find.text('TOQUE PARA PEDIR'), findsOneWidget);
   });
+
+  testWidgets('peça também (F2): sugere upsell, adiciona e segue', (
+    tester,
+  ) async {
+    final repo = FakeOrderRepository();
+    final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        menuProvider.overrideWith((ref) async => snap),
+        orderRepositoryProvider.overrideWith((ref) => repo),
+      ],
+      child: const GogemKioskApp(iniciarSync: false),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+    // Carrinho com p1 (Mister Burguer), que sugere p2 (Refri) e p3 (esgotado).
+    container.read(cartProvider.notifier).adicionar(
+        ItemCarrinho(produto: snap.produtos[0], selecoes: const {}));
+
+    go(tester, '/carrinho');
+    await bombear(tester);
+    await tester.tap(find.byKey(const ValueKey('continuar')));
+    await bombear(tester);
+
+    // Mostra o passo com o Refri (disponível); o esgotado (p3) fica de fora.
+    expect(find.text('PEÇA TAMBÉM'), findsOneWidget);
+    expect(find.text('Refri Lata'), findsOneWidget);
+    expect(find.text('Esgotado Burger'), findsNothing);
+
+    // Adiciona o Refri → entra no carrinho e some da lista.
+    await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('sugestao-p2')),
+        matching: find.byIcon(Icons.add_circle)));
+    await bombear(tester);
+    expect(container.read(cartProvider).totalItens, 2);
+
+    // Segue para a identificação.
+    await tester.tap(find.byKey(const ValueKey('peca-tambem-continuar')));
+    await bombear(tester);
+    expect(find.text('CPF NA NOTA?'), findsOneWidget);
+  });
 }
 
 /// Navega pelo GoRouter usando o contexto de um Scaffold da rota corrente

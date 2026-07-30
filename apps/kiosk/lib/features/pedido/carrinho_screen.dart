@@ -115,7 +115,7 @@ class CarrinhoScreen extends ConsumerWidget {
                 Expanded(
                   child: FilledButton(
                     key: const ValueKey('continuar'),
-                    onPressed: () => context.go('/identificacao'),
+                    onPressed: () => context.go('/peca-tambem'),
                     child: const Text('CONTINUAR'),
                   ),
                 ),
