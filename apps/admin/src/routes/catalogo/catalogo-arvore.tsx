@@ -7,6 +7,7 @@ import {
   Pencil,
   Play,
   Plus,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,7 @@ import {
 import { ProdutoDialog } from './produto-dialog';
 import { CategoriaDialog } from './categoria-dialog';
 import { ComplementosDialog } from './complementos-dialog';
+import { UpsellDialog } from './upsell-dialog';
 
 /**
  * Catálogo em árvore (espelha o Regem): categorias numa coluna à esquerda +
@@ -233,6 +235,7 @@ function ProdutoLinha({
   const pausar = usePausarProduto();
   const remover = useRemoverProduto();
   const [complementos, setComplementos] = React.useState(false);
+  const [upsell, setUpsell] = React.useState(false);
   const [removendo, setRemovendo] = React.useState(false);
   const codigo = codigoPdvRegem(p);
 
@@ -301,6 +304,15 @@ function ProdutoLinha({
           <Button
             variant="ghost"
             size="icon"
+            aria-label={`Peça também de ${p.nome}`}
+            title="Peça também (upsell)"
+            onClick={() => setUpsell(true)}
+          >
+            <Sparkles className="size-4" aria-hidden />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label={`Editar ${p.nome}`}
             onClick={onEditar}
           >
@@ -321,6 +333,13 @@ function ProdutoLinha({
         <ComplementosDialog
           aberto={complementos}
           onFechar={() => setComplementos(false)}
+          produto={p}
+        />
+      )}
+      {upsell && (
+        <UpsellDialog
+          aberto={upsell}
+          onFechar={() => setUpsell(false)}
           produto={p}
         />
       )}

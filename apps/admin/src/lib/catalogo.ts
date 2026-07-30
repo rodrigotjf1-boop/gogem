@@ -5,7 +5,7 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPatch, apiPost } from '@/lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '@/lib/api';
 import { useSelectedCardapio } from '@/lib/cardapios';
 
 /**
@@ -318,5 +318,38 @@ export function useRemoverOpcao(produtoId: string) {
   return useMutation({
     mutationFn: (id: string) => apiDelete<{ id: string }>(`/opcoes/${id}`),
     onSuccess: () => invalidarGrupos(qc, produtoId),
+  });
+}
+
+// ————————————————— Upsell "Peça também" (F2) —————————————————
+
+/** Uma sugestão de upsell configurada (com dados do produto sugerido). */
+export interface Upsell {
+  id: string;
+  sugeridoId: string;
+  nome: string;
+  precoCentavos: number;
+  imagemUrl: string | null;
+  ordem: number;
+}
+
+export function useUpsells(produtoId: string): UseQueryResult<Upsell[]> {
+  return useQuery({
+    queryKey: ['upsells', produtoId],
+    queryFn: () => apiGet<Upsell[]>(`/produtos/${produtoId}/upsells`),
+  });
+}
+
+/** Substitui (replace-all) os upsells do produto na ordem enviada. */
+export function useSalvarUpsells(produtoId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sugeridoIds: string[]) =>
+      apiPut<{ total: number }, { sugeridoIds: string[] }>(
+        `/produtos/${produtoId}/upsells`,
+        { sugeridoIds },
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['upsells', produtoId] }),
   });
 }

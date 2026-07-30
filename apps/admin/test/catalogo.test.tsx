@@ -179,6 +179,43 @@ describe('Catálogo — complementos', () => {
   });
 });
 
+describe('Catálogo — upsell "Peça também"', () => {
+  const REFRI = {
+    id: 'p2',
+    nome: 'Refrigerante',
+    descricao: null,
+    precoCentavos: 800,
+    disponivel: true,
+    categoriaId: 'c1',
+    externalRefs: [],
+  };
+
+  it('seleciona um produto e salva os upsells (PUT com sugeridoIds)', async () => {
+    let recebido: { sugeridoIds?: string[] } | null = null;
+    server.use(
+      http.get(`${API}/categorias`, () => HttpResponse.json([CATEGORIA])),
+      http.get(`${API}/produtos`, () => HttpResponse.json([PRODUTO, REFRI])),
+      http.get(`${API}/produtos/p1/upsells`, () => HttpResponse.json([])),
+      http.put(`${API}/produtos/p1/upsells`, async ({ request }) => {
+        recebido = (await request.json()) as typeof recebido;
+        return HttpResponse.json({ total: recebido!.sugeridoIds!.length });
+      }),
+    );
+    montarLogado('gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Peça também de X-Salada' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    // O próprio produto não é candidato; o Refrigerante sim.
+    fireEvent.click(await within(dialog).findByText('Refrigerante'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(recebido).not.toBeNull());
+    expect(recebido!.sugeridoIds).toEqual(['p2']);
+  });
+});
+
 describe('Catálogo — criar categoria', () => {
   it('cria uma categoria e ela aparece na lista', async () => {
     const categorias: Array<{ id: string; nome: string; ordem: number }> = [];
