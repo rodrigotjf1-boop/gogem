@@ -53,7 +53,7 @@ class ItemCarrinho {
       observacao: observacao);
 }
 
-enum FormaPagamento { credito, debito, pix }
+enum FormaPagamento { credito, debito, pix, vr }
 
 /// Pedido finalizado no totem — nasce com UUID (idempotência, CLAUDE.md) e
 /// vai para a fila local `pedidos_locais` (a F6 drena para o backend).

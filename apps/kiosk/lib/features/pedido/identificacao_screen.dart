@@ -16,8 +16,19 @@ class IdentificacaoScreen extends ConsumerStatefulWidget {
 
 class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
   String _cpf = '';
+  final _nomeCtrl = TextEditingController();
   bool get _completo => _cpf.length == 11;
   bool get _valido => cpfValido(_cpf);
+
+  @override
+  void dispose() {
+    _nomeCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Persiste o nome informado (opcional) no checkout antes de seguir.
+  void _salvarNome() =>
+      ref.read(checkoutProvider.notifier).setCliente(_nomeCtrl.text.trim());
 
   @override
   Widget build(BuildContext context) {
@@ -33,10 +44,27 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
                 icon: const Icon(Icons.arrow_back, color: GogemColors.ink, size: 32),
               ),
               const SizedBox(width: 8),
-              Text('CPF NA NOTA?', style: t.headlineMedium),
+              Text('SEUS DADOS', style: t.headlineMedium),
             ]),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: TextField(
+              key: const ValueKey('nome-cliente'),
+              controller: _nomeCtrl,
+              textCapitalization: TextCapitalization.words,
+              style: const TextStyle(fontSize: 22, color: GogemColors.ink),
+              decoration: const InputDecoration(
+                labelText: 'Seu nome (para chamar o pedido)',
+                labelStyle: TextStyle(color: GogemColors.inkDim),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('CPF na nota?',
+              style: t.titleLarge?.copyWith(color: GogemColors.inkDim)),
+          const SizedBox(height: 12),
           Text(_cpf.isEmpty ? '___.___.___-__' : formatCpf(_cpf),
               key: const ValueKey('cpf-display'),
               style: t.displayLarge?.copyWith(
@@ -53,13 +81,19 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
           const SizedBox(height: 20),
           Expanded(
             child: Center(
-              child: NumPad(
-                onDigito: (d) => setState(() {
-                  if (_cpf.length < 11) _cpf += d;
-                }),
-                onApagar: () => setState(() {
-                  if (_cpf.isNotEmpty) _cpf = _cpf.substring(0, _cpf.length - 1);
-                }),
+              // FittedBox: o teclado escala para caber em qualquer altura de
+              // tela (totem alto = tamanho natural; telas baixas encolhem).
+              child: FittedBox(
+                child: NumPad(
+                  onDigito: (d) => setState(() {
+                    if (_cpf.length < 11) _cpf += d;
+                  }),
+                  onApagar: () => setState(() {
+                    if (_cpf.isNotEmpty) {
+                      _cpf = _cpf.substring(0, _cpf.length - 1);
+                    }
+                  }),
+                ),
               ),
             ),
           ),
@@ -75,6 +109,7 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
                     foregroundColor: GogemColors.ink,
                   ),
                   onPressed: () {
+                    _salvarNome();
                     ref.read(checkoutProvider.notifier).setCpf('');
                     context.go('/pagamento');
                   },
@@ -87,6 +122,7 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
                   key: const ValueKey('confirmar-cpf'),
                   onPressed: _completo && _valido
                       ? () {
+                          _salvarNome();
                           ref.read(checkoutProvider.notifier).setCpf(_cpf);
                           context.go('/pagamento');
                         }
