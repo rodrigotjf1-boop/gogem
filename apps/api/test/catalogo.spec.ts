@@ -10,6 +10,7 @@ function makeService() {
   const prisma = {
     categoria: { findMany: vi.fn() },
     produto: { findMany: vi.fn() },
+    produtoUpsell: { findMany: vi.fn().mockResolvedValue([]) },
     menuVersion: {
       aggregate: vi.fn(),
       create: vi.fn(),
@@ -124,6 +125,7 @@ describe('CatalogoPublicacaoService — publicar', () => {
     ]);
     expect(snap.produtos).toHaveLength(1);
     const prod = snap.produtos[0];
+    expect(prod.upsell).toEqual([]); // sem upsell configurado
     expect(prod).toMatchObject({
       id: 'p-1',
       nome: 'X-Salada',
@@ -147,6 +149,52 @@ describe('CatalogoPublicacaoService — publicar', () => {
       id: 'o-2',
       disponivel: false,
     });
+  });
+
+  it('inclui upsell no snapshot, só para sugeridos no cardápio (sem órfãos)', async () => {
+    const { service, prisma } = makeService();
+    prisma.categoria.findMany.mockResolvedValue([]);
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 'p-1',
+        nome: 'Burger',
+        precoCentavos: 2590,
+        disponivel: true,
+        imagemUrl: null,
+        categoriaId: null,
+        descricao: null,
+        externalRefs: [],
+        complementos: [],
+      },
+      {
+        id: 'p-2',
+        nome: 'Refri',
+        precoCentavos: 800,
+        disponivel: true,
+        imagemUrl: null,
+        categoriaId: null,
+        descricao: null,
+        externalRefs: [],
+        complementos: [],
+      },
+    ]);
+    // p-1 sugere p-2 (no cardápio) e p-9 (fora do cardápio → filtrado).
+    prisma.produtoUpsell.findMany.mockResolvedValue([
+      { produtoId: 'p-1', sugeridoId: 'p-2' },
+      { produtoId: 'p-1', sugeridoId: 'p-9' },
+    ]);
+    prisma.menuVersion.aggregate.mockResolvedValue({ _max: { versao: 0 } });
+    prisma.menuVersion.create.mockResolvedValue({
+      versao: 1,
+      publishedAt: new Date(),
+    });
+
+    await service.publicar('u-1');
+    const snap = prisma.menuVersion.create.mock.calls[0][0].data.snapshot;
+    const burger = snap.produtos.find((p: { id: string }) => p.id === 'p-1');
+    const refri = snap.produtos.find((p: { id: string }) => p.id === 'p-2');
+    expect(burger.upsell).toEqual(['p-2']); // p-9 (órfão) removido
+    expect(refri.upsell).toEqual([]);
   });
 
   it('primeira publicação (nenhuma versão) começa em 1', async () => {

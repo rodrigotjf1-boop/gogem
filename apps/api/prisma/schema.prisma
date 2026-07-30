@@ -43,6 +43,7 @@ model Tenant {
   complementoGrupos  ComplementoGrupo[]
   complementoOpcoes  ComplementoOpcao[]
   produtoComplementos ProdutoComplemento[]
+  produtoUpsells     ProdutoUpsell[]
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
   integracoes        Integracao[]
@@ -179,11 +180,39 @@ model Produto {
   cardapio    Cardapio?  @relation(fields: [cardapioId], references: [id])
   categoria   Categoria? @relation(fields: [categoriaId], references: [id])
   complementos ProdutoComplemento[]
+  // Upsell "Peça também" (F2): sugestões configuradas neste produto (dono) e
+  // ocorrências deste produto como sugerido de outros.
+  upsells      ProdutoUpsell[] @relation("UpsellDono")
+  sugeridoEm   ProdutoUpsell[] @relation("UpsellSugerido")
 
   @@index([tenantId])
   @@index([cardapioId])
   @@index([categoriaId])
   @@map("produtos")
+}
+
+// Upsell / "Peça também" (F2): sugestão configurada POR produto (o lojista
+// indica, no admin, quais produtos cadastrados sugerir). No checkout o totem
+// agrega as sugestões dos itens do carrinho, deduplica e exclui o que já está no
+// carrinho. Auto-referência N:N em Produto. Tenant-scoped (§2); `ordem` define a
+// prioridade de exibição.
+model ProdutoUpsell {
+  id         String @id @default(uuid())
+  tenantId   String
+  // Produto "gatilho" (quando ele está no carrinho, sugerimos o `sugerido`).
+  produtoId  String
+  // Produto sugerido.
+  sugeridoId String
+  ordem      Int    @default(0)
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  produto  Produto @relation("UpsellDono", fields: [produtoId], references: [id], onDelete: Cascade)
+  sugerido Produto @relation("UpsellSugerido", fields: [sugeridoId], references: [id], onDelete: Cascade)
+
+  @@unique([produtoId, sugeridoId])
+  @@index([tenantId])
+  @@index([produtoId])
+  @@map("produto_upsells")
 }
 
 // Etapa/complemento REUTILIZÁVEL — ex.: "Escolha a bebida". Deixa de ser presa a

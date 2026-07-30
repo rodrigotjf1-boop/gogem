@@ -18,7 +18,13 @@ function makeService() {
       update: vi.fn(),
       delete: vi.fn(),
     },
+    produtoUpsell: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      create: vi.fn(),
+    },
     categoria: { findFirst: vi.fn() },
+    $transaction: vi.fn().mockResolvedValue([]),
   };
   const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
   const regemPause = { pausar: vi.fn().mockResolvedValue(true) };
@@ -29,6 +35,65 @@ function makeService() {
   );
   return { service, prisma, cardapios, regemPause };
 }
+
+describe('ProdutoService — upsells (F2)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('setUpsells deduplica, exclui o próprio produto e grava na ordem', async () => {
+    const { service, prisma } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({ id: 'p1' }); // getOne
+    // valida existência dos sugeridos (tenant-scoped): B e C existem
+    prisma.produto.findMany.mockResolvedValue([{ id: 'B' }, { id: 'C' }]);
+
+    const r = await service.setUpsells('p1', ['B', 'C', 'B', 'p1']);
+
+    expect(r).toEqual({ total: 2 });
+    // replace-all: apaga os antigos primeiro
+    expect(prisma.produtoUpsell.deleteMany).toHaveBeenCalledWith({
+      where: { produtoId: 'p1' },
+    });
+    // cria B (ordem 0) e C (ordem 1); 'p1' (si mesmo) foi excluído
+    const criados = prisma.produtoUpsell.create.mock.calls.map(
+      (c) => c[0].data,
+    );
+    expect(criados).toEqual([
+      { produtoId: 'p1', sugeridoId: 'B', ordem: 0 },
+      { produtoId: 'p1', sugeridoId: 'C', ordem: 1 },
+    ]);
+  });
+
+  it('setUpsells rejeita sugerido inexistente no tenant', async () => {
+    const { service, prisma } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({ id: 'p1' });
+    prisma.produto.findMany.mockResolvedValue([{ id: 'B' }]); // C não existe
+    await expect(service.setUpsells('p1', ['B', 'C'])).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(prisma.produtoUpsell.create).not.toHaveBeenCalled();
+  });
+
+  it('listUpsells resolve nome/preço do sugerido, ordenado', async () => {
+    const { service, prisma } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({ id: 'p1' });
+    prisma.produtoUpsell.findMany.mockResolvedValue([
+      {
+        id: 'u1',
+        sugeridoId: 'B',
+        ordem: 0,
+        sugerido: { nome: 'Refri', precoCentavos: 800, imagemUrl: null },
+      },
+    ]);
+    const out = await service.listUpsells('p1');
+    expect(out[0]).toEqual({
+      id: 'u1',
+      sugeridoId: 'B',
+      nome: 'Refri',
+      precoCentavos: 800,
+      imagemUrl: null,
+      ordem: 0,
+    });
+  });
+});
 
 describe('ProdutoService', () => {
   beforeEach(() => vi.clearAllMocks());
