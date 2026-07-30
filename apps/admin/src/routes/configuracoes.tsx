@@ -40,8 +40,26 @@ export default function ConfiguracoesPage() {
   async function onSalvar() {
     if (!form) return;
     setErro(null);
-    const input: AparenciaInput = { ...form };
-    delete (input as { id?: string }).id;
+    // Monta o payload SÓ com os campos editáveis. O GET devolve o registro
+    // inteiro (id, tenantId, createdAt, updatedAt) e o DTO de update tem
+    // whitelist — mandar esses extras dá 400 ("property ... should not exist").
+    const input: AparenciaInput = {
+      corPrimaria: form.corPrimaria,
+      corDestaque: form.corDestaque,
+      corFundo: form.corFundo,
+      corPainel: form.corPainel,
+      raio: form.raio,
+      nomeLoja: form.nomeLoja,
+      logoUrl: form.logoUrl,
+      fonteDisplay: form.fonteDisplay,
+      descansoTipo: form.descansoTipo,
+      descansoIntervaloSeg: form.descansoIntervaloSeg,
+      descansoMidias: form.descansoMidias,
+      chamada: form.chamada,
+      precoIsca: form.precoIsca,
+      estiloCard: form.estiloCard,
+      animacoes: form.animacoes,
+    };
     try {
       await salvar.mutateAsync(input);
       setOk(true);
