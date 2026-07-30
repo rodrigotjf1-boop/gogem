@@ -44,18 +44,38 @@ ThemeData temaDe(Aparencia ap) {
     fontFamily: ap.fonteDisplay,
   );
   final r = ap.raio;
+  // Preset "brasa" (steakhouse): tipografia display maior, mais peso e
+  // espaçamento (leitura editorial, CAIXA ALTA). O fundo ember/cards ficam na
+  // tela do catálogo (que também lê ap.brasa).
+  final brasa = ap.brasa;
+  final pesoDisplay = brasa ? FontWeight.w800 : FontWeight.w600;
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
       displayLarge: TextStyle(
-          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 64, color: GogemColors.ink),
+          fontFamily: ap.fonteDisplay,
+          fontWeight: pesoDisplay,
+          fontSize: brasa ? 72 : 64,
+          letterSpacing: brasa ? 1.5 : 0,
+          color: GogemColors.ink),
       headlineMedium: TextStyle(
-          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 34, color: GogemColors.ink),
+          fontFamily: ap.fonteDisplay,
+          fontWeight: pesoDisplay,
+          fontSize: brasa ? 38 : 34,
+          letterSpacing: brasa ? 2 : 0,
+          color: GogemColors.ink),
       titleLarge: TextStyle(
-          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 22, color: GogemColors.ink),
+          fontFamily: ap.fonteDisplay,
+          fontWeight: pesoDisplay,
+          fontSize: brasa ? 25 : 22,
+          letterSpacing: brasa ? 0.8 : 0,
+          color: GogemColors.ink),
       bodyLarge: const TextStyle(fontSize: 18, color: GogemColors.ink),
       bodyMedium: const TextStyle(fontSize: 16, color: GogemColors.inkDim),
       labelLarge: TextStyle(
-          fontFamily: ap.fonteDisplay, fontWeight: FontWeight.w600, fontSize: 18, letterSpacing: 1.2),
+          fontFamily: ap.fonteDisplay,
+          fontWeight: pesoDisplay,
+          fontSize: 18,
+          letterSpacing: brasa ? 2 : 1.2),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
