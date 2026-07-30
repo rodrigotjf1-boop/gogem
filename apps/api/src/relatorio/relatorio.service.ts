@@ -12,6 +12,7 @@ export interface PedidoRelatorio {
   dispositivo: string | null;
   cliente: string | null;
   cpf: string | null;
+  consumo: string;
   senha: number | null;
   status: string;
   totalCentavos: number;
@@ -69,6 +70,7 @@ export class RelatorioService {
         : null,
       cliente: p.cliente,
       cpf: p.cpf,
+      consumo: p.consumo,
       senha: p.senhaLocal,
       status: p.status,
       totalCentavos: p.totalCentavos,

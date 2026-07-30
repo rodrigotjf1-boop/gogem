@@ -49,6 +49,8 @@ export interface RegemVendaExternaBody {
   cpf?: string;
   taxaServicoPct?: number;
   plataforma?: string;
+  /** Tipo de consumo: 'local' (comer aqui) | 'viagem'. O Regem roteia/embala. */
+  consumo?: 'local' | 'viagem';
   /** Nº do pedido no totem — string (o DTO do Regem valida `@IsString`). */
   senhaPlataforma?: string;
 }

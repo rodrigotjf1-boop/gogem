@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -115,6 +116,15 @@ export class VendaTotemDto {
   @IsString()
   @MaxLength(120)
   cliente?: string;
+
+  @ApiPropertyOptional({
+    description: 'Tipo de consumo: local (comer aqui) ou viagem.',
+    enum: ['local', 'viagem'],
+    default: 'local',
+  })
+  @IsOptional()
+  @IsIn(['local', 'viagem'])
+  consumo?: 'local' | 'viagem';
 
   @ApiPropertyOptional({
     description: 'Percentual de taxa de serviço (inteiro), ex.: 10 = 10%.',
