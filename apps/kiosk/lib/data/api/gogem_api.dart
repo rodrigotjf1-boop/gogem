@@ -122,7 +122,7 @@ class GogemApi {
             headers: {
               ..._headers,
               'Content-Type': 'application/json',
-              'Idempotency-Key': '${corpo['uuid']}',
+              'Idempotency-Key': '${corpo['idempotencyKey']}',
             },
             body: jsonEncode(corpo))
         .timeout(const Duration(seconds: 15));

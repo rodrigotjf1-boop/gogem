@@ -31,16 +31,32 @@ class CartNotifier extends Notifier<Carrinho> {
 
 final cartProvider = NotifierProvider<CartNotifier, Carrinho>(CartNotifier.new);
 
-/// Dados transientes do checkout (CPF opcional).
+/// Dados transientes do checkout: CPF (opcional), tipo de consumo
+/// ('local' comer aqui | 'viagem') e nome do cliente (opcional, F4).
 class CheckoutState {
-  const CheckoutState({this.cpf = ''});
+  const CheckoutState({
+    this.cpf = '',
+    this.consumo = 'local',
+    this.cliente = '',
+  });
   final String cpf;
+  final String consumo;
+  final String cliente;
+
+  CheckoutState copyWith({String? cpf, String? consumo, String? cliente}) =>
+      CheckoutState(
+        cpf: cpf ?? this.cpf,
+        consumo: consumo ?? this.consumo,
+        cliente: cliente ?? this.cliente,
+      );
 }
 
 class CheckoutNotifier extends Notifier<CheckoutState> {
   @override
   CheckoutState build() => const CheckoutState();
-  void setCpf(String cpf) => state = CheckoutState(cpf: cpf);
+  void setCpf(String cpf) => state = state.copyWith(cpf: cpf);
+  void setConsumo(String consumo) => state = state.copyWith(consumo: consumo);
+  void setCliente(String cliente) => state = state.copyWith(cliente: cliente);
   void limpar() => state = const CheckoutState();
 }
 
