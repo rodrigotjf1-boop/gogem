@@ -63,6 +63,15 @@ export class CreateProdutoDto {
   imagemUrl?: string;
 
   @ApiProperty({
+    description: 'Selo de destaque no totem (ex.: "Mais vendido"). Opcional.',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  selo?: string;
+
+  @ApiProperty({
     description: 'Categoria à qual o produto pertence (opcional).',
     required: false,
   })

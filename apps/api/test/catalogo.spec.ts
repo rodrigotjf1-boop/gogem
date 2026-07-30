@@ -46,6 +46,7 @@ function seedDraft(prisma: ReturnType<typeof makeService>['prisma']) {
       precoCentavos: 2590,
       disponivel: true,
       imagemUrl: null,
+      selo: 'Mais vendido',
       categoriaId: 'c-1',
       externalRefs: [{ sistema: 'regem', codigo_pdv: 'PROD-1' }],
       // Etapas via vínculo (reutilizáveis): { ordem, grupo{ opcoes } }.
@@ -126,6 +127,7 @@ describe('CatalogoPublicacaoService — publicar', () => {
     expect(snap.produtos).toHaveLength(1);
     const prod = snap.produtos[0];
     expect(prod.upsell).toEqual([]); // sem upsell configurado
+    expect(prod.selo).toBe('Mais vendido'); // selo de destaque (F4)
     expect(prod).toMatchObject({
       id: 'p-1',
       nome: 'X-Salada',

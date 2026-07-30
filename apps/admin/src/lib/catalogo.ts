@@ -35,6 +35,7 @@ export interface Produto {
   precoCentavos: number;
   disponivel: boolean;
   imagemUrl: string | null;
+  selo: string | null;
   categoriaId: string | null;
   externalRefs: ExternalRef[];
 }
@@ -51,6 +52,7 @@ export interface ProdutoInput {
   precoCentavos: number;
   disponivel?: boolean;
   imagemUrl?: string | null;
+  selo?: string;
   categoriaId?: string;
   cardapioId?: string;
   externalRefs?: ExternalRef[];

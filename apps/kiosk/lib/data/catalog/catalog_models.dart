@@ -98,6 +98,7 @@ class Produto {
     required this.imagemUrl,
     required this.externalRefs,
     required this.grupos,
+    this.selo,
     this.upsell = const [],
   });
   final String id;
@@ -106,6 +107,9 @@ class Produto {
   final String descricao;
   final int precoCentavos;
   final bool disponivel;
+
+  /// Selo de destaque no card (F4) — ex.: "Mais vendido". Nulo = sem selo.
+  final String? selo;
 
   /// URL pública da foto (Supabase Storage) ou `null` quando não há foto.
   final String? imagemUrl;
@@ -126,6 +130,10 @@ class Produto {
         disponivel: _bool(j['disponivel']),
         imagemUrl: _urlOuNull(j['imagemUrl'] ?? j['imagem_url']),
         externalRefs: ExternalRef.listFrom(j['externalRefs']),
+        selo: () {
+          final s = j['selo']?.toString().trim();
+          return (s == null || s.isEmpty) ? null : s;
+        }(),
         grupos: [
           for (final g in (j['grupos'] as List? ?? const []).whereType<Map>())
             GrupoComplemento.fromJson(g)

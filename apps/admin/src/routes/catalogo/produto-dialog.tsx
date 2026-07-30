@@ -51,6 +51,7 @@ export function ProdutoDialog({
   const [disponivel, setDisponivel] = React.useState(true);
   const [categoriaId, setCategoriaId] = React.useState('');
   const [codigoPdv, setCodigoPdv] = React.useState('');
+  const [selo, setSelo] = React.useState('');
   const [imagemUrl, setImagemUrl] = React.useState<string | null>(null);
   const [erros, setErros] = React.useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
@@ -63,6 +64,7 @@ export function ProdutoDialog({
     setDisponivel(produto?.disponivel ?? true);
     setCategoriaId(produto?.categoriaId ?? '');
     setCodigoPdv(produto ? (codigoPdvRegem(produto) ?? '') : '');
+    setSelo(produto?.selo ?? '');
     setImagemUrl(produto?.imagemUrl ?? null);
     setErros({});
     setErroGeral(null);
@@ -101,6 +103,7 @@ export function ProdutoDialog({
       precoCentavos: parsed.data.precoCentavos,
       disponivel,
       imagemUrl,
+      selo: selo.trim() || undefined,
       categoriaId: categoriaId || undefined,
       externalRefs,
     };
@@ -159,6 +162,25 @@ export function ProdutoDialog({
             placeholder="Pão, hambúrguer, salada e queijo."
             disabled={enviando}
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="prod-selo">Selo de destaque (opcional)</Label>
+          <Input
+            id="prod-selo"
+            value={selo}
+            onChange={(e) => setSelo(e.target.value)}
+            placeholder="Mais vendido, Novidade, Chef…"
+            list="prod-selo-sugestoes"
+            maxLength={30}
+            disabled={enviando}
+          />
+          <datalist id="prod-selo-sugestoes">
+            <option value="Mais vendido" />
+            <option value="Novidade" />
+            <option value="Chef" />
+            <option value="Combina bem" />
+          </datalist>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

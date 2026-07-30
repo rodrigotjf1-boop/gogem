@@ -212,6 +212,7 @@ export class CatalogoPublicacaoService {
         precoCentavos: p.precoCentavos,
         disponivel: p.disponivel,
         imagemUrl: p.imagemUrl,
+        selo: p.selo,
         categoriaId: p.categoriaId,
         externalRefs: p.externalRefs,
         upsell: upsellPorProduto.get(p.id) ?? [],
@@ -274,6 +275,8 @@ interface CatalogoSnapshot {
     precoCentavos: number;
     disponivel: boolean;
     imagemUrl: string | null;
+    /** Selo de destaque no card (F4) — ex.: "Mais vendido". */
+    selo: string | null;
     categoriaId: string | null;
     externalRefs: Prisma.JsonValue;
     /** IDs de produtos sugeridos (upsell "Peça também", F2). */

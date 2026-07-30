@@ -66,6 +66,7 @@ export class ProdutoService {
       precoCentavos: dto.precoCentavos,
       disponivel: dto.disponivel ?? true,
       imagemUrl: dto.imagemUrl ?? null,
+      selo: dto.selo ?? null,
       categoriaId: dto.categoriaId,
       cardapioId,
       externalRefs: normalizeRefs(dto.externalRefs),
@@ -89,6 +90,7 @@ export class ProdutoService {
         precoCentavos: dto.precoCentavos,
         disponivel: dto.disponivel,
         imagemUrl: dto.imagemUrl,
+        selo: dto.selo,
         categoriaId: dto.categoriaId,
         externalRefs:
           dto.externalRefs === undefined

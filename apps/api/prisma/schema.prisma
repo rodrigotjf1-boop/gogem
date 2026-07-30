@@ -172,6 +172,9 @@ model Produto {
   descricao    String?
   precoCentavos Int     @default(0)
   disponivel   Boolean  @default(true)
+  // Selo de destaque no card do totem (F4): ex. "Mais vendido", "Novidade".
+  // Texto livre curto; nulo = sem selo.
+  selo         String?
   // URL pública da foto do produto (Supabase Storage). Nulo = sem foto.
   imagemUrl    String?
   // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
