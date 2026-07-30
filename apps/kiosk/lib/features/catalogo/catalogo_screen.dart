@@ -163,6 +163,8 @@ class _ProdutoCard extends StatelessWidget {
               children: [
                 ProdutoImagem(url: p.imagemUrl),
                 Positioned(right: 10, bottom: 10, child: _selo(context)),
+                if (p.selo != null)
+                  Positioned(left: 10, top: 10, child: _seloDestaque(context)),
               ],
             ),
           ),
@@ -196,6 +198,10 @@ class _ProdutoCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (p.selo != null) ...[
+                    _seloDestaque(context),
+                    const SizedBox(height: 6),
+                  ],
                   Text(p.nome, style: t.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
                   if (p.descricao.isNotEmpty)
                     Padding(
@@ -224,6 +230,26 @@ class _ProdutoCard extends StatelessWidget {
           fontFamily: 'Tektur',
           fontWeight: FontWeight.w600,
           fontSize: 18,
+          color: cs.onPrimary,
+        ),
+      ),
+    );
+  }
+
+  /// Selo de destaque (F4) — ex.: "Mais vendido". Fundo na cor primária.
+  Widget _seloDestaque(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+          color: cs.primary, borderRadius: BorderRadius.circular(999)),
+      child: Text(
+        p.selo!.toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'Tektur',
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+          letterSpacing: 0.5,
           color: cs.onPrimary,
         ),
       ),

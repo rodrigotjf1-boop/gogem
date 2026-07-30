@@ -13,6 +13,8 @@ void main() {
     expect(p.precoCentavos, 2990);
     expect(p.codigoPdvRegem, '101'); // de-para SEMPRE por codigo_pdv
     expect(p.grupos.single.opcoes.single.precoCentavosDelta, 400);
+    expect(p.selo, 'Mais vendido'); // selo de destaque (F4)
+    expect(m.produtos[1].selo, isNull); // sem selo → null
   });
 
   test('produtosDa filtra por categoria e disponibilidade', () {
