@@ -18,6 +18,7 @@ import { CreateProdutoDto } from './dto/create-produto.dto';
 import { ListProdutosQuery } from './dto/list-produtos.query';
 import { PausarProdutoDto } from './dto/pausar-produto.dto';
 import { SetExternalRefsDto } from './dto/set-external-refs.dto';
+import { SetUpsellsDto } from './dto/set-upsells.dto';
 import { UpdateProdutoDto } from './dto/update-produto.dto';
 import { ProdutoService } from './produto.service';
 
@@ -79,5 +80,18 @@ export class ProdutoController {
   @ApiOkResponse({ description: 'De-para PDV substituído.' })
   setExternalRefs(@Param('id') id: string, @Body() dto: SetExternalRefsDto) {
     return this.produtos.setExternalRefs(id, dto.externalRefs);
+  }
+
+  @Get(':id/upsells')
+  @ApiOkResponse({ description: 'Upsells "Peça também" do produto.' })
+  listUpsells(@Param('id') id: string) {
+    return this.produtos.listUpsells(id);
+  }
+
+  @Put(':id/upsells')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Substitui os upsells do produto.' })
+  setUpsells(@Param('id') id: string, @Body() dto: SetUpsellsDto) {
+    return this.produtos.setUpsells(id, dto.sugeridoIds);
   }
 }

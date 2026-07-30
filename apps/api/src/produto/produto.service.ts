@@ -105,6 +105,70 @@ export class ProdutoService {
     return { id };
   }
 
+  /** Upsells "Peça também" configurados no produto (com dados do sugerido). */
+  async listUpsells(id: string): Promise<
+    Array<{
+      id: string;
+      sugeridoId: string;
+      nome: string;
+      precoCentavos: number;
+      imagemUrl: string | null;
+      ordem: number;
+    }>
+  > {
+    await this.getOne(id);
+    const rows = await this.prisma.produtoUpsell.findMany({
+      where: { produtoId: id },
+      orderBy: { ordem: 'asc' },
+      include: { sugerido: true },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      sugeridoId: r.sugeridoId,
+      nome: r.sugerido.nome,
+      precoCentavos: r.sugerido.precoCentavos,
+      imagemUrl: r.sugerido.imagemUrl,
+      ordem: r.ordem,
+    }));
+  }
+
+  /**
+   * Substitui (replace-all) a lista de upsells do produto, na ordem enviada.
+   * Deduplica, ignora o próprio produto e valida que os sugeridos existem no
+   * tenant (o `findMany` já é tenant-scoped pelo middleware §2).
+   */
+  async setUpsells(
+    id: string,
+    sugeridoIds: string[],
+  ): Promise<{ total: number }> {
+    await this.getOne(id);
+    const ids = [...new Set(sugeridoIds)].filter((s) => s !== id);
+    if (ids.length) {
+      const encontrados = await this.prisma.produto.findMany({
+        where: { id: { in: ids } },
+        select: { id: true },
+      });
+      if (encontrados.length !== ids.length) {
+        throw new BadRequestException(
+          'Algum produto sugerido não existe neste tenant.',
+        );
+      }
+    }
+    await this.prisma.$transaction([
+      this.prisma.produtoUpsell.deleteMany({ where: { produtoId: id } }),
+      ...ids.map((sugeridoId, ordem) =>
+        this.prisma.produtoUpsell.create({
+          data: {
+            produtoId: id,
+            sugeridoId,
+            ordem,
+          } as Prisma.ProdutoUpsellUncheckedCreateInput,
+        }),
+      ),
+    ]);
+    return { total: ids.length };
+  }
+
   /**
    * Pausa/despausa o produto no totem (Fase 4). Aplica a disponibilidade LOCAL
    * (disponivel = !pausado) e, se o produto tem código PDV do Regem, propaga a

@@ -182,6 +182,22 @@ export class CatalogoPublicacaoService {
       }),
     ]);
 
+    // Upsell "Peça também" (F2): sugestões por produto. Só publica sugeridos que
+    // existem no cardápio ativo (evita refs órfãs no totem), na ordem definida.
+    const idsNoCardapio = new Set(produtos.map((p) => p.id));
+    const upsellRows = await this.prisma.produtoUpsell.findMany({
+      where: { produtoId: { in: [...idsNoCardapio] } },
+      orderBy: { ordem: 'asc' },
+      select: { produtoId: true, sugeridoId: true },
+    });
+    const upsellPorProduto = new Map<string, string[]>();
+    for (const r of upsellRows) {
+      if (!idsNoCardapio.has(r.sugeridoId)) continue;
+      const lista = upsellPorProduto.get(r.produtoId) ?? [];
+      lista.push(r.sugeridoId);
+      upsellPorProduto.set(r.produtoId, lista);
+    }
+
     const snapshot: CatalogoSnapshot = {
       geradoEm: new Date().toISOString(),
       categorias: categorias.map((c) => ({
@@ -198,6 +214,7 @@ export class CatalogoPublicacaoService {
         imagemUrl: p.imagemUrl,
         categoriaId: p.categoriaId,
         externalRefs: p.externalRefs,
+        upsell: upsellPorProduto.get(p.id) ?? [],
         // Shape do totem inalterado: `grupos` (agora resolvidos do vínculo).
         grupos: p.complementos.map((pc) => ({
           id: pc.grupo.id,
@@ -259,6 +276,8 @@ interface CatalogoSnapshot {
     imagemUrl: string | null;
     categoriaId: string | null;
     externalRefs: Prisma.JsonValue;
+    /** IDs de produtos sugeridos (upsell "Peça também", F2). */
+    upsell: string[];
     grupos: Array<{
       id: string;
       nome: string;
