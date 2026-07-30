@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,7 +55,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('continuar')));
     await bombear(tester);
-    expect(find.text('CPF NA NOTA?'), findsOneWidget);
+    expect(find.text('SEUS DADOS'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('pular')));
     await bombear(tester);
@@ -117,7 +118,51 @@ void main() {
     // Segue para a identificação.
     await tester.tap(find.byKey(const ValueKey('peca-tambem-continuar')));
     await bombear(tester);
-    expect(find.text('CPF NA NOTA?'), findsOneWidget);
+    expect(find.text('SEUS DADOS'), findsOneWidget);
+  });
+
+  testWidgets('F4: nome + vale-refeição vão no pedido', (tester) async {
+    final repo = FakeOrderRepository();
+    final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        menuProvider.overrideWith((ref) async => snap),
+        orderRepositoryProvider.overrideWith((ref) => repo),
+        gogemApiProvider.overrideWithValue(GogemApi(
+            baseUrl: 'http://t/api/v1',
+            bearer: 'jwt',
+            client: MockClient((_) async => throw Exception('offline')))),
+      ],
+      child: const GogemKioskApp(iniciarSync: false),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+    container.read(cartProvider.notifier).adicionar(
+        ItemCarrinho(produto: snap.produtos[1], selecoes: const {})); // Refri
+
+    go(tester, '/identificacao');
+    await bombear(tester);
+    // Informa o nome (F4) e pula o CPF.
+    await tester.enterText(find.byKey(const ValueKey('nome-cliente')), 'Ana');
+    await tester.tap(find.byKey(const ValueKey('pular')));
+    await bombear(tester);
+
+    // Paga com vale-refeição (F4).
+    await tester.tap(find.byKey(const ValueKey('forma-vr')));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(seconds: 1));
+    await bombear(tester);
+
+    final corpo = jsonDecode(repo.pedidos.single['corpo_json'] as String)
+        as Map<String, dynamic>;
+    expect(corpo['cliente'], 'Ana');
+    expect(corpo['pagamentos'][0]['forma'], 'vr');
+
+    await tester.pump(const Duration(seconds: 9));
+    await bombear(tester);
   });
 }
 

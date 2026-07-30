@@ -188,6 +188,11 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                           icone: Icons.qr_code_2,
                           rotulo: 'PIX',
                           onTap: () => _pagar(FormaPagamento.pix)),
+                      _FormaBtn(
+                          key: const ValueKey('forma-vr'),
+                          icone: Icons.lunch_dining,
+                          rotulo: 'VALE-REFEIÇÃO',
+                          onTap: () => _pagar(FormaPagamento.vr)),
                     ],
                   ),
                 ),
