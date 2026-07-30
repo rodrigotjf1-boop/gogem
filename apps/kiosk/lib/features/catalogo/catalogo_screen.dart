@@ -28,10 +28,25 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
     final lateral = ap.cardLateral;
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      body: Container(
+        // Preset "brasa": brilho ember no topo (steakhouse). Padrão: sem fundo.
+        decoration: ap.brasa
+            ? BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -1.1),
+                  radius: 1.1,
+                  colors: [
+                    ap.corPrimaria.withValues(alpha: 0.22),
+                    Colors.transparent,
+                  ],
+                ),
+              )
+            : null,
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               IconButton(
                 onPressed: () => context.go('/descanso'),
@@ -112,8 +127,10 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                                       crossAxisSpacing: 16,
                                     ),
                               itemCount: produtos.length,
-                              itemBuilder: (_, i) =>
-                                  _ProdutoCard(p: produtos[i], lateral: lateral),
+                              itemBuilder: (_, i) => _ProdutoCard(
+                                  p: produtos[i],
+                                  lateral: lateral,
+                                  brasa: ap.brasa),
                             ),
                     ),
                   ]);
@@ -121,6 +138,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
               ),
             ),
           ]),
+          ),
         ),
       ),
     );
@@ -128,14 +146,34 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
 }
 
 class _ProdutoCard extends StatelessWidget {
-  const _ProdutoCard({required this.p, this.lateral = false});
+  const _ProdutoCard(
+      {required this.p, this.lateral = false, this.brasa = false});
   final Produto p;
   final bool lateral;
+  final bool brasa;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
     const raio = 18.0;
+    // Preset "brasa": card com brilho diagonal (sheen) + borda tingida pela cor
+    // primária da loja (look steakhouse). Padrão: painel liso.
+    final decor = brasa
+        ? BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF241A12), Color(0xFF14100C)],
+            ),
+            borderRadius: BorderRadius.circular(raio),
+            border: Border.all(color: cs.primary.withValues(alpha: 0.55)),
+          )
+        : BoxDecoration(
+            color: GogemColors.panel,
+            borderRadius: BorderRadius.circular(raio),
+            border: Border.all(color: GogemColors.line),
+          );
     return InkWell(
       key: ValueKey('prod-tap-${p.id}'),
       onTap: () => context.push('/produto/${p.id}'),
@@ -143,11 +181,7 @@ class _ProdutoCard extends StatelessWidget {
       child: Container(
         key: ValueKey('prod-${p.id}'),
         clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: GogemColors.panel,
-          borderRadius: BorderRadius.circular(raio),
-          border: Border.all(color: GogemColors.line),
-        ),
+        decoration: decor,
         child: lateral ? _lateral(context, t) : _cheia(context, t),
       ),
     );
