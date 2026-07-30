@@ -13,6 +13,10 @@ import { apiGet, apiPut } from '@/lib/api';
 export interface DescansoMidia {
   url: string;
   tipo?: 'imagem' | 'gif' | 'video';
+  /** Legendas do slide (F3) — opcionais. */
+  kicker?: string;
+  titulo?: string;
+  subtitulo?: string;
 }
 
 export interface Aparencia {
@@ -25,6 +29,7 @@ export interface Aparencia {
   nomeLoja: string | null;
   logoUrl: string | null;
   fonteDisplay: 'Tektur' | 'Poppins' | 'Montserrat';
+  temaPreset: 'padrao' | 'brasa';
   descansoTipo: 'padrao' | 'carrossel';
   descansoIntervaloSeg: number;
   descansoMidias: DescansoMidia[];

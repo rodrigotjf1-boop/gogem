@@ -23,6 +23,7 @@ const APARENCIA = {
   nomeLoja: 'MISTER BURGERS',
   logoUrl: null,
   fonteDisplay: 'Tektur',
+  temaPreset: 'padrao',
   descansoTipo: 'padrao',
   descansoIntervaloSeg: 6,
   descansoMidias: [],

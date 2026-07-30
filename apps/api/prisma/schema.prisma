@@ -67,6 +67,9 @@ model Aparencia {
   nomeLoja             String?
   logoUrl              String?
   fonteDisplay         String   @default("Tektur")
+  // Preset visual do totem (F3): 'padrao' | 'brasa' (steakhouse dark). Muda o
+  // estilo do descanso/cards sem trocar as cores da loja.
+  temaPreset           String   @default("padrao")
   descansoTipo         String   @default("padrao") // 'padrao' | 'carrossel'
   descansoIntervaloSeg Int      @default(6)
   descansoMidias       Json     @default("[]")

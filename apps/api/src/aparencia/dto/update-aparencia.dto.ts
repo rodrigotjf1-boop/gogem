@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-/** Uma mídia da tela de descanso (imagem/gif/vídeo curto). */
+/** Uma mídia da tela de descanso (imagem/gif/vídeo curto) + legendas (F3). */
 export class DescansoMidiaDto {
   @IsString()
   @MaxLength(500)
@@ -22,6 +22,24 @@ export class DescansoMidiaDto {
   @IsOptional()
   @IsIn(['imagem', 'gif', 'video'])
   tipo?: string;
+
+  /** Chapéu/kicker do slide (ex.: "Feito na brasa"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  kicker?: string;
+
+  /** Título do slide (ex.: "Mister Double"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  titulo?: string;
+
+  /** Subtítulo do slide (ex.: "Dois blends, cheddar duplo"). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  subtitulo?: string;
 }
 
 /**
@@ -51,6 +69,11 @@ export class UpdateAparenciaDto {
   @IsOptional()
   @IsIn(['Tektur', 'Poppins', 'Montserrat'])
   fonteDisplay?: string;
+
+  @ApiPropertyOptional({ enum: ['padrao', 'brasa'] })
+  @IsOptional()
+  @IsIn(['padrao', 'brasa'])
+  temaPreset?: string;
 
   @ApiPropertyOptional({ enum: ['padrao', 'carrossel'] })
   @IsOptional()
