@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -16,8 +16,12 @@ async function bootstrap(): Promise<void> {
   };
   expressApp.set('trust proxy', 1);
 
-  // Prefixo global — CLAUDE.md: API pública versionada em /api/v1.
-  app.setGlobalPrefix('api/v1');
+  // Prefixo global — CLAUDE.md: API pública versionada em /api/v1. O namespace
+  // Open Delivery é público e versionado por conta própria em `/open-delivery/v1`
+  // (padrão de mercado), então fica FORA do prefixo interno.
+  app.setGlobalPrefix('api/v1', {
+    exclude: [{ path: 'open-delivery/v1/(.*)', method: RequestMethod.ALL }],
+  });
 
   // Segurança básica de headers.
   app.use(helmet());

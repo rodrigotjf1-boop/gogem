@@ -21,6 +21,7 @@ export const TENANT_SCOPED_MODELS = new Set([
   'Integracao',
   'Cardapio',
   'Aparencia',
+  'OpenDeliveryApp',
 ]);
 
 /**

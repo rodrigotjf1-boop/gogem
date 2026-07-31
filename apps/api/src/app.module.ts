@@ -17,6 +17,7 @@ import { RegemImportModule } from './integracoes/regem/regem-import.module';
 import { IntegracaoModule } from './integracao/integracao.module';
 import { VendasModule } from './vendas/vendas.module';
 import { RelatorioModule } from './relatorio/relatorio.module';
+import { OpenDeliveryModule } from './open-delivery/open-delivery.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -41,6 +42,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     IntegracaoModule,
     VendasModule,
     RelatorioModule,
+    OpenDeliveryModule,
   ],
   providers: [
     // Rate limiting global (por IP). Primeiro guard: barra o abuso antes de

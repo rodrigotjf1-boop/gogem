@@ -44,6 +44,7 @@ model Tenant {
   complementoOpcoes  ComplementoOpcao[]
   produtoComplementos ProdutoComplemento[]
   produtoUpsells     ProdutoUpsell[]
+  openDeliveryApps   OpenDeliveryApp[]
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
   integracoes        Integracao[]
@@ -83,6 +84,30 @@ model Aparencia {
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
   @@map("aparencias")
+}
+
+// App parceiro do modo Open Delivery (GoGeM como PROVEDOR): terceiros integram-se
+// à loja pela API pública `/open-delivery/v1`. Cada app tem clientId público +
+// clientSecret hasheado (nunca em claro) e escopos. Tenant-scoped (gestão pelo
+// admin); o endpoint /oauth/token busca por clientId cross-tenant (runAsSystem)
+// e emite um JWT curto com o tenant do app.
+model OpenDeliveryApp {
+  id               String    @id @default(uuid())
+  tenantId         String
+  nome             String
+  clientId         String    @unique
+  clientSecretHash String
+  // Escopos concedidos: 'catalog:read' | 'orders:write' | 'orders:read'.
+  escopos          String[]  @default([])
+  ativo            Boolean   @default(true)
+  ultimoUso        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("open_delivery_apps")
 }
 
 // Cardápio (Fase 3B): um conjunto INDEPENDENTE de categorias+produtos. Um tenant
