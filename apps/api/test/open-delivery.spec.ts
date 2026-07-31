@@ -3,6 +3,7 @@ import * as bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenDeliveryAppService } from '../src/open-delivery/open-delivery-app.service';
 import { OpenDeliveryCatalogService } from '../src/open-delivery/open-delivery-catalog.service';
+import { OpenDeliveryOrderService } from '../src/open-delivery/open-delivery-order.service';
 import { OpenDeliveryTokenService } from '../src/open-delivery/open-delivery-token.service';
 import { TenantContext } from '../src/tenant/tenant-context';
 import type { PrismaService } from '../src/prisma/prisma.service';
@@ -270,5 +271,154 @@ describe('OpenDeliveryCatalogService', () => {
       price: { value: 4, currency: 'BRL' },
       status: 'UNAVAILABLE', // opção indisponível
     });
+  });
+});
+
+function makeOrderService() {
+  const prisma = {
+    openDeliveryOrder: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    openDeliveryEvent: {
+      create: vi.fn().mockResolvedValue({}),
+      findMany: vi.fn(),
+      updateMany: vi.fn(),
+    },
+  };
+  const service = new OpenDeliveryOrderService(
+    prisma as unknown as PrismaService,
+  );
+  return { service, prisma };
+}
+
+const pedidoBase = {
+  displayId: 'PED-1',
+  items: [{ name: 'X-Burger', quantity: 1, price: { value: 29.9 } }],
+  payments: [{ method: 'credit', value: { value: 29.9 } }],
+  total: { value: 29.9 },
+};
+
+describe('OpenDeliveryOrderService', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('ingest cria o pedido (total centavos), emite ORDER_PLACED', async () => {
+    const { service, prisma } = makeOrderService();
+    prisma.openDeliveryOrder.findFirst.mockResolvedValue(null);
+    prisma.openDeliveryOrder.create.mockImplementation(({ data }: any) => ({
+      id: 'o1',
+      tenantId: 't-1',
+      createdAt: new Date('2026-07-31T00:00:00Z'),
+      ...data,
+    }));
+
+    const r = await service.ingest(pedidoBase as any, 'app-1');
+
+    expect(
+      prisma.openDeliveryOrder.create.mock.calls[0][0].data.totalCentavos,
+    ).toBe(2990);
+    expect(prisma.openDeliveryOrder.create.mock.calls[0][0].data.appId).toBe(
+      'app-1',
+    );
+    expect(prisma.openDeliveryEvent.create).toHaveBeenCalledWith({
+      data: { tipo: 'ORDER_PLACED', orderId: 'o1' },
+    });
+    expect(r.total).toEqual({ value: 29.9, currency: 'BRL' });
+    expect(r.status).toBe('PLACED');
+  });
+
+  it('ingest idempotente: mesmo displayId devolve o existente sem recriar', async () => {
+    const { service, prisma } = makeOrderService();
+    prisma.openDeliveryOrder.findFirst.mockResolvedValue({
+      id: 'o1',
+      tenantId: 't-1',
+      displayId: 'PED-1',
+      status: 'PLACED',
+      itens: [],
+      pagamentos: [],
+      totalCentavos: 2990,
+      createdAt: new Date(),
+    });
+    const r = await service.ingest(pedidoBase as any, 'app-1');
+    expect(r.id).toBe('o1');
+    expect(prisma.openDeliveryOrder.create).not.toHaveBeenCalled();
+    expect(prisma.openDeliveryEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('atualizarStatus emite ORDER_STATUS_CHANGED (e ORDER_CANCELLED em cancelamento)', async () => {
+    const { service, prisma } = makeOrderService();
+    prisma.openDeliveryOrder.findFirst.mockResolvedValue({
+      id: 'o1',
+      tenantId: 't-1',
+      status: 'PLACED',
+      itens: [],
+      pagamentos: [],
+      totalCentavos: 0,
+      customerNome: null,
+      customerDoc: null,
+      displayId: 'PED-1',
+      createdAt: new Date(),
+    });
+    prisma.openDeliveryOrder.update.mockImplementation(({ data }: any) => ({
+      id: 'o1',
+      tenantId: 't-1',
+      status: data.status,
+      itens: [],
+      pagamentos: [],
+      totalCentavos: 0,
+      customerNome: null,
+      customerDoc: null,
+      displayId: 'PED-1',
+      createdAt: new Date(),
+    }));
+
+    await service.atualizarStatus('o1', 'CONFIRMED');
+    expect(prisma.openDeliveryEvent.create.mock.calls[0][0].data.tipo).toBe(
+      'ORDER_STATUS_CHANGED',
+    );
+
+    prisma.openDeliveryEvent.create.mockClear();
+    await service.atualizarStatus('o1', 'CANCELLED');
+    expect(prisma.openDeliveryEvent.create.mock.calls[0][0].data.tipo).toBe(
+      'ORDER_CANCELLED',
+    );
+  });
+
+  it('atualizarStatus recusa pedido já finalizado', async () => {
+    const { service, prisma } = makeOrderService();
+    prisma.openDeliveryOrder.findFirst.mockResolvedValue({
+      id: 'o1',
+      status: 'CONCLUDED',
+    });
+    await expect(service.atualizarStatus('o1', 'READY')).rejects.toThrow();
+    expect(prisma.openDeliveryOrder.update).not.toHaveBeenCalled();
+  });
+
+  it('eventos lista pendentes; ack confirma pelos ids', async () => {
+    const { service, prisma } = makeOrderService();
+    prisma.openDeliveryEvent.findMany.mockResolvedValue([
+      {
+        id: 'e1',
+        tipo: 'ORDER_PLACED',
+        orderId: 'o1',
+        createdAt: new Date('2026-07-31T00:00:00Z'),
+      },
+    ]);
+    const evs = await service.eventos();
+    expect(evs[0]).toEqual({
+      id: 'e1',
+      type: 'ORDER_PLACED',
+      orderId: 'o1',
+      createdAt: '2026-07-31T00:00:00.000Z',
+    });
+    // só eventos não confirmados entram na fila
+    expect(prisma.openDeliveryEvent.findMany.mock.calls[0][0].where).toEqual({
+      acknowledgedAt: null,
+    });
+
+    prisma.openDeliveryEvent.updateMany.mockResolvedValue({ count: 1 });
+    const r = await service.ack(['e1']);
+    expect(r).toEqual({ acknowledged: 1 });
   });
 });

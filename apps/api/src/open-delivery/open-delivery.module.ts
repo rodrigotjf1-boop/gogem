@@ -8,6 +8,8 @@ import { OpenDeliveryAppService } from './open-delivery-app.service';
 import { OpenDeliveryAuthGuard } from './open-delivery-auth.guard';
 import { OpenDeliveryCatalogController } from './open-delivery-catalog.controller';
 import { OpenDeliveryCatalogService } from './open-delivery-catalog.service';
+import { OpenDeliveryOrderController } from './open-delivery-order.controller';
+import { OpenDeliveryOrderService } from './open-delivery-order.service';
 import { OpenDeliveryTokenController } from './open-delivery-token.controller';
 import { OpenDeliveryTokenService } from './open-delivery-token.service';
 
@@ -34,11 +36,13 @@ import { OpenDeliveryTokenService } from './open-delivery-token.service';
     OpenDeliveryAppController,
     OpenDeliveryTokenController,
     OpenDeliveryCatalogController,
+    OpenDeliveryOrderController,
   ],
   providers: [
     OpenDeliveryAppService,
     OpenDeliveryTokenService,
     OpenDeliveryCatalogService,
+    OpenDeliveryOrderService,
     OpenDeliveryAuthGuard,
   ],
   exports: [OpenDeliveryAuthGuard, JwtModule],

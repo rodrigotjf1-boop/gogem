@@ -22,6 +22,8 @@ export const TENANT_SCOPED_MODELS = new Set([
   'Cardapio',
   'Aparencia',
   'OpenDeliveryApp',
+  'OpenDeliveryOrder',
+  'OpenDeliveryEvent',
 ]);
 
 /**

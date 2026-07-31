@@ -45,6 +45,8 @@ model Tenant {
   produtoComplementos ProdutoComplemento[]
   produtoUpsells     ProdutoUpsell[]
   openDeliveryApps   OpenDeliveryApp[]
+  openDeliveryOrders OpenDeliveryOrder[]
+  openDeliveryEvents OpenDeliveryEvent[]
   dispositivos       Dispositivo[]
   pedidos            Pedido[]
   integracoes        Integracao[]
@@ -108,6 +110,50 @@ model OpenDeliveryApp {
 
   @@index([tenantId])
   @@map("open_delivery_apps")
+}
+
+// Pedido recebido via Open Delivery (inbound de um parceiro). Idempotente por
+// (tenant, displayId). Guarda o payload OD (reais) + total em centavos. A
+// materialização em comanda/produção do ERP é follow-up; aqui é o registro + a
+// máquina de status que o parceiro acompanha pelos eventos.
+model OpenDeliveryOrder {
+  id            String   @id @default(uuid())
+  tenantId      String
+  appId         String?
+  // ID do pedido no parceiro (idempotência).
+  displayId     String
+  // PLACED|CONFIRMED|PREPARING|READY|DISPATCHED|CONCLUDED|CANCELLED
+  status        String   @default("PLACED")
+  customerNome  String?
+  customerDoc   String?
+  itens         Json
+  pagamentos    Json
+  totalCentavos Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, displayId])
+  @@index([tenantId])
+  @@map("open_delivery_orders")
+}
+
+// Fila de eventos do Open Delivery (o parceiro consome por long-polling e dá
+// acknowledgment). Não-acked = pendente. Tenant-scoped.
+model OpenDeliveryEvent {
+  id             String    @id @default(uuid())
+  tenantId       String
+  // ORDER_PLACED | ORDER_STATUS_CHANGED | ORDER_CANCELLED
+  tipo           String
+  orderId        String
+  acknowledgedAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, acknowledgedAt])
+  @@map("open_delivery_events")
 }
 
 // Cardápio (Fase 3B): um conjunto INDEPENDENTE de categorias+produtos. Um tenant
