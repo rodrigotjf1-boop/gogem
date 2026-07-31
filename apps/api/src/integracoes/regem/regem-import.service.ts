@@ -101,6 +101,80 @@ export class RegemImportService {
   }
 
   /**
+   * Sincroniza do Regem apenas os produtos JÁ LINKADOS (mesmo código PDV) — o
+   * Regem age como "segundo admin": edições de preço, nome, descrição e
+   * pausa/disponibilidade propagam ao GoGeM. NÃO cria produtos novos (isso é o
+   * `importar`) nem toca campos só-GoGeM (selo, upsell, imagem, categoria).
+   * Atualiza apenas o que mudou; devolve quantos foram alterados (o chamador
+   * republica só se `alterados > 0`).
+   */
+  async sincronizarLinkados(
+    cardapioId?: string,
+  ): Promise<{ verificados: number; alterados: number }> {
+    const alvo = await this.cardapios.resolverAlvo(cardapioId);
+    const catalogo = await this.client.fetchCatalogo();
+
+    // Estado desejado por código PDV (a partir do Regem).
+    const desejado = new Map<
+      string,
+      {
+        precoCentavos: number;
+        disponivel: boolean;
+        nome: string;
+        descricao: string | null;
+      }
+    >();
+    for (const rp of catalogo.produtos) {
+      const codigo = (rp.codigo ?? '').trim();
+      if (!codigo) continue;
+      desejado.set(codigo, {
+        precoCentavos: reaisToCentavos(rp.precoVenda),
+        disponivel: disponivelNoGogem(rp),
+        nome: rp.nome,
+        descricao: rp.descricao ?? null,
+      });
+    }
+
+    // Produtos GoGeM do cardápio-alvo, com os campos que podem mudar.
+    const produtos = await this.prisma.produto.findMany({
+      where: { cardapioId: alvo },
+      select: {
+        id: true,
+        nome: true,
+        descricao: true,
+        precoCentavos: true,
+        disponivel: true,
+        externalRefs: true,
+      },
+    });
+
+    let verificados = 0;
+    let alterados = 0;
+    for (const p of produtos) {
+      const codigo = codigoRegem(p.externalRefs);
+      if (!codigo) continue;
+      const alvoRegem = desejado.get(codigo);
+      if (!alvoRegem) continue; // produto não veio no catálogo do Regem
+      verificados += 1;
+
+      const patch: Record<string, unknown> = {};
+      if (alvoRegem.precoCentavos !== p.precoCentavos)
+        patch.precoCentavos = alvoRegem.precoCentavos;
+      if (alvoRegem.disponivel !== p.disponivel)
+        patch.disponivel = alvoRegem.disponivel;
+      if (alvoRegem.nome !== p.nome) patch.nome = alvoRegem.nome;
+      if ((alvoRegem.descricao ?? null) !== (p.descricao ?? null))
+        patch.descricao = alvoRegem.descricao;
+
+      if (Object.keys(patch).length) {
+        await this.prisma.produto.update({ where: { id: p.id }, data: patch });
+        alterados += 1;
+      }
+    }
+    return { verificados, alterados };
+  }
+
+  /**
    * Casa categorias por `nome` (trim, case-insensitive) no tenant; cria as
    * ausentes (ordem do Regem) e atualiza a ordem das existentes. Retorna o
    * mapa `regemCategoriaId → gogemCategoriaId`.
@@ -345,7 +419,7 @@ const CANAIS_GOGEM = ['gogem', 'totem'];
  * Regem→GoGeM): indisponível se inativo, fora do cardápio, esgotado (estoque)
  * ou com o canal do totem pausado. Pausar no Regem some do totem no próximo sync.
  */
-function disponivelNoGogem(rp: RegemProduto): boolean {
+export function disponivelNoGogem(rp: RegemProduto): boolean {
   if (rp.ativo === false) return false;
   if (!rp.disponivelCardapio) return false;
   if (rp.pausadoEstoque === true) return false;
@@ -359,6 +433,12 @@ function disponivelNoGogem(rp: RegemProduto): boolean {
 /** Normaliza um nome para casamento: trim + lower-case. */
 function normalizar(nome: string): string {
   return (nome ?? '').trim().toLowerCase();
+}
+
+/** Código PDV do de-para regem (ou null) a partir do Json de externalRefs. */
+function codigoRegem(raw: unknown): string | null {
+  const ref = lerRefs(raw).find((r) => r.sistema === 'regem' && r.codigo_pdv);
+  return ref ? ref.codigo_pdv.trim() || null : null;
 }
 
 /** Lê o Json de `externalRefs` como array de refs (defensivo). */
