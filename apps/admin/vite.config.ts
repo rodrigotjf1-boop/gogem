@@ -20,5 +20,10 @@ export default defineConfig({
     setupFiles: ['./test/setup.ts'],
     css: true,
     include: ['test/**/*.{test,spec}.{ts,tsx}', 'src/**/*.{test,spec}.{ts,tsx}'],
+    // Os testes montam o App inteiro com um MSW server COMPARTILHADO; sob
+    // paralelismo de arquivos, requisições em voo de um arquivo colidem com o
+    // resetHandlers de outro (unhandled request → erro intermitente no CI).
+    // Rodar os arquivos em série elimina a corrida (suíte pequena; custo baixo).
+    fileParallelism: false,
   },
 });

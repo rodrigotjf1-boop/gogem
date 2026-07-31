@@ -84,11 +84,11 @@ describe('Integrações', () => {
     comIntegracoes();
     montar('/integracoes', 'gerente');
 
-    // "Open Delivery" só existe nos cards (dependente da query), diferente de
-    // "Regem", que também aparece no cabeçalho.
-    expect(await screen.findByText('Open Delivery')).toBeInTheDocument();
-    expect(screen.getByText('Ativo')).toBeInTheDocument();
+    // Âncora assíncrona = "Ativo" (status do conector Regem, só após a query).
+    // "Open Delivery" agora também está no menu lateral, então usamos getAllByText.
+    expect(await screen.findByText('Ativo')).toBeInTheDocument();
     expect(screen.getByText('Em breve')).toBeInTheDocument();
+    expect(screen.getAllByText('Open Delivery').length).toBeGreaterThan(0);
   });
 
   it('importa o catálogo pelo conector Regem e mostra o resumo', async () => {
