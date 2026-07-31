@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RegemImportService } from '../src/integracoes/regem/regem-import.service';
 import { RegemSyncPoller } from '../src/integracoes/regem/regem-sync.poller';
+import { RegemInboundService } from '../src/integracoes/regem/regem-inbound.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { RegemCatalogClient } from '../src/integracoes/regem/regem-catalog.client';
@@ -177,5 +178,64 @@ describe('RegemSyncPoller.tick', () => {
 
     expect(imports.sincronizarLinkados).toHaveBeenCalledTimes(2);
     expect(publicacao.publicar).toHaveBeenCalledTimes(1); // só o t2 que deu certo
+  });
+});
+
+function makeInbound() {
+  const prisma = { integracao: { findFirst: vi.fn() } };
+  const imports = { sincronizarLinkados: vi.fn() };
+  const publicacao = { publicar: vi.fn().mockResolvedValue({}) };
+  const service = new RegemInboundService(
+    prisma as unknown as PrismaService,
+    imports as unknown as RegemImportService,
+    publicacao as unknown as CatalogoPublicacaoService,
+  );
+  return { service, prisma, imports, publicacao };
+}
+
+describe('RegemInboundService.publicar (botão "Publicar no GoGeM")', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('token válido → acha o tenant, sincroniza e republica se mudou', async () => {
+    const { service, prisma, imports, publicacao } = makeInbound();
+    prisma.integracao.findFirst.mockResolvedValue({ tenantId: 't1' });
+    imports.sincronizarLinkados.mockResolvedValue({
+      verificados: 3,
+      alterados: 2,
+    });
+
+    const r = await service.publicar('tok-abc');
+
+    expect(r).toEqual({ alterados: 2 });
+    // Casou pelo token dentro do config (cross-tenant, só regem ativo).
+    const where = prisma.integracao.findFirst.mock.calls[0][0].where;
+    expect(where.tipo).toBe('regem');
+    expect(where.ativo).toBe(true);
+    expect(where.config).toEqual({ path: ['token'], equals: 'tok-abc' });
+    expect(publicacao.publicar).toHaveBeenCalledWith(null);
+  });
+
+  it('token válido mas nada mudou → NÃO republica', async () => {
+    const { service, prisma, imports, publicacao } = makeInbound();
+    prisma.integracao.findFirst.mockResolvedValue({ tenantId: 't1' });
+    imports.sincronizarLinkados.mockResolvedValue({
+      verificados: 3,
+      alterados: 0,
+    });
+    const r = await service.publicar('tok-abc');
+    expect(r).toEqual({ alterados: 0 });
+    expect(publicacao.publicar).not.toHaveBeenCalled();
+  });
+
+  it('token inexistente → 401', async () => {
+    const { service, prisma } = makeInbound();
+    prisma.integracao.findFirst.mockResolvedValue(null);
+    await expect(service.publicar('nope')).rejects.toThrow();
+  });
+
+  it('token vazio → 401 (sem consultar)', async () => {
+    const { service, prisma } = makeInbound();
+    await expect(service.publicar('')).rejects.toThrow();
+    expect(prisma.integracao.findFirst).not.toHaveBeenCalled();
   });
 });

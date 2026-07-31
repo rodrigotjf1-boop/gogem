@@ -4,6 +4,8 @@ import { CatalogoModule } from '../../catalogo/catalogo.module';
 import { RegemModule } from './regem.module';
 import { RegemImportController } from './regem-import.controller';
 import { RegemImportService } from './regem-import.service';
+import { RegemInboundController } from './regem-inbound.controller';
+import { RegemInboundService } from './regem-inbound.service';
 import { RegemSyncPoller } from './regem-sync.poller';
 
 /**
@@ -14,8 +16,8 @@ import { RegemSyncPoller } from './regem-sync.poller';
  */
 @Module({
   imports: [RegemModule, CardapioModule, CatalogoModule],
-  controllers: [RegemImportController],
-  providers: [RegemImportService, RegemSyncPoller],
+  controllers: [RegemImportController, RegemInboundController],
+  providers: [RegemImportService, RegemInboundService, RegemSyncPoller],
   exports: [RegemImportService],
 })
 export class RegemImportModule {}
