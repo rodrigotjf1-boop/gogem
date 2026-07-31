@@ -9,6 +9,7 @@ import CatalogoPage from '@/routes/catalogo';
 import CardapiosPage from '@/routes/cardapios';
 import ConfiguracoesPage from '@/routes/configuracoes';
 import IntegracoesPage from '@/routes/integracoes';
+import OpenDeliveryPage from '@/routes/open-delivery';
 import PublicarPage from '@/routes/publicar';
 import RelatoriosPage from '@/routes/relatorios';
 import FrotaPage from '@/routes/frota';
@@ -34,6 +35,7 @@ export default function App() {
               <Route path="/catalogo" element={<CatalogoPage />} />
               <Route path="/cardapios" element={<CardapiosPage />} />
               <Route path="/integracoes" element={<IntegracoesPage />} />
+              <Route path="/open-delivery" element={<OpenDeliveryPage />} />
               {/* Rota antiga: redireciona para a área de Integrações. */}
               <Route
                 path="/importar"
