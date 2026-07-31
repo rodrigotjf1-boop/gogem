@@ -19,18 +19,26 @@ como já faz com o Regem — ver `fix(venda)`).
 
 Ver `open-delivery.types.ts` para os tipos.
 
-## Rotas previstas (v1, a implementar)
+## Rotas (v1 — IMPLEMENTADAS)
 
-| Método | Rota | Descrição |
-|---|---|---|
-| `GET`  | `/open-delivery/v1/merchants/:id` | Dados do merchant (loja). |
-| `GET`  | `/open-delivery/v1/merchants/:id/catalog` | Catálogo completo (categorias/itens/opções). |
-| `POST` | `/open-delivery/v1/orders` | Recebe um pedido (ingest) para materializar no GoGeM. |
-| `POST` | `/open-delivery/v1/orders/:id/status` | Atualiza status do pedido (confirmado, pronto, cancelado…). |
-| `GET`  | `/open-delivery/v1/events:polling` | Long-polling de eventos (pedido novo/cancelado). |
+| Método | Rota | Escopo | Descrição |
+|---|---|---|---|
+| `POST` | `/open-delivery/v1/oauth/token` | — | Token OAuth2 client_credentials. |
+| `GET`  | `/open-delivery/v1/merchants/:id` | `catalog:read` | Dados do merchant (loja). |
+| `GET`  | `/open-delivery/v1/merchants/:id/catalog` | `catalog:read` | Catálogo completo. |
+| `POST` | `/open-delivery/v1/orders` | `orders:write` | Ingest de pedido (idempotente por `displayId`). |
+| `GET`  | `/open-delivery/v1/orders/:id` | `orders:read` | Consulta um pedido. |
+| `POST` | `/open-delivery/v1/orders/:id/status` | `orders:write` | Atualiza status. |
+| `GET`  | `/open-delivery/v1/events/polling` | `orders:read` | Fila de eventos (pendentes). |
+| `POST` | `/open-delivery/v1/events/acknowledgment` | `orders:read` | Confirma eventos processados. |
 
-Autenticação: OAuth2 client-credentials (`clientId`/`clientSecret` por integração,
-guardados em `Integracao.config` do tenant, segredo mascarado). Escopo por tenant.
+> O padrão usa `/events:polling`; aqui é `/events/polling` (o `:polling` colide
+> com parâmetros de rota do Express).
+
+Autenticação: OAuth2 client_credentials. O app parceiro (`OpenDeliveryApp`) tem
+`clientId` público + `clientSecret` **hasheado** (bcrypt, mostrado uma vez) +
+escopos, por tenant. O `/oauth/token` emite um JWT curto (1h, `aud: open-delivery`)
+com o tenant do app. Guia completo: `docs/open-delivery-provider.md`.
 
 ## Mapeamento GoGeM ↔ Open Delivery
 

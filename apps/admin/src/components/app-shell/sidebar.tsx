@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   BarChart3,
   BookOpen,
+  Boxes,
   Layers,
   Plug,
   Radio,
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { to: '/cardapios', label: 'Cardápios', icon: Layers },
   { to: '/catalogo', label: 'Catálogo', icon: BookOpen },
   { to: '/integracoes', label: 'Integrações', icon: Plug },
+  { to: '/open-delivery', label: 'Open Delivery', icon: Boxes },
   { to: '/publicar', label: 'Publicar', icon: UploadCloud },
   { to: '/relatorios', label: 'Relatórios', icon: BarChart3 },
   { to: '/configuracoes', label: 'Configurações', icon: Settings2 },
