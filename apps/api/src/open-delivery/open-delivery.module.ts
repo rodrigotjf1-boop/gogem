@@ -2,9 +2,12 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthModule } from '../auth/auth.module';
+import { CatalogoModule } from '../catalogo/catalogo.module';
 import { OpenDeliveryAppController } from './open-delivery-app.controller';
 import { OpenDeliveryAppService } from './open-delivery-app.service';
 import { OpenDeliveryAuthGuard } from './open-delivery-auth.guard';
+import { OpenDeliveryCatalogController } from './open-delivery-catalog.controller';
+import { OpenDeliveryCatalogService } from './open-delivery-catalog.service';
 import { OpenDeliveryTokenController } from './open-delivery-token.controller';
 import { OpenDeliveryTokenService } from './open-delivery-token.service';
 
@@ -17,6 +20,7 @@ import { OpenDeliveryTokenService } from './open-delivery-token.service';
 @Module({
   imports: [
     AuthModule,
+    CatalogoModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -26,10 +30,15 @@ import { OpenDeliveryTokenService } from './open-delivery-token.service';
       }),
     }),
   ],
-  controllers: [OpenDeliveryAppController, OpenDeliveryTokenController],
+  controllers: [
+    OpenDeliveryAppController,
+    OpenDeliveryTokenController,
+    OpenDeliveryCatalogController,
+  ],
   providers: [
     OpenDeliveryAppService,
     OpenDeliveryTokenService,
+    OpenDeliveryCatalogService,
     OpenDeliveryAuthGuard,
   ],
   exports: [OpenDeliveryAuthGuard, JwtModule],

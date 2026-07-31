@@ -1,9 +1,12 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenDeliveryAppService } from '../src/open-delivery/open-delivery-app.service';
+import { OpenDeliveryCatalogService } from '../src/open-delivery/open-delivery-catalog.service';
 import { OpenDeliveryTokenService } from '../src/open-delivery/open-delivery-token.service';
+import { TenantContext } from '../src/tenant/tenant-context';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import type { CatalogoPublicacaoService } from '../src/catalogo/catalogo-publicacao.service';
 import type { JwtService } from '@nestjs/jwt';
 
 function makeAppService() {
@@ -174,5 +177,98 @@ describe('OpenDeliveryTokenService', () => {
         client_secret: 'x',
       }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+function makeCatalogService() {
+  const prisma = {
+    tenant: {
+      findFirst: vi.fn().mockResolvedValue({ id: 't-1', nome: 'Burger X' }),
+    },
+  };
+  const publicacao = { getPublicado: vi.fn() };
+  const service = new OpenDeliveryCatalogService(
+    prisma as unknown as PrismaService,
+    publicacao as unknown as CatalogoPublicacaoService,
+  );
+  return { service, prisma, publicacao };
+}
+
+const ctx = { tenantId: 't-1', userId: 'app-1', papel: 'open_delivery' };
+
+describe('OpenDeliveryCatalogService', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('merchant devolve id+name; recusa merchantId de outro tenant (403)', async () => {
+    const { service } = makeCatalogService();
+    const m = await TenantContext.run(ctx, () => service.merchant('t-1'));
+    expect(m).toEqual({ id: 't-1', name: 'Burger X' });
+    await expect(
+      TenantContext.run(ctx, () => service.merchant('outro')),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('catalog mapeia snapshot → Open Delivery (reais, externalCode, status)', async () => {
+    const { service, publicacao } = makeCatalogService();
+    publicacao.getPublicado.mockResolvedValue({
+      versao: 3,
+      atualizado: true,
+      snapshot: {
+        categorias: [{ id: 'c1', nome: 'Burgers', ordem: 0 }],
+        produtos: [
+          {
+            id: 'p1',
+            nome: 'X-Burger',
+            descricao: 'Clássico',
+            precoCentavos: 2990,
+            disponivel: true,
+            imagemUrl: 'https://img/x.png',
+            selo: 'Mais vendido',
+            categoriaId: 'c1',
+            externalRefs: [{ sistema: 'regem', codigo_pdv: '101' }],
+            grupos: [
+              {
+                id: 'g1',
+                nome: 'Adicionais',
+                min: 0,
+                max: 3,
+                ordem: 0,
+                opcoes: [
+                  {
+                    id: 'o1',
+                    nome: 'Bacon',
+                    precoCentavosDelta: 400,
+                    disponivel: false,
+                    ordem: 0,
+                    externalRefs: [{ sistema: 'regem', codigo_pdv: '201' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const cat = await TenantContext.run(ctx, () => service.catalog('t-1'));
+    expect(cat.merchant).toEqual({ id: 't-1', name: 'Burger X' });
+    expect(cat.categories).toEqual([{ id: 'c1', name: 'Burgers', index: 0 }]);
+    const item = cat.items[0];
+    expect(item).toMatchObject({
+      id: 'p1',
+      name: 'X-Burger',
+      externalCode: '101',
+      categoryId: 'c1',
+      price: { value: 29.9, currency: 'BRL' },
+      status: 'AVAILABLE',
+      badge: 'Mais vendido',
+    });
+    const opt = item.optionGroups[0].options[0];
+    expect(opt).toMatchObject({
+      name: 'Bacon',
+      externalCode: '201',
+      price: { value: 4, currency: 'BRL' },
+      status: 'UNAVAILABLE', // opção indisponível
+    });
   });
 });
