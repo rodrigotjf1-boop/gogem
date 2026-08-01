@@ -16,6 +16,23 @@ import {
 } from '@/lib/aparencia';
 
 /**
+ * Paletas recomendadas por preset ("estilo do totem"). Escolher um preset com
+ * paleta aplica a cara completa em 1 clique (o lojista ainda pode ajustar as
+ * cores depois). 'padrao'/'brasa' não forçam paleta (mantêm o que o lojista tem).
+ */
+const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>> =
+  {
+    burger: {
+      corPrimaria: '#F5A623',
+      corDestaque: '#E03A2F',
+      corFundo: '#0E0C0B',
+      corPainel: '#1C1815',
+      raio: 16,
+      fonteDisplay: 'Montserrat',
+    },
+  };
+
+/**
  * Configurações → Aparência do totem (Fase 6). O lojista personaliza cores,
  * marca, tela de descanso, vitrine e animações; o totem aplica no próximo sync.
  * Só gerente+ salva (RBAC no servidor). O render é do app do totem.
@@ -34,6 +51,13 @@ export default function ConfiguracoesPage() {
 
   function set<K extends keyof Aparencia>(k: K, v: Aparencia[K]) {
     setForm((f) => (f ? { ...f, [k]: v } : f));
+    setOk(false);
+  }
+
+  /** Troca o preset e, se houver paleta recomendada, aplica tudo de uma vez. */
+  function aplicarPreset(v: Aparencia['temaPreset']) {
+    const pal = PALETA_PRESET[v];
+    setForm((f) => (f ? { ...f, temaPreset: v, ...(pal ?? {}) } : f));
     setOk(false);
   }
 
@@ -127,10 +151,22 @@ export default function ConfiguracoesPage() {
             <SelectField
               label="Estilo do totem"
               value={form.temaPreset}
-              options={['padrao', 'brasa']}
-              rotulos={{ padrao: 'Padrão GoGeM', brasa: 'Brasa (steakhouse)' }}
-              onChange={(v) => set('temaPreset', v as Aparencia['temaPreset'])}
+              options={['padrao', 'brasa', 'burger']}
+              rotulos={{
+                padrao: 'Padrão GoGeM',
+                brasa: 'Brasa (steakhouse)',
+                burger: 'Burger House (hambúrguer)',
+              }}
+              onChange={(v) =>
+                aplicarPreset(v as Aparencia['temaPreset'])
+              }
             />
+            {PALETA_PRESET[form.temaPreset] && (
+              <p className="text-xs text-muted-foreground">
+                Este estilo já aplicou a paleta recomendada — ajuste as cores
+                acima se quiser.
+              </p>
+            )}
           </CardContent>
         </Card>
 

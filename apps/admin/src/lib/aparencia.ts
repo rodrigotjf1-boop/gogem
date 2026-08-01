@@ -29,7 +29,7 @@ export interface Aparencia {
   nomeLoja: string | null;
   logoUrl: string | null;
   fonteDisplay: 'Tektur' | 'Poppins' | 'Montserrat';
-  temaPreset: 'padrao' | 'brasa';
+  temaPreset: 'padrao' | 'brasa' | 'burger';
   descansoTipo: 'padrao' | 'carrossel';
   descansoIntervaloSeg: number;
   descansoMidias: DescansoMidia[];

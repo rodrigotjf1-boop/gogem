@@ -78,7 +78,7 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
                 midias: ap.descansoMidias,
                 intervalo: ap.descansoIntervaloSeg,
                 anima: anima,
-                brasa: ap.brasa,
+                brasa: ap.editorial,
                 corKicker: ap.corPrimaria)
           else
             _FundoRobo(idle: _idle, caps: caps, anima: anima),

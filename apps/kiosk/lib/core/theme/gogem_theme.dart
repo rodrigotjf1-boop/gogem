@@ -44,10 +44,10 @@ ThemeData temaDe(Aparencia ap) {
     fontFamily: ap.fonteDisplay,
   );
   final r = ap.raio;
-  // Preset "brasa" (steakhouse): tipografia display maior, mais peso e
-  // espaçamento (leitura editorial, CAIXA ALTA). O fundo ember/cards ficam na
-  // tela do catálogo (que também lê ap.brasa).
-  final brasa = ap.brasa;
+  // Presets editoriais (Brasa steakhouse / Burger House): tipografia display
+  // maior, mais peso e espaçamento (leitura editorial, CAIXA ALTA). O fundo
+  // quente/cards ficam na tela do catálogo (que também lê ap.brasa/ap.burger).
+  final brasa = ap.editorial;
   final pesoDisplay = brasa ? FontWeight.w800 : FontWeight.w600;
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
