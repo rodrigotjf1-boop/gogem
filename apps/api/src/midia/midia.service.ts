@@ -63,4 +63,31 @@ export class MidiaService {
     );
     return `${this.publicBase}/storage/v1/object/public/${this.bucket}/${key}`;
   }
+
+  /**
+   * Sobe um binário arbitrário (ex.: APK do totem) numa chave dada e devolve a
+   * URL pública. Usado pela publicação de release do totem (auto-update).
+   */
+  async uploadBinario(
+    key: string,
+    buffer: Buffer,
+    contentType: string,
+  ): Promise<string> {
+    if (!this.s3 || !this.bucket) {
+      throw new BadRequestException(
+        'Storage de mídia não configurado: defina S3_ENDPOINT, S3_REGION, ' +
+          'S3_ACCESS_KEY, S3_SECRET_KEY e S3_BUCKET no ambiente da API.',
+      );
+    }
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+    );
+    return `${this.publicBase}/storage/v1/object/public/${this.bucket}/${key}`;
+  }
 }

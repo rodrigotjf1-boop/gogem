@@ -18,6 +18,7 @@ import { IntegracaoModule } from './integracao/integracao.module';
 import { VendasModule } from './vendas/vendas.module';
 import { RelatorioModule } from './relatorio/relatorio.module';
 import { OpenDeliveryModule } from './open-delivery/open-delivery.module';
+import { KioskReleaseModule } from './kiosk-release/kiosk-release.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -43,6 +44,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     VendasModule,
     RelatorioModule,
     OpenDeliveryModule,
+    KioskReleaseModule,
   ],
   providers: [
     // Rate limiting global (por IP). Primeiro guard: barra o abuso antes de

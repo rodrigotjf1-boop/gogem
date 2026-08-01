@@ -56,6 +56,24 @@ model Tenant {
   @@map("tenants")
 }
 
+// Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o
+// mesmo produto para todas as lojas. O DMS publica (token de release); o totem
+// consulta /kiosk/latest, compara o versionCode, baixa o apkUrl e confere o
+// sha256. `ativo` permite despublicar; `obrigatorio` = update forçado.
+model KioskRelease {
+  id          String   @id @default(uuid())
+  versionCode Int      @unique
+  versionName String
+  apkUrl      String
+  sha256      String
+  notas       String?
+  obrigatorio Boolean  @default(false)
+  ativo       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("kiosk_releases")
+}
+
 // Aparência do totem POR LOJA (Fase 6). O admin configura e o totem aplica no
 // próximo sync (vai no `/catalogo/publicado`). O render é do app do totem; aqui
 // só guardamos os tokens. Cores em hex; `descansoMidias` = [{ url, tipo }].
