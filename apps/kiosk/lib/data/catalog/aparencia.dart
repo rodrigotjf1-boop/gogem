@@ -50,7 +50,7 @@ class Aparencia {
   final String? nomeLoja;
   final String? logoUrl;
   final String fonteDisplay; // 'Tektur' | 'Poppins' | 'Montserrat'
-  final String temaPreset; // 'padrao' | 'brasa'
+  final String temaPreset; // 'padrao' | 'brasa' | 'burger'
   final String descansoTipo; // 'padrao' | 'carrossel'
   final int descansoIntervaloSeg;
   final List<DescansoMidia> descansoMidias;
@@ -81,6 +81,11 @@ class Aparencia {
 
   bool get carrossel => descansoTipo == 'carrossel' && descansoMidias.isNotEmpty;
   bool get brasa => temaPreset == 'brasa';
+  bool get burger => temaPreset == 'burger';
+
+  /// Presets "editoriais" (Brasa/Burger House): tipografia display maior, peso e
+  /// caixa-alta, fundo/cards quentes. Agrupa os tratamentos comuns aos dois.
+  bool get editorial => brasa || burger;
   bool get cardLateral => estiloCard == 'lateral';
   bool get semAnimacao => animacoes == 'off';
   bool get animacaoReduzida => animacoes == 'reduzido';

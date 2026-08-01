@@ -70,9 +70,9 @@ export class UpdateAparenciaDto {
   @IsIn(['Tektur', 'Poppins', 'Montserrat'])
   fonteDisplay?: string;
 
-  @ApiPropertyOptional({ enum: ['padrao', 'brasa'] })
+  @ApiPropertyOptional({ enum: ['padrao', 'brasa', 'burger'] })
   @IsOptional()
-  @IsIn(['padrao', 'brasa'])
+  @IsIn(['padrao', 'brasa', 'burger'])
   temaPreset?: string;
 
   @ApiPropertyOptional({ enum: ['padrao', 'carrossel'] })

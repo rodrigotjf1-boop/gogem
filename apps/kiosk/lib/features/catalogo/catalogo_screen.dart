@@ -29,19 +29,32 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     final lateral = ap.cardLateral;
     return Scaffold(
       body: Container(
-        // Preset "brasa": brilho ember no topo (steakhouse). Padrão: sem fundo.
-        decoration: ap.brasa
+        // Preset "brasa": brilho ember no topo (steakhouse). "burger" (Burger
+        // House): fundo quente escuro + brasa vermelha no topo. Padrão: sem fundo.
+        decoration: ap.burger
             ? BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -1.1),
-                  radius: 1.1,
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                   colors: [
-                    ap.corPrimaria.withValues(alpha: 0.22),
-                    Colors.transparent,
+                    Color.alphaBlend(
+                        ap.corDestaque.withValues(alpha: 0.16), ap.corFundo),
+                    ap.corFundo,
                   ],
                 ),
               )
-            : null,
+            : ap.brasa
+                ? BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0, -1.1),
+                      radius: 1.1,
+                      colors: [
+                        ap.corPrimaria.withValues(alpha: 0.22),
+                        Colors.transparent,
+                      ],
+                    ),
+                  )
+                : null,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -130,7 +143,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                               itemBuilder: (_, i) => _ProdutoCard(
                                   p: produtos[i],
                                   lateral: lateral,
-                                  brasa: ap.brasa),
+                                  brasa: ap.brasa,
+                                  burger: ap.burger),
                             ),
                     ),
                   ]);
@@ -147,33 +161,58 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
 
 class _ProdutoCard extends StatelessWidget {
   const _ProdutoCard(
-      {required this.p, this.lateral = false, this.brasa = false});
+      {required this.p,
+      this.lateral = false,
+      this.brasa = false,
+      this.burger = false});
   final Produto p;
   final bool lateral;
   final bool brasa;
+  final bool burger;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     const raio = 18.0;
-    // Preset "brasa": card com brilho diagonal (sheen) + borda tingida pela cor
-    // primária da loja (look steakhouse). Padrão: painel liso.
-    final decor = brasa
-        ? BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF241A12), Color(0xFF14100C)],
-            ),
-            borderRadius: BorderRadius.circular(raio),
-            border: Border.all(color: cs.primary.withValues(alpha: 0.55)),
-          )
-        : BoxDecoration(
-            color: GogemColors.panel,
-            borderRadius: BorderRadius.circular(raio),
-            border: Border.all(color: GogemColors.line),
-          );
+    // "brasa": card com brilho diagonal (sheen) + borda tingida (steakhouse).
+    // "burger" (Burger House): painel quente escuro, borda âmbar sutil e sombra
+    // — foto-forward. Padrão: painel liso.
+    final BoxDecoration decor;
+    if (burger) {
+      decor = BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF201814), Color(0xFF14100D)],
+        ),
+        borderRadius: BorderRadius.circular(raio),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.45),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      );
+    } else if (brasa) {
+      decor = BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF241A12), Color(0xFF14100C)],
+        ),
+        borderRadius: BorderRadius.circular(raio),
+        border: Border.all(color: cs.primary.withValues(alpha: 0.55)),
+      );
+    } else {
+      decor = BoxDecoration(
+        color: GogemColors.panel,
+        borderRadius: BorderRadius.circular(raio),
+        border: Border.all(color: GogemColors.line),
+      );
+    }
     return InkWell(
       key: ValueKey('prod-tap-${p.id}'),
       onTap: () => context.push('/produto/${p.id}'),
@@ -270,13 +309,16 @@ class _ProdutoCard extends StatelessWidget {
     );
   }
 
-  /// Selo de destaque (F4) — ex.: "Mais vendido". Fundo na cor primária.
+  /// Selo de destaque (F4) — ex.: "Mais vendido". Fundo na cor primária;
+  /// no Burger House usa a cor de destaque (vermelho), como no mockup.
   Widget _seloDestaque(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final fundo = burger ? cs.secondary : cs.primary;
+    final tinta = fundo.computeLuminance() > 0.5 ? Colors.black : Colors.white;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-          color: cs.primary, borderRadius: BorderRadius.circular(999)),
+          color: fundo, borderRadius: BorderRadius.circular(999)),
       child: Text(
         p.selo!.toUpperCase(),
         style: TextStyle(
@@ -284,7 +326,7 @@ class _ProdutoCard extends StatelessWidget {
           fontWeight: FontWeight.w700,
           fontSize: 12,
           letterSpacing: 0.5,
-          color: cs.onPrimary,
+          color: tinta,
         ),
       ),
     );
