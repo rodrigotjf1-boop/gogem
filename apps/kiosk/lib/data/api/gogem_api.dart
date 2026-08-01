@@ -132,4 +132,49 @@ class GogemApi {
     }
     throw GogemApiException(res.statusCode, res.body);
   }
+
+  /// GET /kiosk/latest — manifesto da release mais nova (auto-update). Devolve
+  /// null quando não há release publicada. O totem compara o versionCode.
+  Future<KioskRelease?> latestRelease() async {
+    final uri = Uri.parse('$baseUrl/kiosk/latest');
+    final res = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    final body = utf8.decode(res.bodyBytes).trim();
+    if (body.isEmpty || body == 'null') return null;
+    final b = jsonDecode(body);
+    if (b is! Map || b['versionCode'] == null) return null;
+    return KioskRelease.fromJson(b.cast<String, dynamic>());
+  }
+}
+
+/// Manifesto de uma release do APK do totem (auto-update).
+class KioskRelease {
+  const KioskRelease({
+    required this.versionCode,
+    required this.versionName,
+    required this.apkUrl,
+    required this.sha256,
+    this.notas,
+    this.obrigatorio = false,
+  });
+
+  final int versionCode;
+  final String versionName;
+  final String apkUrl;
+  final String sha256;
+  final String? notas;
+  final bool obrigatorio;
+
+  factory KioskRelease.fromJson(Map<String, dynamic> j) => KioskRelease(
+        versionCode: (j['versionCode'] as num).toInt(),
+        versionName: '${j['versionName'] ?? ''}',
+        apkUrl: '${j['apkUrl'] ?? ''}',
+        sha256: '${j['sha256'] ?? ''}',
+        notas: j['notas'] as String?,
+        obrigatorio: j['obrigatorio'] == true,
+      );
 }

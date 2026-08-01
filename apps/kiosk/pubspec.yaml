@@ -1,7 +1,7 @@
 name: gogem_kiosk
 description: "GoGeM - app de autoatendimento (totem) by DMS"
 publish_to: "none"
-version: 0.5.2+7
+version: 0.5.3+8
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -16,6 +16,8 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.3
   cached_network_image: ^3.4.1
+  package_info_plus: ^8.0.0
+  crypto: ^3.0.3
   gogem_escpos:
     path: ../../packages/escpos
 
