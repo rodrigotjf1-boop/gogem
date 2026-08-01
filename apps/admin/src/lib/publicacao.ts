@@ -68,9 +68,22 @@ export function usePublicar() {
 
 /** Extrai a mensagem de erro da API (ex.: 400 Regem não configurado). */
 export function mensagemDeErro(e: unknown): string {
-  const msg = (e as { response?: { data?: { message?: string | string[] } } })
-    ?.response?.data?.message;
+  const err = e as {
+    response?: { status?: number; data?: { message?: string | string[] } };
+    message?: string;
+  };
+  const msg = err?.response?.data?.message;
   if (Array.isArray(msg)) return msg.join(' ');
-  if (typeof msg === 'string') return msg;
-  return 'Algo deu errado. Tente novamente.';
+  if (typeof msg === 'string' && msg) return msg;
+  // Sem `message` do servidor: dá o motivo real em vez de engolir num genérico
+  // (ajuda a diagnosticar upload — 413 do proxy, 500 do storage, rede/CORS).
+  const status = err?.response?.status;
+  if (status === 413)
+    return 'Arquivo grande demais para o servidor (limite do proxy). Use uma imagem menor.';
+  if (status === 403) return 'Você não tem permissão para esta ação.';
+  if (status && status >= 500)
+    return `Erro no servidor (${status}). Verifique o storage de mídia (S3) da API.`;
+  if (!err?.response)
+    return 'Sem resposta do servidor (rede/CORS). Confira a conexão com a API.';
+  return err?.message || 'Algo deu errado. Tente novamente.';
 }
