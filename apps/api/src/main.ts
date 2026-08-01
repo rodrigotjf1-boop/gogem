@@ -26,12 +26,29 @@ async function bootstrap(): Promise<void> {
   // Segurança básica de headers.
   app.use(helmet());
 
-  // CORS: o painel (admin) roda em outro domínio (ex.: admin-stg.gogem.com.br) e
-  // precisa chamar esta API. CORS_ORIGIN = lista de origens separadas por vírgula;
-  // sem a var (dev), reflete a origem da requisição. Auth é por Bearer (não cookie).
-  const corsOrigin = process.env.CORS_ORIGIN;
+  // CORS: o painel (admin) roda em outro domínio (ex.: app.gogem.com.br) e precisa
+  // chamar esta API. Sempre liberamos a FAMÍLIA própria (*.gogem.com.br) — assim
+  // trocar de subdomínio nunca derruba o admin — além das origens extras em
+  // CORS_ORIGIN (lista por vírgula). Sem lista (dev), reflete a origem. Auth é por
+  // Bearer (não cookie), então liberar a origem não expõe sessão de terceiros.
+  const listaCors = (process.env.CORS_ORIGIN ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  const origemPermitida = (origin?: string): boolean => {
+    if (!origin) return true; // apps nativos / curl (sem header Origin)
+    let host = '';
+    try {
+      host = new URL(origin).hostname;
+    } catch {
+      return false;
+    }
+    if (host === 'gogem.com.br' || host.endsWith('.gogem.com.br')) return true;
+    if (listaCors.includes(origin)) return true;
+    return listaCors.length === 0; // dev sem lista: permissivo (como antes)
+  };
   app.enableCors({
-    origin: corsOrigin ? corsOrigin.split(',').map((o) => o.trim()) : true,
+    origin: (origin, cb) => cb(null, origemPermitida(origin)),
     credentials: true,
   });
 
