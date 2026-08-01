@@ -8,7 +8,12 @@ import '../../printing/printer_providers.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart';
+import '../../data/update/updater.dart';
 import '../../widgets/gogem_robot.dart';
+
+/// Throttle do auto-update: checa no máximo 1x a cada 3h (a tela de descanso
+/// monta várias vezes ao dia; não queremos bater na API a cada retorno ao idle).
+DateTime _ultimoCheckUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
 /// Tela de descanso (atrator). Aparência POR LOJA (Fase 6): logo/nome, chamada,
 /// preço-isca e — se configurado — carrossel de mídias da loja; senão, o robô
@@ -32,6 +37,13 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
     _idle = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(printerHealthProvider.notifier).iniciar();
+      // Auto-update: na tela idle (ninguém pedindo), verifica se há APK novo e
+      // instala. Throttle de 3h para não checar a cada retorno ao descanso.
+      final agora = DateTime.now();
+      if (agora.difference(_ultimoCheckUpdate) > const Duration(hours: 3)) {
+        _ultimoCheckUpdate = agora;
+        ref.read(updaterProvider).verificarEAtualizar();
+      }
     });
   }
 
