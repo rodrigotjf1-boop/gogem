@@ -11,10 +11,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags } from '@nestjs/swagger';
 import { DeviceTokenGuard } from '../auth/device-token.guard';
 import { ReleaseTokenGuard } from '../auth/release-token.guard';
-import {
-  ApkEnviado,
-  KioskReleaseService,
-} from './kiosk-release.service';
+import { ApkEnviado, KioskReleaseService } from './kiosk-release.service';
 import { PublicarReleaseDto } from './dto/publicar-release.dto';
 
 /**
@@ -45,10 +42,7 @@ export class KioskReleaseController {
   @Post('releases')
   @UseGuards(ReleaseTokenGuard)
   @UseInterceptors(FileInterceptor('apk'))
-  publicar(
-    @Body() dto: PublicarReleaseDto,
-    @UploadedFile() apk?: ApkEnviado,
-  ) {
+  publicar(@Body() dto: PublicarReleaseDto, @UploadedFile() apk?: ApkEnviado) {
     return this.service.publicar(dto, apk);
   }
 }
