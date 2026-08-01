@@ -253,6 +253,9 @@ export class RegemImportService {
     const categoriaId = rp.categoriaId
       ? (categoriaMap.get(rp.categoriaId) ?? null)
       : null;
+    // Foto do Regem (URL pública do Supabase). Só absolutas; quando ausente NÃO
+    // apagamos uma imagem custom já enviada no GoGeM (só grava quando há uma).
+    const imagemUrl = urlPublicaOuNull(rp.imagem);
 
     const existente = produtoPorCodigo.get(codigo);
     if (existente) {
@@ -265,6 +268,7 @@ export class RegemImportService {
           precoCentavos,
           disponivel,
           categoriaId,
+          ...(imagemUrl ? { imagemUrl } : {}),
           externalRefs: externalRefs as unknown as Prisma.InputJsonValue,
         },
       });
@@ -279,6 +283,7 @@ export class RegemImportService {
       precoCentavos,
       disponivel,
       categoriaId,
+      imagemUrl,
       cardapioId,
       externalRefs: externalRefs as unknown as Prisma.InputJsonValue,
     } satisfies Omit<Prisma.ProdutoUncheckedCreateInput, 'tenantId'>;
@@ -433,6 +438,16 @@ export function disponivelNoGogem(rp: RegemProduto): boolean {
 /** Normaliza um nome para casamento: trim + lower-case. */
 function normalizar(nome: string): string {
   return (nome ?? '').trim().toLowerCase();
+}
+
+/**
+ * URL de imagem só se for ABSOLUTA (http/https) — o GoGeM serve a foto direto
+ * dessa URL (Supabase público do Regem). Refs relativas/vazias viram null para
+ * não gravar caminho quebrado.
+ */
+function urlPublicaOuNull(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim();
+  return /^https?:\/\//i.test(s) ? s : null;
 }
 
 /** Código PDV do de-para regem (ou null) a partir do Json de externalRefs. */

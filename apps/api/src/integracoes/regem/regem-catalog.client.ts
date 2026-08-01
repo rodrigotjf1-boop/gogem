@@ -48,6 +48,8 @@ export interface RegemProduto {
   codigo: string | null;
   nome: string;
   descricao: string | null;
+  /** URL pública da foto do produto (Supabase). Pode ser null/ausente. */
+  imagem?: string | null;
   /** Preço de venda em reais (string decimal), ex. "29.90". */
   precoVenda: string | null;
   categoriaId: string | null;
