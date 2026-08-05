@@ -54,6 +54,26 @@ export const CONECTORES: Record<string, Conector> = {
       },
     ],
   },
+  mercadopago: {
+    tipo: 'mercadopago',
+    nome: 'Mercado Pago (PIX)',
+    descricao:
+      'PIX por QR no totem, sem homologação. As credenciais ficam no servidor ' +
+      '(nunca no app); o cliente paga escaneando o QR. Sem configurar, o totem ' +
+      'usa o modo sandbox (QR de teste que aprova sozinho).',
+    disponivel: true,
+    importaCatalogo: false,
+    campos: [
+      {
+        key: 'accessToken',
+        label: 'Access token',
+        secret: true,
+        ajuda:
+          'Mercado Pago → Suas integrações → Credenciais. Produção começa com ' +
+          'APP_USR-…; teste com TEST-….',
+      },
+    ],
+  },
   open_delivery: {
     tipo: 'open_delivery',
     nome: 'Open Delivery',

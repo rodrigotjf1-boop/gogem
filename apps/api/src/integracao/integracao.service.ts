@@ -127,6 +127,7 @@ export class IntegracaoService {
   /** Testa a conexão do conector com a config guardada (mesmo não-ativa). */
   async testar(tipo: string): Promise<TesteResultado> {
     const conector = this.conectorDisponivel(tipo);
+    if (tipo === 'mercadopago') return this.testarMercadoPago();
     if (tipo !== 'regem') {
       throw new BadRequestException(
         `Teste de conexão ainda não implementado para "${conector.nome}".`,
@@ -177,6 +178,60 @@ export class IntegracaoService {
       );
     }
     return this.regemImport.importar(cardapioId);
+  }
+
+  /** Testa o token do Mercado Pago pingando /users/me (sem cobrar nada). */
+  private async testarMercadoPago(): Promise<TesteResultado> {
+    const row = await this.prisma.integracao.findFirst({
+      where: { tipo: 'mercadopago' },
+    });
+    const token = (row?.config as Record<string, string> | null)?.accessToken;
+    let resultado: TesteResultado;
+    if (!token) {
+      resultado = {
+        ok: false,
+        detalhe: 'Access token não configurado.',
+        em: new Date().toISOString(),
+      };
+    } else {
+      try {
+        const res = await fetch('https://api.mercadopago.com/users/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const b = (await res.json()) as {
+            nickname?: string;
+            email?: string;
+            id?: number;
+          };
+          const conta = b.nickname ?? b.email ?? `#${b.id}`;
+          resultado = {
+            ok: true,
+            detalhe: `Conexão ok — conta ${conta}.`,
+            em: new Date().toISOString(),
+          };
+        } else {
+          resultado = {
+            ok: false,
+            detalhe: `Mercado Pago recusou o token (HTTP ${res.status}).`,
+            em: new Date().toISOString(),
+          };
+        }
+      } catch (err) {
+        resultado = {
+          ok: false,
+          detalhe: err instanceof Error ? err.message : String(err),
+          em: new Date().toISOString(),
+        };
+      }
+    }
+    if (row) {
+      await this.prisma.integracao.update({
+        where: { id: row.id },
+        data: { ultimoTeste: resultado as unknown as Prisma.InputJsonValue },
+      });
+    }
+    return resultado;
   }
 
   // ── internos ──────────────────────────────────────────────────────────────
