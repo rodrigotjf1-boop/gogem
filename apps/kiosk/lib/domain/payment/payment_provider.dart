@@ -1,9 +1,32 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gogem_payment/payment.dart';
 
 import '../../data/api/gogem_api.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../order/order_models.dart';
+
+/// Liga o ElginTefProvider (pacote) ao IDH nativo: o canal `gogem/tef` dispara o
+/// Intent `com.elgin.e1.digitalhub.TEF` e devolve o `retorno`. Sem canal nativo
+/// (bancada desktop/teste) as chamadas caem no fake do transporte.
+class MethodChannelElginTransport implements ElginTefTransport {
+  static const MethodChannel _canal = MethodChannel('gogem/tef');
+
+  @override
+  Future<String> executar(Map<String, String> extras) async {
+    final r = await _canal.invokeMethod<String>('executar', extras);
+    return r ?? '{"mensagem":"Sem retorno do TEF"}';
+  }
+
+  @override
+  Future<bool> disponivel() async {
+    try {
+      return await _canal.invokeMethod<bool>('disponivel') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
 
 /// Liga o PixProvider (pacote) ao backend do GoGeM: cria a cobrança e faz o
 /// polling do status via API do totem (X-Device-Token). Credencial do PSP fica
@@ -41,6 +64,12 @@ const String _kProvider =
 
 final paymentProviderProvider = Provider<PaymentProvider>((ref) {
   switch (_kProvider) {
+    // Elgin TEF (cartão crédito/débito pelo pinpad, via IDH). PIX continua no
+    // pixProviderProvider (PSP). Selecionável por GOGEM_PAYMENT_PROVIDER=elgin.
+    case 'elgin':
+      final p = ElginTefProvider(MethodChannelElginTransport());
+      ref.onDispose(p.dispose);
+      return p;
     case 'fake':
     default:
       final p = FakePaymentProvider();

@@ -12,3 +12,5 @@ export 'src/fake/fake_provider.dart';
 export 'src/pix/pix_models.dart';
 export 'src/pix/pix_gateway.dart';
 export 'src/pix/pix_provider.dart';
+export 'src/elgin/elgin_transport.dart';
+export 'src/elgin/elgin_provider.dart';

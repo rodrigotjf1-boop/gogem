@@ -50,5 +50,11 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- TEF Elgin (F9): resolver o Intent do IDH no Android 11+ (package
+             visibility) e conseguir startActivityForResult para o pinpad. -->
+        <intent>
+            <action android:name="com.elgin.e1.digitalhub.TEF"/>
+        </intent>
+        <package android:name="com.elgin.e1.digitalhub"/>
     </queries>
 </manifest>
