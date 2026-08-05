@@ -52,8 +52,35 @@ model Tenant {
   integracoes        Integracao[]
   cardapios          Cardapio[]
   aparencia          Aparencia?
+  pixCharges         PixCharge[]
 
   @@map("tenants")
+}
+
+// Cobrança PIX via PSP (F8). O totem cria (POST /pagamentos/pix), mostra o QR e
+// faz polling (GET /pagamentos/pix/:id); o PSP confirma por webhook. Credenciais
+// do PSP ficam no backend — o app nunca as vê. `psp` = adaptador usado
+// (sandbox|mercadopago); `pspRef` = id do pagamento no PSP.
+model PixCharge {
+  id          String    @id @default(uuid())
+  tenantId    String
+  orderId     String // UUID do pedido = idempotência
+  amountCents Int
+  status      String    @default("pending") // pending|approved|expired|cancelled|error
+  psp         String
+  pspRef      String?
+  copiaECola  String?
+  qrImage     String? // data URI (base64) do QR
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, orderId])
+  @@index([tenantId])
+  @@index([pspRef])
+  @@map("pix_charges")
 }
 
 // Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o
