@@ -183,6 +183,13 @@ packages:
       relative: true
     source: path
     version: "0.1.0"
+  gogem_payment:
+    dependency: "direct main"
+    description:
+      path: "../../packages/payment"
+      relative: true
+    source: path
+    version: "0.1.0"
   hooks:
     dependency: transitive
     description:

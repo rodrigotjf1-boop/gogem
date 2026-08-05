@@ -2,25 +2,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:gogem_payment/payment.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 import '../../domain/order/order_repository.dart';
 import '../../domain/order/venda_sync.dart';
+import '../../domain/payment/payment_provider.dart';
 import '../../printing/fila_impressao.dart';
 import '../../printing/printer_providers.dart';
 import '../../printing/recibo.dart';
 
-/// Pagamento (mock na F3/F4; a F6 troca pelo POST real + TEF).
+/// Pagamento (F7: consome o `PaymentProvider` — fake na bancada; integradoras
+/// reais entram sem tocar nesta tela).
 /// PORTÃO 2 (F4): checagem SÍNCRONA da impressora ao entrar E imediatamente
 /// antes de cobrar — NUNCA cobrar sem poder concluir. Se o papel acabar na
 /// janela residual pós-pagamento, o pedido não se perde: senha na tela +
 /// fila de reimpressão.
 class PagamentoScreen extends ConsumerStatefulWidget {
-  const PagamentoScreen(
-      {super.key, this.processamento = const Duration(milliseconds: 900)});
-  final Duration processamento;
+  const PagamentoScreen({super.key});
   @override
   ConsumerState<PagamentoScreen> createState() => _PagamentoScreenState();
 }
@@ -29,6 +30,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   bool _processando = false;
   bool _bloqueado = false;
   String _motivo = '';
+  String? _erroPagamento;
 
   @override
   void initState() {
@@ -58,8 +60,6 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       });
       return;
     }
-    setState(() => _processando = true);
-    await Future<void>.delayed(widget.processamento); // simula a integradora
 
     final checkout = ref.read(checkoutProvider);
     final pedido = PedidoLocal(
@@ -69,6 +69,39 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       cliente: checkout.cliente,
       consumo: checkout.consumo,
     );
+    setState(() {
+      _processando = true;
+      _erroPagamento = null;
+    });
+
+    // Cobrança pelo PaymentProvider (fake na F7). O orderId = uuid do pedido é a
+    // chave de idempotência. Só segue (persiste/imprime) se APROVADO.
+    final provider = ref.read(paymentProviderProvider);
+    PaymentResult res;
+    try {
+      res = await provider.start(PaymentRequest(
+        orderId: pedido.uuid,
+        amountCents: cart.totalCentavos,
+        method: metodoDePagamento(forma),
+        cpfCnpj: checkout.cpf,
+      ));
+    } on PaymentException {
+      if (!mounted) return;
+      setState(() {
+        _processando = false;
+        _erroPagamento = 'Falha na comunicação com a maquininha. Tente de novo.';
+      });
+      return;
+    }
+    if (res.status != PaymentStatus.approved) {
+      if (!mounted) return;
+      setState(() {
+        _processando = false;
+        _erroPagamento = res.message ?? 'Pagamento não aprovado. Tente outra forma.';
+      });
+      return;
+    }
+
     final repo = await ref.read(orderRepositoryProvider.future);
     final senha = await repo.salvarPedido(pedido);
 
@@ -168,6 +201,14 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                 Text('Total ${formatCentavos(cart.totalCentavos)}',
                     style:
                         t.headlineMedium?.copyWith(color: GogemColors.cheese)),
+                if (_erroPagamento != null)
+                  Padding(
+                    key: const ValueKey('pagamento-erro'),
+                    padding: const EdgeInsets.fromLTRB(40, 16, 40, 0),
+                    child: Text('$_erroPagamento',
+                        textAlign: TextAlign.center,
+                        style: t.bodyLarge?.copyWith(color: GogemColors.heat)),
+                  ),
                 const SizedBox(height: 32),
                 Expanded(
                   child: ListView(

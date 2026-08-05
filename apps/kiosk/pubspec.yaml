@@ -20,6 +20,8 @@ dependencies:
   crypto: ^3.0.3
   gogem_escpos:
     path: ../../packages/escpos
+  gogem_payment:
+    path: ../../packages/payment
 
 dev_dependencies:
   flutter_test:
