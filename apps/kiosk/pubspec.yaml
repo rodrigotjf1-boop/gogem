@@ -18,6 +18,7 @@ dependencies:
   cached_network_image: ^3.4.1
   package_info_plus: ^8.0.0
   crypto: ^3.0.3
+  qr_flutter: ^4.1.0
   gogem_escpos:
     path: ../../packages/escpos
   gogem_payment:

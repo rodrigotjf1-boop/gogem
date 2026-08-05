@@ -78,7 +78,9 @@ class PaymentResult {
 }
 
 /// Eventos emitidos durante a transação (a UI do totem mostra a mensagem grande).
-sealed class PaymentEvent {
+/// Abstrato (não sealed) para que providers em `src/<provider>/` definam eventos
+/// próprios — ex.: o PIX emite o desafio do QR (PixChallenge).
+abstract class PaymentEvent {
   const PaymentEvent();
 }
 

@@ -14,6 +14,7 @@ import 'package:gogem_kiosk/domain/order/order_repository.dart'
 import 'package:gogem_kiosk/domain/payment/payment_provider.dart';
 import 'package:gogem_payment/payment.dart';
 import 'package:http/testing.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'fakes.dart';
 import 'fixtures.dart';
 
@@ -63,7 +64,9 @@ void main() {
     await bombear(tester);
     expect(find.text('PAGAMENTO'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('forma-pix')));
+    // Crédito passa pelo provider fake (aprovado). PIX tem fluxo próprio (teste
+    // dedicado abaixo).
+    await tester.tap(find.byKey(const ValueKey('forma-credito')));
     await tester.pump(const Duration(milliseconds: 200)); // spinner
     await tester.pump(const Duration(seconds: 1)); // processamento mock
     await bombear(tester);
@@ -214,6 +217,62 @@ void main() {
       expect(await repo.pendentes(), 0);
     });
   }
+
+  // F8: ao escolher PIX, a tela mostra o QR (copia-e-cola + copiar + cancelar).
+  // A lógica de aprovação/expiração/cancelamento/timeout do polling é coberta
+  // pelos testes unitários do PixProvider (packages/payment).
+  testWidgets('PIX: a tela mostra o QR e o copia-e-cola', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400); // totem retrato
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = FakeOrderRepository();
+    final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        menuProvider.overrideWith((ref) async => snap),
+        orderRepositoryProvider.overrideWith((ref) => repo),
+        gogemApiProvider.overrideWithValue(GogemApi(
+            baseUrl: 'http://t/api/v1',
+            bearer: 'jwt',
+            client: MockClient((_) async => throw Exception('offline')))),
+        // Fica pendente → a tela permanece no QR (cancelamos no fim).
+        pixProviderProvider.overrideWithValue(PixProvider(
+            _FakePixGateway(const ['pending', 'pending', 'pending', 'pending']),
+            pollInterval: const Duration(milliseconds: 400))),
+      ],
+      child: const GogemKioskApp(iniciarSync: false),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+    container.read(cartProvider.notifier).adicionar(
+        ItemCarrinho(produto: snap.produtos[1], selecoes: const {}));
+
+    go(tester, '/identificacao');
+    await bombear(tester);
+    await tester.tap(find.byKey(const ValueKey('pular')));
+    await bombear(tester);
+    expect(find.text('PAGAMENTO'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('forma-pix')));
+    await tester.pump(const Duration(milliseconds: 100)); // cria + emite o QR
+
+    expect(find.text('PAGUE COM PIX'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byKey(const ValueKey('pix-copia-cola')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pix-copiar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pix-cancelar')), findsOneWidget);
+    // Nada de pedido enquanto o PIX não aprova.
+    expect(await repo.pendentes(), 0);
+
+    // Encerra o polling para não deixar timer pendente no teardown.
+    container.read(pixProviderProvider).cancelar();
+    await tester.pump(const Duration(seconds: 1));
+    await bombear(tester);
+  });
 }
 
 /// Navega pelo GoRouter usando o contexto de um Scaffold da rota corrente
@@ -226,5 +285,27 @@ void go(WidgetTester t, String path) {
 Future<void> bombear(WidgetTester t) async {
   for (var i = 0; i < 8; i++) {
     await t.pump(const Duration(milliseconds: 100));
+  }
+}
+
+/// Gateway PIX fake para os testes de widget: QR fixo; `status` percorre a
+/// sequência de estados informada.
+class _FakePixGateway implements PixGateway {
+  _FakePixGateway(this._statuses);
+  final List<String> _statuses;
+  int _i = 0;
+
+  @override
+  Future<PixCharge> criar(PaymentRequest req) async => PixCharge(
+        id: 'chg-test',
+        status: 'pending',
+        amountCents: req.amountCents,
+        copiaECola: '00020126BR.GOV.BCB.PIX.TEST6304ABCD',
+      );
+
+  @override
+  Future<PixCharge> status(String chargeId) async {
+    final s = _i < _statuses.length ? _statuses[_i++] : 'pending';
+    return PixCharge(id: chargeId, status: s, amountCents: 100);
   }
 }

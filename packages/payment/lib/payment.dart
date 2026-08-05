@@ -9,3 +9,6 @@ export 'src/models.dart';
 export 'src/errors.dart';
 export 'src/provider.dart';
 export 'src/fake/fake_provider.dart';
+export 'src/pix/pix_models.dart';
+export 'src/pix/pix_gateway.dart';
+export 'src/pix/pix_provider.dart';

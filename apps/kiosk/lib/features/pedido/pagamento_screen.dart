@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gogem_payment/payment.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../domain/order/cart.dart';
@@ -31,6 +33,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   bool _bloqueado = false;
   String _motivo = '';
   String? _erroPagamento;
+  PixChallenge? _pixDesafio;
 
   @override
   void initState() {
@@ -72,10 +75,17 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     setState(() {
       _processando = true;
       _erroPagamento = null;
+      _pixDesafio = null;
     });
 
-    // Cobrança pelo PaymentProvider (fake na F7). O orderId = uuid do pedido é a
-    // chave de idempotência. Só segue (persiste/imprime) se APROVADO.
+    // PIX tem fluxo próprio (QR + polling); os demais vão pelo provider genérico.
+    if (forma == FormaPagamento.pix) {
+      await _pagarPix(pedido, cart.totalCentavos, checkout.cpf);
+      return;
+    }
+
+    // Cartão/voucher: PaymentProvider (fake na F7; TEF na F9). O orderId = uuid do
+    // pedido é a chave de idempotência. Só segue (persiste/imprime) se APROVADO.
     final provider = ref.read(paymentProviderProvider);
     PaymentResult res;
     try {
@@ -86,26 +96,60 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         cpfCnpj: checkout.cpf,
       ));
     } on PaymentException {
-      if (!mounted) return;
-      setState(() {
-        _processando = false;
-        _erroPagamento = 'Falha na comunicação com a maquininha. Tente de novo.';
-      });
+      _falhaPagamento('Falha na comunicação com a maquininha. Tente de novo.');
       return;
     }
     if (res.status != PaymentStatus.approved) {
-      if (!mounted) return;
-      setState(() {
-        _processando = false;
-        _erroPagamento = res.message ?? 'Pagamento não aprovado. Tente outra forma.';
-      });
+      _falhaPagamento(res.message ?? 'Pagamento não aprovado. Tente outra forma.');
       return;
     }
+    await _finalizar(pedido);
+  }
 
+  /// PIX (F8): cria a cobrança, mostra o QR (PixChallenge) e faz polling até
+  /// aprovar/expirar/cancelar. Só finaliza se aprovado.
+  Future<void> _pagarPix(
+      PedidoLocal pedido, int totalCentavos, String? cpf) async {
+    final pix = ref.read(pixProviderProvider);
+    final sub = pix.events.listen((e) {
+      if (e is PixChallenge && mounted) setState(() => _pixDesafio = e);
+    });
+    PaymentResult res;
+    try {
+      res = await pix.start(PaymentRequest(
+        orderId: pedido.uuid,
+        amountCents: totalCentavos,
+        method: PaymentMethod.pix,
+        cpfCnpj: cpf,
+      ));
+    } on PaymentException {
+      await sub.cancel();
+      _falhaPagamento('Não foi possível gerar o PIX. Tente de novo.');
+      return;
+    }
+    await sub.cancel();
+    if (res.status != PaymentStatus.approved) {
+      _falhaPagamento(res.message ?? 'PIX não concluído.');
+      return;
+    }
+    await _finalizar(pedido);
+  }
+
+  void _falhaPagamento(String msg) {
+    if (!mounted) return;
+    setState(() {
+      _processando = false;
+      _pixDesafio = null;
+      _erroPagamento = msg;
+    });
+  }
+
+  /// Pós-aprovação (comum a todas as formas): persiste, imprime (com fila de
+  /// reimpressão na janela residual), dispara o envio ao Regem e confirma.
+  Future<void> _finalizar(PedidoLocal pedido) async {
     final repo = await ref.read(orderRepositoryProvider.future);
     final senha = await repo.salvarPedido(pedido);
 
-    // impressão pós-pagamento (janela residual coberta)
     var impresso = true;
     final cupom = montarCupom(pedido, senha);
     try {
@@ -121,13 +165,81 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       } catch (_) {}
     }
 
-    // dispara o envio ao backend em segundo plano (F6) — não bloqueia a UX
     unawaited(ref.read(vendaSyncProvider.notifier).drenar());
     ref.read(cartProvider.notifier).limpar();
     ref.read(checkoutProvider.notifier).limpar();
     if (mounted) {
       context.go('/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}');
     }
+  }
+
+  /// Tela do PIX (F8): QR gerado do copia-e-cola, botão copiar, "aguardando" e
+  /// cancelar (encerra o polling). Aparece durante o processamento do PIX.
+  Widget _pixView(TextTheme t, int totalCentavos) {
+    final d = _pixDesafio!;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      child: Column(children: [
+        Text('PAGUE COM PIX', style: t.headlineMedium),
+        const SizedBox(height: 8),
+        Text('Total ${formatCentavos(totalCentavos)}',
+            style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          child: QrImageView(
+              data: d.copiaECola, size: 260, backgroundColor: Colors.white),
+        ),
+        const SizedBox(height: 16),
+        Text('Abra o app do banco, escaneie o QR ou copie o código',
+            style: t.bodyMedium, textAlign: TextAlign.center),
+        const SizedBox(height: 12),
+        Container(
+          key: const ValueKey('pix-copia-cola'),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+              color: GogemColors.panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: GogemColors.line)),
+          child: Text(d.copiaECola,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                  color: GogemColors.ink)),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          key: const ValueKey('pix-copiar'),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: d.copiaECola));
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Código PIX copiado')));
+            }
+          },
+          icon: const Icon(Icons.copy),
+          label: const Text('COPIAR CÓDIGO'),
+        ),
+        const SizedBox(height: 24),
+        const CircularProgressIndicator(color: GogemColors.cheese),
+        const SizedBox(height: 12),
+        Text('Aguardando pagamento…', style: t.bodyLarge),
+        const SizedBox(height: 20),
+        OutlinedButton(
+          key: const ValueKey('pix-cancelar'),
+          style: OutlinedButton.styleFrom(
+              minimumSize: const Size(220, 64),
+              side: const BorderSide(color: GogemColors.line),
+              foregroundColor: GogemColors.ink),
+          onPressed: () => ref.read(pixProviderProvider).cancelar(),
+          child: const Text('CANCELAR PAGAMENTO'),
+        ),
+      ]),
+    );
   }
 
   @override
@@ -178,12 +290,14 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     return Scaffold(
       body: SafeArea(
         child: _processando
-            ? Center(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                const CircularProgressIndicator(color: GogemColors.cheese),
-                const SizedBox(height: 24),
-                Text('PROCESSANDO PAGAMENTO…', style: t.titleLarge),
-              ]))
+            ? (_pixDesafio != null
+                ? _pixView(t, cart.totalCentavos)
+                : Center(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const CircularProgressIndicator(color: GogemColors.cheese),
+                    const SizedBox(height: 24),
+                    Text('PROCESSANDO PAGAMENTO…', style: t.titleLarge),
+                  ])))
             : Column(children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
