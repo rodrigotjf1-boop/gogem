@@ -79,13 +79,7 @@ export class MercadoPagoPspGateway implements PspGateway {
     body: unknown,
     query: Record<string, unknown>,
   ): { pspRef: string } | null {
-    const b = (body ?? {}) as any;
-    // Formato novo (body) ou legado (query string ?type=payment&data.id=).
-    const tipo = b.type ?? b.topic ?? query['type'] ?? query['topic'];
-    if (tipo && String(tipo) !== 'payment') return null;
-    const id = b?.data?.id ?? query['data.id'] ?? query['id'] ?? b?.resource;
-    if (!id) return null;
-    return { pspRef: String(id) };
+    return parseMercadoPagoWebhook(body, query);
   }
 
   _mapStatus(status: string, detail: string): PixStatus {
@@ -104,4 +98,22 @@ export class MercadoPagoPspGateway implements PspGateway {
         return 'pending';
     }
   }
+}
+
+/**
+ * Extrai do webhook do Mercado Pago o id do pagamento a re-consultar. Não usa
+ * credencial (só lê o corpo/query), então o handler acha a cobrança pelo pspRef
+ * ANTES de resolver o gateway do tenant. Formato novo `{type:'payment',
+ * data:{id}}` ou legado `?type=payment&data.id=`.
+ */
+export function parseMercadoPagoWebhook(
+  body: unknown,
+  query: Record<string, unknown>,
+): { pspRef: string } | null {
+  const b = (body ?? {}) as any;
+  const tipo = b.type ?? b.topic ?? query['type'] ?? query['topic'];
+  if (tipo && String(tipo) !== 'payment') return null;
+  const id = b?.data?.id ?? query['data.id'] ?? query['id'] ?? b?.resource;
+  if (!id) return null;
+  return { pspRef: String(id) };
 }

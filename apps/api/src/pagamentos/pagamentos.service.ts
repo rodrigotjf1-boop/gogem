@@ -1,9 +1,11 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CriarPixDto } from './dto/criar-pix.dto';
-import { PSP_GATEWAY, PspGateway } from './psp/psp-gateway';
+import { PspGateway } from './psp/psp-gateway';
+import { PspResolver } from './psp/psp-resolver';
+import { parseMercadoPagoWebhook } from './psp/mercadopago-psp.gateway';
 
 /** Cobrança PIX como o totem enxerga (nunca expõe credencial/pspRef). */
 export interface PixChargeView {
@@ -25,7 +27,7 @@ export interface PixChargeView {
 export class PagamentosService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(PSP_GATEWAY) private readonly psp: PspGateway,
+    private readonly pspResolver: PspResolver,
   ) {}
 
   /** Cria (ou reaproveita) a cobrança do pedido. Idempotente por orderId. */
@@ -44,7 +46,8 @@ export class PagamentosService {
       }
     }
 
-    const criado = await this.psp.criarPix({
+    const psp = await this.pspResolver.resolver();
+    const criado = await psp.criarPix({
       amountCents: dto.amountCents,
       orderId: dto.orderId,
       descricao: dto.descricao,
@@ -57,7 +60,7 @@ export class PagamentosService {
         data: {
           amountCents: dto.amountCents,
           status: 'pending',
-          psp: this.psp.nome,
+          psp: psp.nome,
           pspRef: criado.pspRef,
           copiaECola: criado.copiaECola,
           qrImage: criado.qrImage,
@@ -71,7 +74,7 @@ export class PagamentosService {
       orderId: dto.orderId,
       amountCents: dto.amountCents,
       status: 'pending',
-      psp: this.psp.nome,
+      psp: psp.nome,
       pspRef: criado.pspRef,
       copiaECola: criado.copiaECola,
       qrImage: criado.qrImage,
@@ -87,21 +90,30 @@ export class PagamentosService {
   async statusPix(id: string): Promise<PixChargeView> {
     const charge = await this.prisma.pixCharge.findFirst({ where: { id } });
     if (!charge) throw new NotFoundException('Cobrança PIX não encontrada.');
-    return this._view(await this._reconciliar(charge));
+    const psp = await this.pspResolver.resolver();
+    return this._view(await this._reconciliar(charge, psp));
   }
 
-  /** Webhook do PSP: casa por pspRef (cross-tenant) e re-consulta o status. */
+  /**
+   * Webhook do PSP: casa por pspRef (cross-tenant, runAsSystem) e re-consulta o
+   * status DENTRO do contexto do tenant da cobrança (para usar as credenciais
+   * dele). Nunca confia no corpo — só extrai a referência.
+   */
   async webhook(
     body: unknown,
     query: Record<string, unknown>,
   ): Promise<{ ok: true }> {
-    const parsed = this.psp.parseWebhook(body, query);
+    const parsed = parseMercadoPagoWebhook(body, query);
     if (parsed) {
       await TenantContext.runAsSystem(async () => {
         const charge = await this.prisma.pixCharge.findFirst({
           where: { pspRef: parsed.pspRef },
         });
-        if (charge) await this._reconciliar(charge);
+        if (!charge) return;
+        await TenantContext.run({ tenantId: charge.tenantId }, async () => {
+          const psp = await this.pspResolver.resolver();
+          await this._reconciliar(charge, psp);
+        });
       });
     }
     return { ok: true };
@@ -109,6 +121,7 @@ export class PagamentosService {
 
   private async _reconciliar(
     charge: Prisma.PixChargeGetPayload<object>,
+    psp: PspGateway,
   ): Promise<Prisma.PixChargeGetPayload<object>> {
     if (charge.status !== 'pending') return charge;
     if (charge.expiresAt && charge.expiresAt < new Date()) {
@@ -118,7 +131,7 @@ export class PagamentosService {
       });
     }
     if (!charge.pspRef) return charge;
-    const st = await this.psp.consultar(charge.pspRef);
+    const st = await psp.consultar(charge.pspRef);
     if (st !== charge.status) {
       return this.prisma.pixCharge.update({
         where: { id: charge.id },
