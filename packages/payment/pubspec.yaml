@@ -1,0 +1,11 @@
+name: gogem_payment
+description: "Contrato de pagamento do GoGeM (PaymentProvider) + provider fake. Integradoras (PIX/Elgin/Destaxa/PayGo/SiTef) entram como src/<provider>/ sem mexer na UI."
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.2
+  lints: ^4.0.0

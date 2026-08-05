@@ -11,6 +11,8 @@ import 'package:gogem_kiosk/domain/order/cart.dart';
 import 'package:gogem_kiosk/domain/order/order_models.dart';
 import 'package:gogem_kiosk/domain/order/order_repository.dart'
     show orderRepositoryProvider;
+import 'package:gogem_kiosk/domain/payment/payment_provider.dart';
+import 'package:gogem_payment/payment.dart';
 import 'package:http/testing.dart';
 import 'fakes.dart';
 import 'fixtures.dart';
@@ -164,6 +166,54 @@ void main() {
     await tester.pump(const Duration(seconds: 9));
     await bombear(tester);
   });
+
+  // F7: a tela consome o PaymentProvider. Desfecho != aprovado NÃO fecha o
+  // pedido — mostra o erro, preserva o carrinho, deixa tentar outra forma.
+  for (final caso in [
+    (nome: 'negado', outcome: FakeOutcome.denied),
+    (nome: 'erro de comunicação', outcome: FakeOutcome.communicationError),
+  ]) {
+    testWidgets('pagamento ${caso.nome}: erro na tela, sem confirmar',
+        (tester) async {
+      final repo = FakeOrderRepository();
+      final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          menuProvider.overrideWith((ref) async => snap),
+          orderRepositoryProvider.overrideWith((ref) => repo),
+          gogemApiProvider.overrideWithValue(GogemApi(
+              baseUrl: 'http://t/api/v1',
+              bearer: 'jwt',
+              client: MockClient((_) async => throw Exception('offline')))),
+          paymentProviderProvider.overrideWithValue(
+              FakePaymentProvider(outcome: caso.outcome, delay: Duration.zero)),
+        ],
+        child: const GogemKioskApp(iniciarSync: false),
+      ));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+      container.read(cartProvider.notifier).adicionar(
+          ItemCarrinho(produto: snap.produtos[1], selecoes: const {}));
+
+      go(tester, '/identificacao');
+      await bombear(tester);
+      await tester.tap(find.byKey(const ValueKey('pular')));
+      await bombear(tester);
+      expect(find.text('PAGAMENTO'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('forma-credito')));
+      await bombear(tester);
+
+      // Erro visível, sem confirmação, carrinho intacto, nada persistido.
+      expect(find.byKey(const ValueKey('pagamento-erro')), findsOneWidget);
+      expect(find.text('PEDIDO CONFIRMADO!'), findsNothing);
+      expect(container.read(cartProvider).vazio, isFalse);
+      expect(await repo.pendentes(), 0);
+    });
+  }
 }
 
 /// Navega pelo GoRouter usando o contexto de um Scaffold da rota corrente
