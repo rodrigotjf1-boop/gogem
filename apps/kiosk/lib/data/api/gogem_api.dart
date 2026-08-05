@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:gogem_payment/payment.dart' show PixCharge;
 import '../catalog/catalog_models.dart';
 
 sealed class PublicadoResult {}
@@ -148,6 +149,56 @@ class GogemApi {
     final b = jsonDecode(body);
     if (b is! Map || b['versionCode'] == null) return null;
     return KioskRelease.fromJson(b.cast<String, dynamic>());
+  }
+
+  /// POST /pagamentos/pix — cria a cobrança e devolve o QR (F8). Idempotente
+  /// por orderId (uuid do pedido).
+  Future<PixCharge> criarPix({
+    required int amountCents,
+    required String orderId,
+    String? cpfCnpj,
+    String? descricao,
+  }) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/pix');
+    final res = await _client
+        .post(uri,
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'amountCents': amountCents,
+              'orderId': orderId,
+              if (cpfCnpj != null) 'cpfCnpj': cpfCnpj,
+              if (descricao != null) 'descricao': descricao,
+            }))
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    return _pixDe(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// GET /pagamentos/pix/:id — status atual da cobrança (polling).
+  Future<PixCharge> pixStatus(String id) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/pix/$id');
+    final res = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    return _pixDe(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  PixCharge _pixDe(dynamic b) {
+    final m = (b as Map).cast<String, dynamic>();
+    final exp = m['expiresAt'];
+    return PixCharge(
+      id: '${m['id']}',
+      status: '${m['status']}',
+      amountCents: (m['amountCents'] as num?)?.toInt() ?? 0,
+      copiaECola: m['copiaECola'] as String?,
+      qrImage: m['qrImage'] as String?,
+      expiresAt: exp is String ? DateTime.tryParse(exp) : null,
+    );
   }
 }
 
