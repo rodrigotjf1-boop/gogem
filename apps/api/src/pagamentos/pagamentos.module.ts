@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PagamentosController } from './pagamentos.controller';
 import { PagamentosService } from './pagamentos.service';
+import { PointController } from './point.controller';
+import { PointService } from './point.service';
 import { PspResolver } from './psp/psp-resolver';
 
 /**
@@ -10,7 +12,7 @@ import { PspResolver } from './psp/psp-resolver';
  * e, na ausência de tudo, no sandbox (QR de teste que aprova sozinho).
  */
 @Module({
-  controllers: [PagamentosController],
-  providers: [PagamentosService, PspResolver],
+  controllers: [PagamentosController, PointController],
+  providers: [PagamentosService, PointService, PspResolver],
 })
 export class PagamentosModule {}

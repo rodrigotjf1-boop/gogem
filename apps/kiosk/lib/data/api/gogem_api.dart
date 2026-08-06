@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:gogem_payment/payment.dart' show PixCharge;
+import 'package:gogem_payment/payment.dart' show PixCharge, PointCharge;
 import '../catalog/catalog_models.dart';
 
 sealed class PublicadoResult {}
@@ -198,6 +198,58 @@ class GogemApi {
       copiaECola: m['copiaECola'] as String?,
       qrImage: m['qrImage'] as String?,
       expiresAt: exp is String ? DateTime.tryParse(exp) : null,
+    );
+  }
+
+  /// POST /pagamentos/point — cria a cobrança de cartão na maquininha Point.
+  Future<PointCharge> criarPoint({
+    required int amountCents,
+    required String orderId,
+    String? tipo,
+  }) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/point');
+    final res = await _client
+        .post(uri,
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'amountCents': amountCents,
+              'orderId': orderId,
+              if (tipo != null) 'tipo': tipo,
+            }))
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode != 200 && res.statusCode != 201) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    return _pointDe(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// GET /pagamentos/point/:id — status da cobrança (polling).
+  Future<PointCharge> pointStatus(String id) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/point/$id');
+    final res = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    return _pointDe(jsonDecode(utf8.decode(res.bodyBytes)));
+  }
+
+  /// POST /pagamentos/point/:id/cancelar — cancela a cobrança (a maquininha para).
+  Future<void> pointCancelar(String id) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/point/$id/cancelar');
+    await _client
+        .post(uri, headers: {..._headers, 'Content-Type': 'application/json'})
+        .timeout(const Duration(seconds: 12));
+  }
+
+  PointCharge _pointDe(dynamic b) {
+    final m = (b as Map).cast<String, dynamic>();
+    return PointCharge(
+      id: '${m['id']}',
+      status: '${m['status']}',
+      amountCents: (m['amountCents'] as num?)?.toInt() ?? 0,
+      tipo: m['tipo'] as String?,
     );
   }
 }

@@ -15,6 +15,8 @@ export interface ConectorCampo {
   ajuda?: string;
   /** true = validação de URL no front. */
   url?: boolean;
+  /** Opcional: não conta para "configurado"/ativação (ex.: device do Point). */
+  opcional?: boolean;
 }
 
 /** Metadados de um conector. */
@@ -71,6 +73,15 @@ export const CONECTORES: Record<string, Conector> = {
         ajuda:
           'Mercado Pago → Suas integrações → Credenciais. Produção começa com ' +
           'APP_USR-…; teste com TEST-….',
+      },
+      {
+        key: 'deviceId',
+        label: 'ID da maquininha Point (modo PDV)',
+        secret: false,
+        opcional: true,
+        ajuda:
+          'Só para cobrar CARTÃO na Point Smart. ID do dispositivo pareado na ' +
+          'conta (ex.: PAX_A910__SMARTPOS…). Vazio = só PIX por QR.',
       },
     ],
   },

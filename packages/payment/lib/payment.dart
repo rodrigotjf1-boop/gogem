@@ -14,3 +14,6 @@ export 'src/pix/pix_gateway.dart';
 export 'src/pix/pix_provider.dart';
 export 'src/elgin/elgin_transport.dart';
 export 'src/elgin/elgin_provider.dart';
+export 'src/point/point_models.dart';
+export 'src/point/point_gateway.dart';
+export 'src/point/point_provider.dart';
