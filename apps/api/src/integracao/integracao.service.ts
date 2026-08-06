@@ -21,6 +21,7 @@ export interface IntegracaoCampoView {
   secret: boolean;
   url?: boolean;
   ajuda?: string;
+  opcional?: boolean;
   /** Há valor guardado para este campo? */
   preenchido: boolean;
   /** Valor exibível: o valor real (não-segredo) ou máscara/'' (segredo). */
@@ -89,9 +90,9 @@ export class IntegracaoService {
     const atual = (existente?.config ?? {}) as Record<string, string>;
     const config = this.mesclarConfig(conector, atual, dto.config ?? {});
 
-    const configurado = conector.campos.every((f) =>
-      (config[f.key] ?? '').trim() ? true : false,
-    );
+    const configurado = conector.campos
+      .filter((f) => !f.opcional)
+      .every((f) => (config[f.key] ?? '').trim().length > 0);
     const ativo = dto.ativo ?? existente?.ativo ?? false;
     if (ativo && !configurado) {
       throw new BadRequestException(
@@ -295,6 +296,7 @@ export class IntegracaoService {
         secret: f.secret,
         url: f.url,
         ajuda: f.ajuda,
+        opcional: f.opcional,
         preenchido,
         valor: f.secret ? (preenchido ? SECRET_MASK : '') : bruto,
       };
@@ -306,7 +308,7 @@ export class IntegracaoService {
       disponivel: conector.disponivel,
       importaCatalogo: conector.importaCatalogo,
       ativo: row?.ativo ?? false,
-      configurado: campos.every((c) => c.preenchido),
+      configurado: campos.filter((c) => !c.opcional).every((c) => c.preenchido),
       campos,
       nomePersonalizado: row?.nome ?? null,
       ultimoTeste: row?.ultimoTeste ?? null,

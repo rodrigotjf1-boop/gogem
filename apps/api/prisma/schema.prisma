@@ -53,6 +53,7 @@ model Tenant {
   cardapios          Cardapio[]
   aparencia          Aparencia?
   pixCharges         PixCharge[]
+  pointPayments      PointPayment[]
 
   @@map("tenants")
 }
@@ -81,6 +82,32 @@ model PixCharge {
   @@index([tenantId])
   @@index([pspRef])
   @@map("pix_charges")
+}
+
+// Cobrança de CARTÃO na maquininha Point Smart do Mercado Pago (modo PDV). O
+// totem cria uma payment intent (POST /pagamentos/point) para o `deviceId` da
+// loja → a maquininha acende → cliente passa o cartão → volta por webhook +
+// polling (GET /pagamentos/point/:id). Reusa o access token do MP (integração
+// mercadopago). `intentId` = id da payment intent; `paymentId` = pagamento final.
+model PointPayment {
+  id          String   @id @default(uuid())
+  tenantId    String
+  orderId     String // UUID do pedido = idempotência
+  deviceId    String
+  intentId    String?
+  amountCents Int
+  tipo        String   @default("credit") // credit | debit
+  status      String   @default("pending") // pending|approved|cancelled|error
+  paymentId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, orderId])
+  @@index([tenantId])
+  @@index([intentId])
+  @@map("point_payments")
 }
 
 // Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o

@@ -1,0 +1,159 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../tenant/tenant-context';
+import { CriarPointDto } from './dto/criar-point.dto';
+import {
+  MercadoPagoPointGateway,
+  parsePointWebhook,
+} from './psp/mercadopago-point.gateway';
+import { PspResolver } from './psp/psp-resolver';
+
+/** Cobrança Point como o totem enxerga (nunca expõe token/intentId). */
+export interface PointView {
+  id: string;
+  status: string;
+  amountCents: number;
+  tipo: string;
+}
+
+/**
+ * PointService — cartão na maquininha Point Smart (modo PDV). Multi-tenant pelo
+ * middleware do Prisma (o device abre o contexto pelo X-Device-Token). Espelha o
+ * PixService: criar → polling do status → webhook re-consulta no contexto do
+ * tenant da cobrança. Idempotente por orderId.
+ */
+@Injectable()
+export class PointService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pspResolver: PspResolver,
+  ) {}
+
+  async criar(dto: CriarPointDto): Promise<PointView> {
+    const gw = await this.pspResolver.resolverPoint();
+    if (!gw) {
+      throw new BadRequestException(
+        'Point Smart não configurada: salve o device_id na integração Mercado Pago.',
+      );
+    }
+
+    const existente = await this.prisma.pointPayment.findFirst({
+      where: { orderId: dto.orderId },
+    });
+    // Reaproveita: já aprovado, ou pendente (a maquininha já está com a intent).
+    if (
+      existente &&
+      (existente.status === 'approved' || existente.status === 'pending')
+    ) {
+      return this._view(existente);
+    }
+
+    await gw.garantirModoPdv();
+    const tipo = dto.tipo ?? 'credit';
+    const intent = await gw.criarIntent({
+      amountCents: dto.amountCents,
+      orderId: dto.orderId,
+      tipo,
+    });
+
+    if (existente) {
+      const upd = await this.prisma.pointPayment.update({
+        where: { id: existente.id },
+        data: {
+          deviceId: gw.deviceId,
+          intentId: intent.intentId,
+          amountCents: dto.amountCents,
+          tipo,
+          status: 'pending',
+          paymentId: null,
+        },
+      });
+      return this._view(upd);
+    }
+
+    const data = {
+      orderId: dto.orderId,
+      deviceId: gw.deviceId,
+      intentId: intent.intentId,
+      amountCents: dto.amountCents,
+      tipo,
+      status: 'pending',
+    } satisfies Omit<Prisma.PointPaymentUncheckedCreateInput, 'tenantId'>;
+    const criado = await this.prisma.pointPayment.create({
+      data: data as Prisma.PointPaymentUncheckedCreateInput,
+    });
+    return this._view(criado);
+  }
+
+  async status(id: string): Promise<PointView> {
+    const p = await this.prisma.pointPayment.findFirst({ where: { id } });
+    if (!p) throw new NotFoundException('Cobrança Point não encontrada.');
+    const gw = await this.pspResolver.resolverPoint();
+    return this._view(await this._reconciliar(p, gw));
+  }
+
+  async cancelar(id: string): Promise<PointView> {
+    const p = await this.prisma.pointPayment.findFirst({ where: { id } });
+    if (!p) throw new NotFoundException('Cobrança Point não encontrada.');
+    if (p.status === 'pending') {
+      const gw = await this.pspResolver.resolverPoint();
+      if (gw && p.intentId) await gw.cancelar(p.intentId);
+      return this._view(
+        await this.prisma.pointPayment.update({
+          where: { id: p.id },
+          data: { status: 'cancelled' },
+        }),
+      );
+    }
+    return this._view(p);
+  }
+
+  async webhook(
+    body: unknown,
+    query: Record<string, unknown>,
+  ): Promise<{ ok: true }> {
+    const parsed = parsePointWebhook(body, query);
+    if (parsed) {
+      await TenantContext.runAsSystem(async () => {
+        const p = await this.prisma.pointPayment.findFirst({
+          where: { intentId: parsed.intentId },
+        });
+        if (!p) return;
+        await TenantContext.run({ tenantId: p.tenantId }, async () => {
+          const gw = await this.pspResolver.resolverPoint();
+          await this._reconciliar(p, gw);
+        });
+      });
+    }
+    return { ok: true };
+  }
+
+  private async _reconciliar(
+    p: Prisma.PointPaymentGetPayload<object>,
+    gw: MercadoPagoPointGateway | null,
+  ): Promise<Prisma.PointPaymentGetPayload<object>> {
+    if (p.status !== 'pending' || !gw || !p.intentId) return p;
+    const r = await gw.consultar(p.intentId);
+    if (r.status !== p.status) {
+      return this.prisma.pointPayment.update({
+        where: { id: p.id },
+        data: { status: r.status, paymentId: r.paymentId ?? p.paymentId },
+      });
+    }
+    return p;
+  }
+
+  private _view(p: Prisma.PointPaymentGetPayload<object>): PointView {
+    return {
+      id: p.id,
+      status: p.status,
+      amountCents: p.amountCents,
+      tipo: p.tipo,
+    };
+  }
+}

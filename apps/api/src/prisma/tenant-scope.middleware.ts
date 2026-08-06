@@ -25,6 +25,7 @@ export const TENANT_SCOPED_MODELS = new Set([
   'OpenDeliveryOrder',
   'OpenDeliveryEvent',
   'PixCharge',
+  'PointPayment',
 ]);
 
 /**
