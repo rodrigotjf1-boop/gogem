@@ -34,6 +34,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   String _motivo = '';
   String? _erroPagamento;
   PixChallenge? _pixDesafio;
+  bool _pointAtivo = false;
 
   @override
   void initState() {
@@ -76,11 +77,19 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       _processando = true;
       _erroPagamento = null;
       _pixDesafio = null;
+      _pointAtivo = false;
     });
 
     // PIX tem fluxo próprio (QR + polling); os demais vão pelo provider genérico.
     if (forma == FormaPagamento.pix) {
       await _pagarPix(pedido, cart.totalCentavos, checkout.cpf);
+      return;
+    }
+    // Cartão pela maquininha Point (modo PDV): fluxo "pague na maquininha".
+    final ehCartao = forma == FormaPagamento.credito ||
+        forma == FormaPagamento.debito;
+    if (ehCartao && cartaoViaPoint) {
+      await _pagarPoint(pedido, cart.totalCentavos);
       return;
     }
 
@@ -135,11 +144,39 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     await _finalizar(pedido);
   }
 
+  /// Cartão na maquininha Point (modo PDV): aciona a maquininha, mostra "pague na
+  /// maquininha" e faz polling até aprovar/cancelar/timeout. Só finaliza se OK.
+  Future<void> _pagarPoint(PedidoLocal pedido, int totalCentavos) async {
+    final point = ref.read(pointProviderProvider);
+    final sub = point.events.listen((e) {
+      if (e is PointChallenge && mounted) setState(() => _pointAtivo = true);
+    });
+    PaymentResult res;
+    try {
+      res = await point.start(PaymentRequest(
+        orderId: pedido.uuid,
+        amountCents: totalCentavos,
+        method: metodoDePagamento(pedido.forma),
+      ));
+    } on PaymentException {
+      await sub.cancel();
+      _falhaPagamento('Não foi possível acionar a maquininha. Tente de novo.');
+      return;
+    }
+    await sub.cancel();
+    if (res.status != PaymentStatus.approved) {
+      _falhaPagamento(res.message ?? 'Pagamento não concluído.');
+      return;
+    }
+    await _finalizar(pedido);
+  }
+
   void _falhaPagamento(String msg) {
     if (!mounted) return;
     setState(() {
       _processando = false;
       _pixDesafio = null;
+      _pointAtivo = false;
       _erroPagamento = msg;
     });
   }
@@ -171,6 +208,42 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     if (mounted) {
       context.go('/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}');
     }
+  }
+
+  /// Tela do cartão na Point (modo PDV): "pague na maquininha" + aguardando +
+  /// cancelar (encerra o polling e cancela a intent). Aparece durante o Point.
+  Widget _pointView(TextTheme t, int totalCentavos) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.point_of_sale, color: GogemColors.cheese, size: 88),
+          const SizedBox(height: 20),
+          Text('PAGUE NA MAQUININHA',
+              style: t.headlineMedium, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          Text('Total ${formatCentavos(totalCentavos)}',
+              style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
+          const SizedBox(height: 16),
+          Text('Siga as instruções no visor — aproxime, insira ou passe o cartão',
+              style: t.bodyLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 28),
+          const CircularProgressIndicator(color: GogemColors.cheese),
+          const SizedBox(height: 12),
+          Text('Aguardando o pagamento…', style: t.bodyMedium),
+          const SizedBox(height: 24),
+          OutlinedButton(
+            key: const ValueKey('point-cancelar'),
+            style: OutlinedButton.styleFrom(
+                minimumSize: const Size(220, 64),
+                side: const BorderSide(color: GogemColors.line),
+                foregroundColor: GogemColors.ink),
+            onPressed: () => ref.read(pointProviderProvider).cancelar(),
+            child: const Text('CANCELAR PAGAMENTO'),
+          ),
+        ]),
+      ),
+    );
   }
 
   /// Tela do PIX (F8): QR gerado do copia-e-cola, botão copiar, "aguardando" e
@@ -292,12 +365,16 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         child: _processando
             ? (_pixDesafio != null
                 ? _pixView(t, cart.totalCentavos)
-                : Center(
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    const CircularProgressIndicator(color: GogemColors.cheese),
-                    const SizedBox(height: 24),
-                    Text('PROCESSANDO PAGAMENTO…', style: t.titleLarge),
-                  ])))
+                : _pointAtivo
+                    ? _pointView(t, cart.totalCentavos)
+                    : Center(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                        const CircularProgressIndicator(
+                            color: GogemColors.cheese),
+                        const SizedBox(height: 24),
+                        Text('PROCESSANDO PAGAMENTO…', style: t.titleLarge),
+                      ])))
             : Column(children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),

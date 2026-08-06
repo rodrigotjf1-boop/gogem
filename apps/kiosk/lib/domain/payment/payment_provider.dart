@@ -53,6 +53,33 @@ final pixProviderProvider = Provider<PixProvider>((ref) {
   return p;
 });
 
+/// Liga o PointProvider (pacote) ao backend: cria a cobrança na maquininha Point,
+/// faz o polling e cancela. Credencial (token + device) fica no backend.
+class HttpPointGateway implements PointGateway {
+  HttpPointGateway(this._api);
+  final GogemApi _api;
+
+  @override
+  Future<PointCharge> criar(PaymentRequest req) => _api.criarPoint(
+        amountCents: req.amountCents,
+        orderId: req.orderId,
+        tipo: req.method == PaymentMethod.debito ? 'debit' : 'credit',
+      );
+
+  @override
+  Future<PointCharge> status(String chargeId) => _api.pointStatus(chargeId);
+
+  @override
+  Future<void> cancelar(String chargeId) => _api.pointCancelar(chargeId);
+}
+
+/// PointProvider (cartão na maquininha). A tela usa quando cartão vai pro Point.
+final pointProviderProvider = Provider<PointProvider>((ref) {
+  final p = PointProvider(HttpPointGateway(ref.watch(gogemApiProvider)));
+  ref.onDispose(p.dispose);
+  return p;
+});
+
 /// Provider de pagamento ativo do totem.
 ///
 /// Default: FAKE (bancada/dev) — substitui o pagamento mock da Fatia 3. As
@@ -61,6 +88,11 @@ final pixProviderProvider = Provider<PixProvider>((ref) {
 /// bancada; em produção o provider vem da config do dispositivo (pareamento).
 const String _kProvider =
     String.fromEnvironment('GOGEM_PAYMENT_PROVIDER', defaultValue: 'fake');
+
+/// Cartão (crédito/débito) vai pra maquininha Point Smart (via nuvem)? Ligado por
+/// `--dart-define=GOGEM_PAYMENT_PROVIDER=mppoint`. A tela roteia o cartão pro
+/// fluxo do Point ("pague na maquininha"); o PIX segue no QR do totem.
+const bool cartaoViaPoint = _kProvider == 'mppoint';
 
 final paymentProviderProvider = Provider<PaymentProvider>((ref) {
   switch (_kProvider) {
