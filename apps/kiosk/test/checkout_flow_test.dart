@@ -66,7 +66,7 @@ void main() {
 
     // Crédito passa pelo provider fake (aprovado). PIX tem fluxo próprio (teste
     // dedicado abaixo).
-    await tester.tap(find.byKey(const ValueKey('forma-credito')));
+    await tester.tap(find.byKey(const ValueKey('forma-cartao')));
     await tester.pump(const Duration(milliseconds: 200)); // spinner
     await tester.pump(const Duration(seconds: 1)); // processamento mock
     await bombear(tester);
@@ -126,7 +126,7 @@ void main() {
     expect(find.text('SEUS DADOS'), findsOneWidget);
   });
 
-  testWidgets('F4: nome + vale-refeição vão no pedido', (tester) async {
+  testWidgets('F4: nome + cartão vão no pedido', (tester) async {
     final repo = FakeOrderRepository();
     final snap = MenuSnapshot.fromPublicadoJson(publicadoFixture);
 
@@ -155,8 +155,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('pular')));
     await bombear(tester);
 
-    // Paga com vale-refeição (F4).
-    await tester.tap(find.byKey(const ValueKey('forma-vr')));
+    // Paga com cartão (a forma real é escolhida na maquininha; no build de
+    // teste o provider é o fake e o pedido sai como 'credito').
+    await tester.tap(find.byKey(const ValueKey('forma-cartao')));
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump(const Duration(seconds: 1));
     await bombear(tester);
@@ -164,7 +165,7 @@ void main() {
     final corpo = jsonDecode(repo.pedidos.single['corpo_json'] as String)
         as Map<String, dynamic>;
     expect(corpo['cliente'], 'Ana');
-    expect(corpo['pagamentos'][0]['forma'], 'vr');
+    expect(corpo['pagamentos'][0]['forma'], 'credito');
 
     await tester.pump(const Duration(seconds: 9));
     await bombear(tester);
@@ -207,7 +208,7 @@ void main() {
       await bombear(tester);
       expect(find.text('PAGAMENTO'), findsOneWidget);
 
-      await tester.tap(find.byKey(const ValueKey('forma-credito')));
+      await tester.tap(find.byKey(const ValueKey('forma-cartao')));
       await bombear(tester);
 
       // Erro visível, sem confirmação, carrinho intacto, nada persistido.
