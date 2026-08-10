@@ -121,6 +121,16 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       }
     } on GogemApiException catch (e) {
       _falhasSeguidas++;
+      // 401 com token de dispositivo = revogado/invalidado no servidor. Não
+      // adianta insistir com um token morto: apaga e volta ao pareamento (o
+      // router reage). Sem isto o totem revogado ficava preso no cache.
+      if (e.status == 401 && ref.read(deviceTokenProvider).pareado) {
+        await ref.read(deviceTokenProvider.notifier).desparear();
+        state = state.copyWith(
+            status: SyncStatus.erro,
+            mensagem: 'dispositivo revogado — refazer pareamento');
+        return;
+      }
       state = state.copyWith(status: SyncStatus.erro, mensagem: 'API ${e.status}');
     } catch (_) {
       // Sem rede: segue com o snapshot local (offline-first).
