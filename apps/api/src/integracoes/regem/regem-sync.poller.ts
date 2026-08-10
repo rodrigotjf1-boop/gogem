@@ -62,12 +62,17 @@ export class RegemSyncPoller implements OnModuleInit, OnModuleDestroy {
     if (this.rodando) return; // evita sobreposição de execuções
     this.rodando = true;
     try {
-      const integracoes = await TenantContext.runAsSystem(() =>
-        this.prisma.integracao.findMany({
+      // O `await` DENTRO do runAsSystem mantém o contexto de sistema (ALS) vivo
+      // durante a query + middleware do Prisma. Callback síncrono descartaria o
+      // contexto antes do Prisma rodar → ForbiddenException (e, como o tick é
+      // fire-and-forget, derrubava o processo). Ver DeviceTokenGuard.
+      const integracoes = await TenantContext.runAsSystem(async () => {
+        const rows = await this.prisma.integracao.findMany({
           where: { tipo: 'regem', ativo: true },
           select: { tenantId: true },
-        }),
-      );
+        });
+        return rows;
+      });
       for (const { tenantId } of integracoes) {
         await TenantContext.run({ tenantId }, async () => {
           try {
@@ -84,6 +89,12 @@ export class RegemSyncPoller implements OnModuleInit, OnModuleDestroy {
           }
         });
       }
+    } catch (err) {
+      // Blindagem: o tick é fire-and-forget (setInterval/setTimeout). Uma
+      // exceção aqui viraria unhandled rejection e DERRUBARIA a API inteira.
+      // Nunca deixa vazar — degrada logando.
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Poller Regem→GoGeM falhou (ignorado): ${msg}`);
     } finally {
       this.rodando = false;
     }

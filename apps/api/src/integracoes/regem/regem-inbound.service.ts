@@ -25,8 +25,10 @@ export class RegemInboundService {
     if (!t) throw new UnauthorizedException('X-Sync-Token ausente.');
 
     // Acha a loja pelo token que ela já usa na integração (cross-tenant).
-    const integ = await TenantContext.runAsSystem(() =>
-      this.prisma.integracao.findFirst({
+    // O `await` dentro do runAsSystem mantém o contexto de sistema vivo até o
+    // Prisma rodar (callback síncrono → ForbiddenException). Ver DeviceTokenGuard.
+    const integ = await TenantContext.runAsSystem(async () => {
+      const row = await this.prisma.integracao.findFirst({
         where: {
           tipo: 'regem',
           ativo: true,
@@ -36,8 +38,9 @@ export class RegemInboundService {
           } as Prisma.JsonFilter,
         },
         select: { tenantId: true },
-      }),
-    );
+      });
+      return row;
+    });
     if (!integ) throw new UnauthorizedException('Token inválido.');
 
     return TenantContext.run({ tenantId: integ.tenantId }, async () => {
