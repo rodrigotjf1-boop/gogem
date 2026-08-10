@@ -28,6 +28,7 @@ const DISPOSITIVO_SELECT = {
   ativo: true,
   ultimoHeartbeat: true,
   ultimoStatus: true,
+  pointDeviceId: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DispositivoSelect;
@@ -97,6 +98,19 @@ export class DispositivoService {
   list() {
     return this.prisma.dispositivo.findMany({
       orderBy: [{ createdAt: 'desc' }],
+      select: DISPOSITIVO_SELECT,
+    });
+  }
+
+  /**
+   * Vincula (ou desvincula) a maquininha Point deste totem (modo PDV
+   * multi-terminal). Vazio/nulo = usa o device_id padrão da loja.
+   */
+  async vincularMaquininha(id: string, pointDeviceId: string | null) {
+    await this.getOne(id);
+    return this.prisma.dispositivo.update({
+      where: { id },
+      data: { pointDeviceId: pointDeviceId?.trim() || null },
       select: DISPOSITIVO_SELECT,
     });
   }

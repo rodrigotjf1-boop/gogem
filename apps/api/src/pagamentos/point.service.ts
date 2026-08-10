@@ -8,8 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CriarPointDto } from './dto/criar-point.dto';
 import {
+  listarPointDevices,
   MercadoPagoPointGateway,
   parsePointWebhook,
+  type PointDevice,
 } from './psp/mercadopago-point.gateway';
 import { PspResolver } from './psp/psp-resolver';
 
@@ -34,11 +36,32 @@ export class PointService {
     private readonly pspResolver: PspResolver,
   ) {}
 
-  async criar(dto: CriarPointDto): Promise<PointView> {
-    const gw = await this.pspResolver.resolverPoint();
+  /** Lista as maquininhas Point da conta (admin escolhe o device_id). */
+  async listarDevices(): Promise<PointDevice[]> {
+    const token = await this.pspResolver.tokenMercadoPago();
+    if (!token) {
+      throw new BadRequestException(
+        'Configure o Access Token do Mercado Pago antes de buscar maquininhas.',
+      );
+    }
+    return listarPointDevices(token);
+  }
+
+  async criar(dto: CriarPointDto, totemId?: string): Promise<PointView> {
+    // Multi-terminal: usa a maquininha vinculada AO totem que está cobrando
+    // (fallback = device_id padrão da loja). Assim 4 totens cobram cada um na sua.
+    let maquininha: string | null = null;
+    if (totemId) {
+      const totem = await this.prisma.dispositivo.findFirst({
+        where: { id: totemId },
+        select: { pointDeviceId: true },
+      });
+      maquininha = totem?.pointDeviceId ?? null;
+    }
+    const gw = await this.pspResolver.resolverPoint(maquininha);
     if (!gw) {
       throw new BadRequestException(
-        'Point Smart não configurada: salve o device_id na integração Mercado Pago.',
+        'Point Smart não configurada: vincule a maquininha a este totem (ou defina o device_id padrão da loja).',
       );
     }
 
@@ -93,7 +116,8 @@ export class PointService {
   async status(id: string): Promise<PointView> {
     const p = await this.prisma.pointPayment.findFirst({ where: { id } });
     if (!p) throw new NotFoundException('Cobrança Point não encontrada.');
-    const gw = await this.pspResolver.resolverPoint();
+    // Gateway com a maquininha DA cobrança (não a padrão da loja).
+    const gw = await this.pspResolver.resolverPoint(p.deviceId);
     return this._view(await this._reconciliar(p, gw));
   }
 
@@ -101,7 +125,7 @@ export class PointService {
     const p = await this.prisma.pointPayment.findFirst({ where: { id } });
     if (!p) throw new NotFoundException('Cobrança Point não encontrada.');
     if (p.status === 'pending') {
-      const gw = await this.pspResolver.resolverPoint();
+      const gw = await this.pspResolver.resolverPoint(p.deviceId);
       if (gw && p.intentId) await gw.cancelar(p.intentId);
       return this._view(
         await this.prisma.pointPayment.update({
@@ -125,7 +149,7 @@ export class PointService {
         });
         if (!p) return;
         await TenantContext.run({ tenantId: p.tenantId }, async () => {
-          const gw = await this.pspResolver.resolverPoint();
+          const gw = await this.pspResolver.resolverPoint(p.deviceId);
           await this._reconciliar(p, gw);
         });
       });

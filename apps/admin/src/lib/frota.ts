@@ -33,8 +33,17 @@ export interface Dispositivo {
   ativo: boolean;
   ultimoHeartbeat: string | null;
   ultimoStatus: DispositivoStatus | null;
+  /** Maquininha Point vinculada a este totem (modo PDV). Nulo = padrão da loja. */
+  pointDeviceId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Uma maquininha Point da conta Mercado Pago (para vincular a um totem). */
+export interface PointDevice {
+  id: string;
+  posId?: number;
+  operatingMode?: string;
 }
 
 /** Online = heartbeat recente (< 2 min). */
@@ -98,6 +107,29 @@ export function useReparear() {
     mutationFn: (id: string) =>
       apiPost<CodigoEmitido>(`/dispositivos/${id}/reparear`),
     onSuccess: () => invalidar(qc),
+  });
+}
+
+/** Vincula (ou desvincula com null) a maquininha Point deste totem. */
+export function useVincularMaquininha() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; pointDeviceId: string | null }) =>
+      apiPost<Dispositivo, { pointDeviceId: string | null }>(
+        `/dispositivos/${v.id}/maquininha`,
+        { pointDeviceId: v.pointDeviceId },
+      ),
+    onSuccess: () => invalidar(qc),
+  });
+}
+
+/** Lista as maquininhas Point da conta (sob demanda — usa o token da loja). */
+export function usePointDevices(enabled: boolean) {
+  return useQuery({
+    queryKey: ['point-devices'] as const,
+    queryFn: () => apiGet<PointDevice[]>('/pagamentos/point/devices'),
+    enabled,
+    staleTime: 60_000,
   });
 }
 

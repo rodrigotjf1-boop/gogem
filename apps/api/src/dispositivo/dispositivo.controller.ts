@@ -47,4 +47,16 @@ export class DispositivoController {
   reparear(@Param('id') id: string) {
     return this.dispositivos.reparear(id);
   }
+
+  @Post(':id/maquininha')
+  @ApiOkResponse({
+    description:
+      'Vincula (ou desvincula, com pointDeviceId vazio/nulo) a maquininha Point deste totem.',
+  })
+  vincularMaquininha(
+    @Param('id') id: string,
+    @Body() dto: { pointDeviceId?: string | null },
+  ) {
+    return this.dispositivos.vincularMaquininha(id, dto.pointDeviceId ?? null);
+  }
 }

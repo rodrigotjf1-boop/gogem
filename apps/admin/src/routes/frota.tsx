@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Loader2, Plus, Radio, RotateCcw, Ban } from 'lucide-react';
+import { Loader2, Plus, Radio, RotateCcw, Ban, CreditCard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -13,8 +13,10 @@ import {
   estaOnline,
   useCriarDispositivo,
   useDispositivos,
+  usePointDevices,
   useReparear,
   useRevogar,
+  useVincularMaquininha,
   type CodigoEmitido,
   type Dispositivo,
 } from '@/lib/frota';
@@ -43,7 +45,11 @@ export default function FrotaPage() {
           </p>
         </div>
         {podeEscrever && (
-          <Button variant="primary" size="sm" onClick={() => setNovoAberto(true)}>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setNovoAberto(true)}
+          >
             <Plus aria-hidden />
             Novo totem
           </Button>
@@ -51,7 +57,10 @@ export default function FrotaPage() {
       </header>
 
       {isLoading && (
-        <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground" role="status">
+        <div
+          className="flex items-center gap-2 py-10 text-sm text-muted-foreground"
+          role="status"
+        >
           <Loader2 className="size-4 animate-spin" aria-hidden />
           Carregando totens…
         </div>
@@ -60,7 +69,12 @@ export default function FrotaPage() {
       {isError && (
         <div className="rounded-lg border border-border bg-card p-6 text-sm">
           <p className="text-destructive">Não foi possível carregar.</p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => refetch()}
+          >
             Tentar novamente
           </Button>
         </div>
@@ -76,7 +90,11 @@ export default function FrotaPage() {
             Cadastre o primeiro totem e use o código para parear no aparelho.
           </p>
           {podeEscrever && (
-            <Button variant="primary" size="sm" onClick={() => setNovoAberto(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setNovoAberto(true)}
+            >
               <Plus aria-hidden />
               Novo totem
             </Button>
@@ -94,7 +112,10 @@ export default function FrotaPage() {
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Ao vivo</th>
                 <th className="px-4 py-2 font-medium">Pareamento</th>
-                {podeEscrever && <th className="px-4 py-2 text-right font-medium">Ações</th>}
+                <th className="px-4 py-2 font-medium">Maquininha</th>
+                {podeEscrever && (
+                  <th className="px-4 py-2 text-right font-medium">Ações</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -102,7 +123,9 @@ export default function FrotaPage() {
                 <tr key={d.id} className="hover:bg-secondary/30">
                   <td className="px-4 py-2">
                     <div className="font-medium">{d.nome}</div>
-                    <div className="text-xs text-muted-foreground">{d.tipo}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {d.tipo}
+                    </div>
                   </td>
                   <td className="px-4 py-2">
                     {!d.ativo ? (
@@ -118,7 +141,8 @@ export default function FrotaPage() {
                   </td>
                   <td className="px-4 py-2">
                     {d.ativo && !d.pareado ? (
-                      d.codigoPareamento && !codigoExpirado(d.codigoExpiraEm) ? (
+                      d.codigoPareamento &&
+                      !codigoExpirado(d.codigoExpiraEm) ? (
                         <span className="font-mono text-base font-semibold tracking-widest">
                           {d.codigoPareamento}
                         </span>
@@ -130,6 +154,9 @@ export default function FrotaPage() {
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <MaquininhaCelula d={d} podeEscrever={podeEscrever} />
                   </td>
                   {podeEscrever && (
                     <td className="px-4 py-2">
@@ -155,7 +182,10 @@ export default function FrotaPage() {
                             aria-label={`Revogar ${d.nome}`}
                             onClick={() => setRemovendo(d)}
                           >
-                            <Ban className="size-4 text-destructive" aria-hidden />
+                            <Ban
+                              className="size-4 text-destructive"
+                              aria-hidden
+                            />
                           </Button>
                         )}
                       </div>
@@ -207,7 +237,10 @@ function TelemetriaCelula({ d }: { d: Dispositivo }) {
   if (!estaOnline(d.ultimoHeartbeat)) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="size-2 rounded-full bg-muted-foreground/40" aria-hidden />
+        <span
+          className="size-2 rounded-full bg-muted-foreground/40"
+          aria-hidden
+        />
         Offline
       </span>
     );
@@ -232,6 +265,126 @@ function TelemetriaCelula({ d }: { d: Dispositivo }) {
         </span>
       )}
     </div>
+  );
+}
+
+/** Célula "Maquininha": mostra a Point vinculada ao totem + abre o seletor. */
+function MaquininhaCelula({
+  d,
+  podeEscrever,
+}: {
+  d: Dispositivo;
+  podeEscrever: boolean;
+}) {
+  const [aberto, setAberto] = React.useState(false);
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        {d.pointDeviceId ? (
+          <span className="font-mono text-xs" title={d.pointDeviceId}>
+            …{d.pointDeviceId.slice(-8)}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">padrão da loja</span>
+        )}
+        {podeEscrever && d.ativo && (
+          <Button variant="ghost" size="sm" onClick={() => setAberto(true)}>
+            <CreditCard className="size-4" aria-hidden />
+            {d.pointDeviceId ? 'Trocar' : 'Vincular'}
+          </Button>
+        )}
+      </div>
+      <VincularMaquininhaDialog
+        d={d}
+        aberto={aberto}
+        onFechar={() => setAberto(false)}
+      />
+    </>
+  );
+}
+
+/** Lista as maquininhas Point da conta (Buscar maquininhas) e vincula ao totem. */
+function VincularMaquininhaDialog({
+  d,
+  aberto,
+  onFechar,
+}: {
+  d: Dispositivo;
+  aberto: boolean;
+  onFechar: () => void;
+}) {
+  const devices = usePointDevices(aberto);
+  const vincular = useVincularMaquininha();
+
+  async function escolher(pointDeviceId: string | null) {
+    await vincular.mutateAsync({ id: d.id, pointDeviceId });
+    onFechar();
+  }
+
+  return (
+    <Dialog
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo={`Maquininha de “${d.nome}”`}
+      descricao="Escolha a Point que vai cobrar cartão neste totem."
+      larguraClasse="max-w-md"
+    >
+      {devices.isLoading && (
+        <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" aria-hidden />
+          Buscando maquininhas…
+        </div>
+      )}
+      {devices.isError && (
+        <div className="space-y-2 py-2 text-sm">
+          <p className="text-destructive">
+            Não foi possível listar as maquininhas.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Confirme o Access Token do Mercado Pago na integração e se a Point
+            está online e vinculada a um caixa no painel do MP.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => devices.refetch()}>
+            Tentar de novo
+          </Button>
+        </div>
+      )}
+      {devices.data && (
+        <div className="space-y-2">
+          {devices.data.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Nenhuma maquininha na conta. Ligue a Point na internet e vincule-a
+              a um caixa no painel do Mercado Pago.
+            </p>
+          )}
+          {devices.data.map((dev) => (
+            <button
+              key={dev.id}
+              type="button"
+              onClick={() => escolher(dev.id)}
+              disabled={vincular.isPending}
+              className="flex w-full items-center justify-between rounded-md border border-input px-3 py-2 text-left hover:border-primary hover:bg-secondary/40 disabled:opacity-60"
+            >
+              <span className="font-mono text-xs">{dev.id}</span>
+              {d.pointDeviceId === dev.id && (
+                <Badge variant="success">atual</Badge>
+              )}
+            </button>
+          ))}
+          {d.pointDeviceId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => escolher(null)}
+              disabled={vincular.isPending}
+            >
+              Usar o padrão da loja (desvincular)
+            </Button>
+          )}
+        </div>
+      )}
+    </Dialog>
   );
 }
 
@@ -271,7 +424,12 @@ function NovoTotemDialog({
   }
 
   return (
-    <Dialog aberto={aberto} onFechar={onFechar} titulo="Novo totem" descricao="Dê um nome; geramos o código de pareamento.">
+    <Dialog
+      aberto={aberto}
+      onFechar={onFechar}
+      titulo="Novo totem"
+      descricao="Dê um nome; geramos o código de pareamento."
+    >
       <form className="space-y-4" onSubmit={onSubmit} noValidate>
         <div className="space-y-2">
           <Label htmlFor="totem-nome">Nome do totem</Label>
@@ -286,11 +444,18 @@ function NovoTotemDialog({
           {erro && <p className="text-xs text-destructive">{erro}</p>}
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={onFechar} disabled={criar.isPending}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onFechar}
+            disabled={criar.isPending}
+          >
             Cancelar
           </Button>
           <Button type="submit" variant="primary" disabled={criar.isPending}>
-            {criar.isPending && <Loader2 className="animate-spin" aria-hidden />}
+            {criar.isPending && (
+              <Loader2 className="animate-spin" aria-hidden />
+            )}
             Cadastrar
           </Button>
         </div>
@@ -324,7 +489,12 @@ function CodigoDialog({
             {codigo.codigoPareamento}
           </p>
           <p className="text-xs text-muted-foreground">
-            Expira em {new Date(codigo.codigoExpiraEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.
+            Expira em{' '}
+            {new Date(codigo.codigoExpiraEm).toLocaleTimeString('pt-BR', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+            .
           </p>
           <Button variant="primary" className="w-full" onClick={onFechar}>
             Fechar
