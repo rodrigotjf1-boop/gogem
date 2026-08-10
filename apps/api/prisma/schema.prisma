@@ -481,6 +481,9 @@ model Dispositivo {
   // `ultimoHeartbeat` no admin.
   ultimoHeartbeat  DateTime?
   ultimoStatus     Json?
+  // Maquininha Point vinculada a ESTE totem (modo PDV). Cada totem cobra na sua
+  // própria maquininha; nulo = usa o device_id padrão da loja (integração MP).
+  pointDeviceId    String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

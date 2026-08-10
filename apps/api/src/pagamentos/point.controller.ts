@@ -9,7 +9,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { DeviceCtx } from '../auth/device-ctx.decorator';
 import { DeviceTokenGuard } from '../auth/device-token.guard';
+import type { DeviceUser } from '../auth/device-token.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -37,8 +39,8 @@ export class PointController {
 
   @Post()
   @UseGuards(DeviceTokenGuard)
-  criar(@Body() dto: CriarPointDto) {
-    return this.service.criar(dto);
+  criar(@DeviceCtx() dev: DeviceUser | undefined, @Body() dto: CriarPointDto) {
+    return this.service.criar(dto, dev?.deviceId);
   }
 
   @Get(':id')
