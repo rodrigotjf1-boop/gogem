@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,8 @@ import 'package:gogem_payment/payment.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
+import '../../data/api/gogem_api.dart';
+import '../../data/catalog/catalog_sync.dart' show gogemApiProvider;
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 import '../../domain/order/order_repository.dart';
@@ -216,7 +219,29 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   /// reimpressão na janela residual), dispara o envio ao Regem e confirma.
   Future<void> _finalizar(PedidoLocal pedido) async {
     final repo = await ref.read(orderRepositoryProvider.future);
-    final senha = await repo.salvarPedido(pedido);
+    final senhaLocal = await repo.salvarPedido(pedido);
+
+    // Mostra a senha do REGEM (a que a cozinha/KDS chama), não a local do totem
+    // — senão o cliente sai com um número (001) e a cozinha chama outro (107).
+    // Envia AGORA (o totem está online no pós-pagamento); offline/erro → mantém
+    // a senha local e o agendador reenvia depois. A senha entra no cupom TAMBÉM.
+    var senha = senhaLocal;
+    try {
+      final resp = await ref
+          .read(gogemApiProvider)
+          .enviarVenda(pedido.toJson(senhaLocal: int.tryParse(senhaLocal)));
+      await repo.marcarEnviado(pedido.uuid, jsonEncode(resp));
+      final regemSenha = resp['senha'];
+      if (regemSenha != null) senha = '$regemSenha';
+    } on GogemApiException catch (e) {
+      if (e.status == 409) {
+        await repo.marcarEnviado(pedido.uuid, '{"idempotente":true}');
+      } else {
+        unawaited(ref.read(vendaSyncProvider.notifier).drenar());
+      }
+    } catch (_) {
+      unawaited(ref.read(vendaSyncProvider.notifier).drenar());
+    }
 
     var impresso = true;
     final cupom = montarCupom(pedido, senha);
@@ -233,7 +258,6 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       } catch (_) {}
     }
 
-    unawaited(ref.read(vendaSyncProvider.notifier).drenar());
     ref.read(cartProvider.notifier).limpar();
     ref.read(checkoutProvider.notifier).limpar();
     if (mounted) {
