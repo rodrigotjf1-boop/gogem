@@ -48,6 +48,14 @@ export class MercadoPagoPointGateway {
   }
 
   async criarIntent(input: CriarPointInput): Promise<PointIntentCriado> {
+    // O Point exige payment.type = credit_card | debit_card | voucher_card
+    // (não 'credit'/'debit'). Mapeia do nosso tipo interno.
+    const tipoMp =
+      input.tipo === 'debit'
+        ? 'debit_card'
+        : input.tipo === 'voucher'
+          ? 'voucher_card'
+          : 'credit_card';
     const res = await fetch(
       `${BASE}/point/integration-api/devices/${this.deviceId}/payment-intents`,
       {
@@ -59,7 +67,7 @@ export class MercadoPagoPointGateway {
             external_reference: input.orderId,
             print_on_terminal: true,
           },
-          payment: { type: input.tipo, installments: 1 },
+          payment: { type: tipoMp, installments: 1 },
         }),
       },
     );
