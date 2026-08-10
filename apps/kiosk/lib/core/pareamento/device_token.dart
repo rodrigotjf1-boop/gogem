@@ -55,6 +55,16 @@ class DeviceTokenNotifier extends Notifier<DeviceTokenState> {
     _aplicar(token);
   }
 
+  /// O servidor revogou/invalidou o dispositivo (a chamada volta 401): apaga o
+  /// token local e volta à tela de pareamento (o router reage ao pairingStatus).
+  /// Sem isso, um totem revogado ficava preso no catálogo em cache, sem pedir
+  /// código de novo.
+  Future<void> desparear() async {
+    final db = await ref.read(databaseProvider.future);
+    await db.delete('kv', where: 'chave = ?', whereArgs: [_kvChaveToken]);
+    _aplicar(null);
+  }
+
   void _aplicar(String? token) {
     state = DeviceTokenState(carregando: false, token: token);
     pairingStatus.value =
