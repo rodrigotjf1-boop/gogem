@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gogem_payment/payment.dart';
@@ -35,12 +34,38 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   String? _erroPagamento;
   PixChallenge? _pixDesafio;
   bool _pointAtivo = false;
+  Timer? _pixTimer;
+  int _pixSegundos = 300; // contagem regressiva do PIX (5 min)
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _portao());
   }
+
+  @override
+  void dispose() {
+    _pixTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Contagem regressiva do PIX (5 min) — só visual; o provider tem o mesmo
+  /// timeout e cancela sozinho ao esgotar.
+  void _iniciarContagemPix() {
+    _pixTimer?.cancel();
+    _pixSegundos = 300;
+    _pixTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _pixSegundos = _pixSegundos > 0 ? _pixSegundos - 1 : 0);
+      if (_pixSegundos <= 0) t.cancel();
+    });
+  }
+
+  String _mmss(int s) =>
+      '${(s ~/ 60).toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
 
   Future<void> _portao() async {
     final h = await ref.read(printerHealthProvider.notifier).checarAgora();
@@ -123,7 +148,10 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       PedidoLocal pedido, int totalCentavos, String? cpf) async {
     final pix = ref.read(pixProviderProvider);
     final sub = pix.events.listen((e) {
-      if (e is PixChallenge && mounted) setState(() => _pixDesafio = e);
+      if (e is PixChallenge && mounted) {
+        setState(() => _pixDesafio = e);
+        _iniciarContagemPix();
+      }
     });
     PaymentResult res;
     try {
@@ -174,6 +202,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   }
 
   void _falhaPagamento(String msg) {
+    _pixTimer?.cancel();
     if (!mounted) return;
     setState(() {
       _processando = false;
@@ -268,41 +297,13 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
               data: d.copiaECola, size: 260, backgroundColor: Colors.white),
         ),
         const SizedBox(height: 16),
-        Text('Abra o app do banco, escaneie o QR ou copie o código',
-            style: t.bodyMedium, textAlign: TextAlign.center),
-        const SizedBox(height: 12),
-        Container(
-          key: const ValueKey('pix-copia-cola'),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              color: GogemColors.panel,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: GogemColors.line)),
-          child: Text(d.copiaECola,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 13,
-                  color: GogemColors.ink)),
-        ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          key: const ValueKey('pix-copiar'),
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: d.copiaECola));
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Código PIX copiado')));
-            }
-          },
-          icon: const Icon(Icons.copy),
-          label: const Text('COPIAR CÓDIGO'),
-        ),
-        const SizedBox(height: 24),
+        Text('Abra o app do banco e escaneie o QR',
+            style: t.bodyLarge, textAlign: TextAlign.center),
+        const SizedBox(height: 28),
         const CircularProgressIndicator(color: GogemColors.cheese),
         const SizedBox(height: 12),
-        Text('Aguardando pagamento…', style: t.bodyLarge),
+        Text('Aguardando pagamento · ${_mmss(_pixSegundos)}',
+            key: const ValueKey('pix-contador'), style: t.bodyLarge),
         const SizedBox(height: 20),
         OutlinedButton(
           key: const ValueKey('pix-cancelar'),
