@@ -63,7 +63,11 @@ class HttpPointGateway implements PointGateway {
   Future<PointCharge> criar(PaymentRequest req) => _api.criarPoint(
         amountCents: req.amountCents,
         orderId: req.orderId,
-        tipo: req.method == PaymentMethod.debito ? 'debit' : 'credit',
+        tipo: switch (req.method) {
+          PaymentMethod.debito => 'debit',
+          PaymentMethod.voucher => 'voucher', // vale-refeição → voucher_card
+          _ => 'credit',
+        },
       );
 
   @override

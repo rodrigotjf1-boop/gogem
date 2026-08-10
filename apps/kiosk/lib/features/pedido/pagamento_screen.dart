@@ -85,10 +85,12 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       await _pagarPix(pedido, cart.totalCentavos, checkout.cpf);
       return;
     }
-    // Cartão pela maquininha Point (modo PDV): fluxo "pague na maquininha".
-    final ehCartao = forma == FormaPagamento.credito ||
-        forma == FormaPagamento.debito;
-    if (ehCartao && cartaoViaPoint) {
+    // Cartão E vale-refeição vão pela maquininha Point (modo PDV): crédito,
+    // débito e voucher (VR/VA). PIX é o único que fica no QR da tela.
+    final vaiPraMaquininha = forma == FormaPagamento.credito ||
+        forma == FormaPagamento.debito ||
+        forma == FormaPagamento.vr;
+    if (vaiPraMaquininha && cartaoViaPoint) {
       await _pagarPoint(pedido, cart.totalCentavos);
       return;
     }
