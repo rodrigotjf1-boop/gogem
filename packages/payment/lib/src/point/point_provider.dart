@@ -117,21 +117,34 @@ class PointProvider implements PaymentProvider {
     if (!_events.isClosed) _events.close();
   }
 
-  /// Encerra a cobrança: cancela a intent na Point e devolve o desfecho.
+  /// Encerra a cobrança. F10: ANTES de cancelar, confirma o status uma última
+  /// vez — se o cliente JÁ pagou (approved) enquanto dava timeout/cancelamento,
+  /// NÃO cancela: finaliza. Senão a maquininha teria capturado o dinheiro e o
+  /// totem diria "cancelado" (pedido órfão / cobrança sem venda).
   Future<PaymentResult> _abortar(
     PaymentRequest req,
     String chargeId,
     PaymentStatus status,
   ) async {
+    try {
+      final atual = await _gateway.status(chargeId);
+      if (atual.status == 'approved') {
+        return _res(req, PaymentStatus.approved, 'Pagamento aprovado',
+            txn: chargeId);
+      }
+    } catch (_) {
+      // Sem rede pra confirmar: NÃO cancela às cegas (poderia estar pago). O
+      // resolvePendings no boot reconcilia por orderId (F10.2).
+      return _res(req, status, _msgAborto(status));
+    }
     await _cancelarRemoto(chargeId);
-    return _res(
-      req,
-      status,
+    return _res(req, status, _msgAborto(status));
+  }
+
+  String _msgAborto(PaymentStatus status) =>
       status == PaymentStatus.timeout
           ? 'Tempo do pagamento esgotado'
-          : 'Pagamento cancelado',
-    );
-  }
+          : 'Pagamento cancelado';
 
   Future<void> _cancelarRemoto(String chargeId) async {
     try {

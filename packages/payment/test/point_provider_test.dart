@@ -97,6 +97,50 @@ void main() {
       p.dispose();
     });
 
+    test('F10: timeout mas pagou no fim => approved, NÃO cancela', () async {
+      var t = DateTime(2026, 1, 1);
+      DateTime clock() {
+        final atual = t;
+        t = t.add(const Duration(seconds: 60));
+        return atual;
+      }
+
+      // A re-checagem do _abortar vê 'approved' → finaliza sem cancelar.
+      final gw = _FakePointGateway(['approved']);
+      final p = PointProvider(
+        gw,
+        pollInterval: Duration.zero,
+        displayTimeout: const Duration(seconds: 60),
+        clock: clock,
+      );
+      final r = await p.start(_req());
+      expect(r.status, PaymentStatus.approved);
+      expect(gw.cancelou, isFalse); // dinheiro capturado NÃO vira "cancelado"
+      p.dispose();
+    });
+
+    test('F10: sem rede pra confirmar no timeout => NÃO cancela às cegas',
+        () async {
+      var t = DateTime(2026, 1, 1);
+      DateTime clock() {
+        final atual = t;
+        t = t.add(const Duration(seconds: 60));
+        return atual;
+      }
+
+      final gw = _FakePointGateway(['throw']); // consulta do _abortar falha
+      final p = PointProvider(
+        gw,
+        pollInterval: Duration.zero,
+        displayTimeout: const Duration(seconds: 60),
+        clock: clock,
+      );
+      final r = await p.start(_req());
+      expect(r.status, PaymentStatus.timeout);
+      expect(gw.cancelou, isFalse); // pode estar pago → boot reconcilia
+      p.dispose();
+    });
+
     test('cancelar() encerra e cancela a intent remota', () async {
       late PointProvider p;
       final gw = _FakePointGateway(['pending', 'pending'],
