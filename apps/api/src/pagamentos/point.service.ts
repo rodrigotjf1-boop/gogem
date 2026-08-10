@@ -8,8 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CriarPointDto } from './dto/criar-point.dto';
 import {
+  listarPointDevices,
   MercadoPagoPointGateway,
   parsePointWebhook,
+  type PointDevice,
 } from './psp/mercadopago-point.gateway';
 import { PspResolver } from './psp/psp-resolver';
 
@@ -33,6 +35,17 @@ export class PointService {
     private readonly prisma: PrismaService,
     private readonly pspResolver: PspResolver,
   ) {}
+
+  /** Lista as maquininhas Point da conta (admin escolhe o device_id). */
+  async listarDevices(): Promise<PointDevice[]> {
+    const token = await this.pspResolver.tokenMercadoPago();
+    if (!token) {
+      throw new BadRequestException(
+        'Configure o Access Token do Mercado Pago antes de buscar maquininhas.',
+      );
+    }
+    return listarPointDevices(token);
+  }
 
   async criar(dto: CriarPointDto): Promise<PointView> {
     const gw = await this.pspResolver.resolverPoint();

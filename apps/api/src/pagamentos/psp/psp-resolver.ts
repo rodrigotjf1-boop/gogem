@@ -42,6 +42,15 @@ export class PspResolver {
       : null;
   }
 
+  /** Access token do MP da loja (sem exigir device) — p/ listar maquininhas. */
+  async tokenMercadoPago(): Promise<string | null> {
+    const integ = await this.prisma.integracao.findFirst({
+      where: { tipo: 'mercadopago', ativo: true },
+    });
+    const cfg = integ?.config as Record<string, string> | null;
+    return cfg?.accessToken ?? null;
+  }
+
   private fallbackEnv(): PspGateway {
     const psp = (process.env.GOGEM_PSP ?? 'sandbox').toLowerCase();
     if (psp === 'mercadopago' && process.env.MERCADOPAGO_ACCESS_TOKEN) {

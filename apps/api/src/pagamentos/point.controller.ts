@@ -10,6 +10,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { DeviceTokenGuard } from '../auth/device-token.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { CriarPointDto } from './dto/criar-point.dto';
 import { PointService } from './point.service';
 
@@ -22,6 +25,15 @@ import { PointService } from './point.service';
 @Controller('pagamentos/point')
 export class PointController {
   constructor(private readonly service: PointService) {}
+
+  // Admin (JWT): lista as maquininhas Point da conta p/ escolher o device_id.
+  // ANTES de `:id` para não ser capturado pela rota de status.
+  @Get('devices')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('gerente')
+  listarDevices() {
+    return this.service.listarDevices();
+  }
 
   @Post()
   @UseGuards(DeviceTokenGuard)

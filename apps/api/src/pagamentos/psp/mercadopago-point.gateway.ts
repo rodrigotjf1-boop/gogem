@@ -125,6 +125,36 @@ export class MercadoPagoPointGateway {
   }
 }
 
+/** Uma maquininha Point da conta (para o admin escolher o device_id). */
+export interface PointDevice {
+  id: string;
+  posId?: number;
+  operatingMode?: string;
+}
+
+/**
+ * Lista as maquininhas Point da conta (GET /point/integration-api/devices) — só
+ * precisa do access token (sem device_id), então serve pro admin descobrir o
+ * device_id antes de salvá-lo. Não expõe credencial.
+ */
+export async function listarPointDevices(
+  accessToken: string,
+): Promise<PointDevice[]> {
+  const res = await fetch(`${BASE}/point/integration-api/devices`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Point devices ${res.status}: ${txt}`);
+  }
+  const b = (await res.json()) as { devices?: any[] };
+  return (b.devices ?? []).map((d) => ({
+    id: String(d.id),
+    posId: typeof d.pos_id === 'number' ? d.pos_id : undefined,
+    operatingMode: d.operating_mode ? String(d.operating_mode) : undefined,
+  }));
+}
+
 /**
  * Extrai o id da payment intent do webhook do Point (`point_integration_wh`).
  * Sem credencial (só lê o corpo/query), então o handler acha a cobrança antes de
