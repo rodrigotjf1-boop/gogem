@@ -262,8 +262,7 @@ void main() {
 
     expect(find.text('PAGUE COM PIX'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.byKey(const ValueKey('pix-copia-cola')), findsOneWidget);
-    expect(find.byKey(const ValueKey('pix-copiar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pix-contador')), findsOneWidget);
     expect(find.byKey(const ValueKey('pix-cancelar')), findsOneWidget);
     // Nada de pedido enquanto o PIX não aprova.
     expect(await repo.pendentes(), 0);

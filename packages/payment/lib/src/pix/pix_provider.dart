@@ -14,7 +14,7 @@ class PixProvider implements PaymentProvider {
   PixProvider(
     this._gateway, {
     this.pollInterval = const Duration(seconds: 3),
-    this.displayTimeout = const Duration(seconds: 180),
+    this.displayTimeout = const Duration(seconds: 300),
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
