@@ -48,14 +48,11 @@ export class MercadoPagoPointGateway {
   }
 
   async criarIntent(input: CriarPointInput): Promise<PointIntentCriado> {
-    // O Point exige payment.type = credit_card | debit_card | voucher_card
-    // (não 'credit'/'debit'). Mapeia do nosso tipo interno.
-    const tipoMp =
-      input.tipo === 'debit'
-        ? 'debit_card'
-        : input.tipo === 'voucher'
-          ? 'voucher_card'
-          : 'credit_card';
+    // NÃO forçamos `payment.type`: a maquininha pergunta crédito/débito/voucher
+    // na tela dela. Forçar o tipo depende de o adquirente da conta habilitar
+    // cada um — débito vinha recusado com "payment.type does not match
+    // credit_card". Sem forçar, funciona pra qualquer configuração de conta.
+    // (input.tipo segue guardado no PointPayment, só p/ relatório.)
     const res = await fetch(
       `${BASE}/point/integration-api/devices/${this.deviceId}/payment-intents`,
       {
@@ -67,7 +64,6 @@ export class MercadoPagoPointGateway {
             external_reference: input.orderId,
             print_on_terminal: true,
           },
-          payment: { type: tipoMp, installments: 1 },
         }),
       },
     );
