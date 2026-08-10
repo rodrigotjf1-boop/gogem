@@ -241,23 +241,59 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     }
   }
 
-  /// Tela do cartão na Point (modo PDV): "pague na maquininha" + aguardando +
-  /// cancelar (encerra o polling e cancela a intent). Aparece durante o Point.
+  /// Passo numerado (bolinha + texto) da instrução da maquininha.
+  Widget _passoPoint(TextTheme t, String n, String texto) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: const BoxDecoration(
+                color: GogemColors.cheese, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: Text(n,
+                style: const TextStyle(
+                    color: Color(0xFF1A1206), fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+              child: Text(texto,
+                  style: t.bodyLarge, textAlign: TextAlign.center)),
+        ],
+      );
+
+  /// Tela do cartão na Point (modo PDV): instrui o cliente a tocar "Atualizar"
+  /// na maquininha e escolher a forma lá; faz o polling e permite cancelar.
   Widget _pointView(TextTheme t, int totalCentavos) {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.point_of_sale, color: GogemColors.cheese, size: 88),
-          const SizedBox(height: 20),
+          const Icon(Icons.point_of_sale, color: GogemColors.cheese, size: 76),
+          const SizedBox(height: 14),
           Text('PAGUE NA MAQUININHA',
               style: t.headlineMedium, textAlign: TextAlign.center),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text('Total ${formatCentavos(totalCentavos)}',
               style: t.titleLarge?.copyWith(color: GogemColors.cheese)),
-          const SizedBox(height: 16),
-          Text('Siga as instruções no visor — aproxime, insira ou passe o cartão',
-              style: t.bodyLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          _passoPoint(t, '1', 'Na maquininha, toque em'),
+          const SizedBox(height: 10),
+          // Reproduz o botão azul "Atualizar" que aparece no terminal.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+            decoration: BoxDecoration(
+                color: const Color(0xFF2D7FF9),
+                borderRadius: BorderRadius.circular(10)),
+            child: const Text('Atualizar',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(height: 18),
+          _passoPoint(
+              t, '2', 'Escolha a forma (crédito, débito ou vale) e pague'),
           const SizedBox(height: 28),
           const CircularProgressIndicator(color: GogemColors.cheese),
           const SizedBox(height: 12),
@@ -409,31 +445,25 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 40),
                     children: [
                       _FormaBtn(
-                          key: const ValueKey('forma-credito'),
-                          icone: Icons.credit_card,
-                          rotulo: 'CRÉDITO',
-                          onTap: () => _pagar(FormaPagamento.credito)),
-                      _FormaBtn(
-                          key: const ValueKey('forma-debito'),
-                          icone: Icons.credit_card_outlined,
-                          rotulo: 'DÉBITO',
-                          onTap: () => _pagar(FormaPagamento.debito)),
-                      _FormaBtn(
                           key: const ValueKey('forma-pix'),
                           icone: Icons.qr_code_2,
                           rotulo: 'PIX',
                           onTap: () => _pagar(FormaPagamento.pix)),
+                      // Um botão só: crédito/débito/vale são escolhidos NA
+                      // maquininha (o backend não força o tipo).
                       _FormaBtn(
-                          key: const ValueKey('forma-vr'),
-                          icone: Icons.lunch_dining,
-                          rotulo: 'VALE-REFEIÇÃO',
-                          onTap: () => _pagar(FormaPagamento.vr)),
+                          key: const ValueKey('forma-cartao'),
+                          icone: Icons.credit_card,
+                          rotulo: 'CARTÃO',
+                          onTap: () => _pagar(FormaPagamento.credito)),
                     ],
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text('modo demonstração — pagamento simulado',
+                  padding: const EdgeInsets.fromLTRB(40, 0, 40, 16),
+                  child: Text(
+                      'No cartão você escolhe crédito, débito ou vale na maquininha.',
+                      textAlign: TextAlign.center,
                       style: t.bodyMedium?.copyWith(fontSize: 13)),
                 ),
               ]),

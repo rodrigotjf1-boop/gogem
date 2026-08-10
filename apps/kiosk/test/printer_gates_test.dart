@@ -118,7 +118,7 @@ void main() {
       lidas++;
       if (lidas >= 11) fake.semPapel = true;
     };
-    await tester.tap(find.byKey(const ValueKey('forma-debito')));
+    await tester.tap(find.byKey(const ValueKey('forma-cartao')));
     await bombear(tester, 3); // spinner
     await tester.pump(const Duration(seconds: 1)); // processamento mock
     await bombear(tester);
