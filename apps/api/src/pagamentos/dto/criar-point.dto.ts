@@ -18,6 +18,6 @@ export class CriarPointDto {
   orderId!: string;
 
   @IsOptional()
-  @IsIn(['credit', 'debit'])
+  @IsIn(['credit', 'debit', 'voucher'])
   tipo?: string;
 }
