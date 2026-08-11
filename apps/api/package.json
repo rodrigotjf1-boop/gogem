@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "backfill:forma-cartao": "ts-node src/scripts/backfill-forma-cartao.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

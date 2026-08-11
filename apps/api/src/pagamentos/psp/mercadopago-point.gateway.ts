@@ -27,6 +27,48 @@ export function normalizarTipoPagamento(paymentTypeId?: string): string {
   }
 }
 
+/** Marcas de vale-refeição/alimentação (o cartão vem como debit_card no MP). */
+const MARCAS_VOUCHER = [
+  'alelo',
+  'sodexo',
+  'ticket',
+  'refeic',
+  'aliment',
+  'vale',
+  'greencard',
+  'planvale',
+  'vr',
+  'ben',
+];
+
+/** `payment_method_id` do MP indica vale-refeição? (ex.: 'alelo', 'vr'). */
+export function ehBandeiraVoucher(bandeira?: string): boolean {
+  const b = (bandeira ?? '').toLowerCase();
+  if (!b) return false;
+  if (b === 'vr' || b === 'ben') return true; // exatos (evita casar 'verve' etc.)
+  return MARCAS_VOUCHER.some((m) => m.length > 2 && b.includes(m));
+}
+
+/**
+ * Classifica a forma real: `tipo` (credito|debito|voucher|…) + `bandeira`
+ * (payment_method_id, ex.: visa|master|elo|alelo). Se o MP marcou a compra como
+ * cartão mas a bandeira é de vale, reclassifica como 'voucher' (VR/Alelo vêm
+ * como debit_card).
+ */
+export function classificarPagamento(
+  paymentTypeId?: string,
+  paymentMethodId?: string,
+): { tipo: string; bandeira: string | null } {
+  const bandeira = paymentMethodId
+    ? String(paymentMethodId).toLowerCase()
+    : null;
+  let tipo = normalizarTipoPagamento(paymentTypeId);
+  if (tipo !== 'voucher' && ehBandeiraVoucher(bandeira ?? undefined)) {
+    tipo = 'voucher';
+  }
+  return { tipo, bandeira };
+}
+
 export interface CriarPointInput {
   amountCents: number;
   orderId: string;
@@ -123,13 +165,18 @@ export class MercadoPagoPointGateway {
    * Detalhe do pagamento aprovado (GET /v1/payments/:id) — só pra descobrir a
    * forma REAL escolhida na maquininha. Chamado UMA vez, na virada pra aprovado.
    */
-  async consultarPagamento(paymentId: string): Promise<{ tipo: string }> {
+  async consultarPagamento(
+    paymentId: string,
+  ): Promise<{ tipo: string; bandeira: string | null }> {
     const res = await fetch(`${BASE}/v1/payments/${paymentId}`, {
       headers: this._headers(),
     });
     if (!res.ok) throw new Error(`Point payment ${res.status}`);
-    const b = (await res.json()) as { payment_type_id?: string };
-    return { tipo: normalizarTipoPagamento(b.payment_type_id) };
+    const b = (await res.json()) as {
+      payment_type_id?: string;
+      payment_method_id?: string;
+    };
+    return classificarPagamento(b.payment_type_id, b.payment_method_id);
   }
 
   /** Cancela a intent (só enquanto não finalizada). */

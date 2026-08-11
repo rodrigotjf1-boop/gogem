@@ -176,17 +176,24 @@ export class PointService {
     // voucher) — busca a forma REAL uma vez e grava por cima do placeholder
     // (relatório de taxas fiel). Se o MP não responder, mantém o placeholder.
     let tipo = p.tipo;
+    let bandeira = p.bandeira;
     if (r.status === 'approved' && r.paymentId) {
       try {
         const pg = await gw.consultarPagamento(r.paymentId);
         if (pg.tipo) tipo = pg.tipo;
+        if (pg.bandeira) bandeira = pg.bandeira;
       } catch {
         /* mantém o placeholder — não bloqueia a confirmação do pagamento */
       }
     }
     return this.prisma.pointPayment.update({
       where: { id: p.id },
-      data: { status: r.status, paymentId: r.paymentId ?? p.paymentId, tipo },
+      data: {
+        status: r.status,
+        paymentId: r.paymentId ?? p.paymentId,
+        tipo,
+        bandeira,
+      },
     });
   }
 
