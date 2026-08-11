@@ -13,7 +13,7 @@
 // o attach pro app). Então, se `hasPermission` for false, PEDIMOS o diálogo do
 // sistema (requestPermission). Logs em `adb logcat -s UsbPrinter` mostram cada
 // passo (VID/PID, sem permissão, sem endpoint).
-package com.dms.gogem.gogem_kiosk
+package br.com.dms.gogem_kiosk
 
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -44,7 +44,7 @@ class UsbPrinterPlugin(private val ctx: Context) {
     companion object {
         private const val TAG = "UsbPrinter"
         private const val EPSON_VID = 0x04B8
-        private const val ACAO_PERMISSAO = "com.dms.gogem.USB_PERMISSION"
+        private const val ACAO_PERMISSAO = "br.com.dms.gogem_kiosk.USB_PERMISSION"
     }
 
     fun registrar(engine: FlutterEngine) {
@@ -160,10 +160,14 @@ class UsbPrinterPlugin(private val ctx: Context) {
     }
 
     private fun ler(max: Int, timeoutMs: Int): ByteArray {
-        val buf = ByteArray(max)
-        val n = synchronized(epInLock) { conn?.bulkTransfer(epIn, buf, max, timeoutMs) ?: -1 }
+        val ep = epIn ?: return ByteArray(0)
+        // Bulk IN precisa de um buffer >= tamanho do pacote do endpoint (ex.: 64B).
+        // Pedir só `max` (1 byte no DLE EOT) faz o controlador rejeitar (-1).
+        val cap = maxOf(max, ep.maxPacketSize)
+        val buf = ByteArray(cap)
+        val n = synchronized(epInLock) { conn?.bulkTransfer(ep, buf, cap, timeoutMs) ?: -1 }
         if (n <= 0) return ByteArray(0)
-        return buf.copyOf(n)
+        return buf.copyOf(minOf(n, max))
     }
 
     /** Thread de leitura contínua para ASB (pacotes de 4 bytes espontâneos). */

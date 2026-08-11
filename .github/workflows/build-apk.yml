@@ -51,7 +51,7 @@ jobs:
       # As pastas de plataforma não são versionadas (ver ci.yml): geramos o
       # scaffold Android on-demand. Não toca em lib/ nem em pubspec.
       - name: Gerar projeto Android
-        run: flutter create --platforms=android --org com.dms.gogem .
+        run: flutter create --platforms=android --org br.com.dms .
 
       # `flutter create` NÃO declara INTERNET no manifesto principal (só nos de
       # debug/profile). Sem isso o APK de release não alcança a API. Injeta a
@@ -74,10 +74,11 @@ jobs:
 
       # Modo quiosque + impressora: substitui o MainActivity gerado pelo que tem
       # lock task (canal 'gogem/kiosk') e registra o UsbPrinterPlugin (canal
-      # 'gogem/usb_printer'). Caminho segue --org com.dms.gogem + gogem_kiosk.
+      # 'gogem/usb_printer'). Caminho segue --org br.com.dms + gogem_kiosk
+      # (= br.com.dms.gogem_kiosk, o MESMO package do campo — atualiza no lugar).
       - name: Instalar MainActivity + plugin USB
         run: |
-          DEST=android/app/src/main/kotlin/com/dms/gogem/gogem_kiosk
+          DEST=android/app/src/main/kotlin/br/com/dms/gogem_kiosk
           mkdir -p "$DEST"
           cp tool/kiosk_mainactivity.kt "$DEST/MainActivity.kt"
           cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
