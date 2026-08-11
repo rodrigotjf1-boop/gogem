@@ -28,7 +28,42 @@ class VendaSyncNotifier extends Notifier<VendaSyncState> {
 
   void iniciarAgendador() {
     if (_timer != null) return;
+    // No boot: primeiro reconcilia pagamentos presos (write-ahead F10), depois
+    // começa a drenar a fila. Assim um pedido pago-mas-não-salvo (queda entre
+    // pagar e gravar) volta pro fluxo antes de qualquer envio.
+    unawaited(resolverPendencias());
     _agendar(const Duration(seconds: 5));
+  }
+
+  /// F10 — recuperação no boot. Pedidos presos em 'aguardando_pagamento' (o
+  /// totem caiu entre a aprovação e o salvamento) são reconciliados pelo status
+  /// REAL no backend: aprovado → libera pro envio; recusado/cancelado/expirado/
+  /// inexistente → descarta; ainda pendente ou offline → deixa preso (o próximo
+  /// boot tenta de novo). Nunca perde dinheiro capturado, nunca envia não-pago.
+  Future<void> resolverPendencias() async {
+    final repo = await ref.read(orderRepositoryProvider.future);
+    final api = ref.read(gogemApiProvider);
+    final presos = await repo.listarAguardandoPagamento();
+    for (final row in presos) {
+      final uuid = row['uuid'] as String;
+      try {
+        final st = await api.statusPorOrder(uuid);
+        switch (st.status) {
+          case 'approved':
+            await repo.marcarPago(uuid);
+          case 'nenhum':
+          case 'rejected':
+          case 'cancelled':
+          case 'expired':
+          case 'error':
+            await repo.marcarCancelado(uuid);
+          // 'pending' → deixa preso; a cobrança ainda pode fechar
+        }
+      } catch (_) {
+        // sem rede: deixa preso, tenta no próximo boot
+      }
+    }
+    await atualizarContagem();
   }
 
   void _agendar(Duration d) {

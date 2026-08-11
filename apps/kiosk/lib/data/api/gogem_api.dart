@@ -243,6 +243,23 @@ class GogemApi {
         .timeout(const Duration(seconds: 12));
   }
 
+  /// GET /pagamentos/status/:orderId — status consolidado (Point ou PIX) por
+  /// uuid do pedido. Usado na recuperação no boot (F10): o totem pergunta "esse
+  /// pedido que ficou preso — foi pago?". Devolve `{tipo, status}`; tipo pode ser
+  /// 'point' | 'pix' | 'nenhum'.
+  Future<({String tipo, String status})> statusPorOrder(String orderId) async {
+    final uri = Uri.parse('$baseUrl/pagamentos/status/$orderId');
+    final res = await _client
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 12));
+    if (res.statusCode != 200) {
+      throw GogemApiException(res.statusCode, res.body);
+    }
+    final m = (jsonDecode(utf8.decode(res.bodyBytes)) as Map)
+        .cast<String, dynamic>();
+    return (tipo: '${m['tipo']}', status: '${m['status']}');
+  }
+
   PointCharge _pointDe(dynamic b) {
     final m = (b as Map).cast<String, dynamic>();
     return PointCharge(
