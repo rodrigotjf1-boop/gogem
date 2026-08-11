@@ -33,6 +33,9 @@ function makeService() {
       create: vi.fn(),
       update: vi.fn(),
     },
+    // Correção da forma real do cartão consulta o PointPayment; sem cobrança
+    // (null) mantém a forma que o totem mandou — não altera os casos abaixo.
+    pointPayment: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   const regem = { lancarVendaExterna: vi.fn() };
   const service = new VendasService(
