@@ -8,7 +8,7 @@
 //
 // Sem Device Owner, o Android mostra o aviso de "tela fixada" (barreira leve);
 // como Device Owner, a fixação é silenciosa e sem saída (kiosk de verdade).
-package com.dms.gogem.gogem_kiosk
+package br.com.dms.gogem_kiosk
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine

@@ -42,19 +42,18 @@ class PrinterHealth {
       : (status.motivoBloqueio ?? 'ok');
 }
 
-/// Vigia da impressora: ASB sempre ligado + polling de segurança (30s) +
-/// checagem síncrona sob demanda nos portões do fluxo.
+/// Vigia da impressora: polling síncrono (DLE EOT) a cada 30s + checagem sob
+/// demanda nos portões do fluxo. ASB (avisos espontâneos) fica DESLIGADO: no
+/// USB Android o pacote de 4 bytes do ASB compete com a resposta do DLE EOT no
+/// mesmo endpoint IN e corrompe a leitura de status (impressora "conecta" mas o
+/// status falha → totem trava). O polling cobre papel/tampa nos portões.
 class PrinterHealthNotifier extends Notifier<PrinterHealth> {
   Timer? _poll;
-  StreamSubscription? _asbSub;
   static const intervalo = Duration(seconds: 30);
 
   @override
   PrinterHealth build() {
-    ref.onDispose(() {
-      _poll?.cancel();
-      _asbSub?.cancel();
-    });
+    ref.onDispose(() => _poll?.cancel());
     return const PrinterHealth();
   }
 
@@ -63,10 +62,9 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
     final d = ref.read(printerDriverProvider);
     try {
       await d.conectar();
-      await d.habilitarAsb();
-      _asbSub = d.statusStream.listen((s) => state = PrinterHealth(
-          status: s, desconectada: false, ultimaChecagem: DateTime.now()));
-    } catch (_) {
+    } catch (e) {
+      // ignore: avoid_print
+      print('[printerHealth] conectar falhou: $e');
       state = PrinterHealth(desconectada: true, ultimaChecagem: DateTime.now());
     }
     _poll = Timer.periodic(intervalo, (_) => checarAgora());
@@ -78,16 +76,24 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
     final d = ref.read(printerDriverProvider);
     try {
       final s = await d.consultarStatus();
+      // ignore: avoid_print
+      print('[printerHealth] status=$s');
       state = PrinterHealth(
           status: s, desconectada: false, ultimaChecagem: DateTime.now());
-    } on Object {
+    } on Object catch (e) {
+      // ignore: avoid_print
+      print('[printerHealth] consultarStatus falhou: $e — reconectando');
       // tenta reconectar uma vez (cabo religado etc.)
       try {
         await d.conectar();
         final s = await d.consultarStatus();
+        // ignore: avoid_print
+        print('[printerHealth] status (retry)=$s');
         state = PrinterHealth(
             status: s, desconectada: false, ultimaChecagem: DateTime.now());
-      } catch (_) {
+      } catch (e2) {
+        // ignore: avoid_print
+        print('[printerHealth] retry falhou: $e2');
         state =
             PrinterHealth(desconectada: true, ultimaChecagem: DateTime.now());
       }
