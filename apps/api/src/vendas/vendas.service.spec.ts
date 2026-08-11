@@ -7,7 +7,9 @@ import { VendaTotemDto } from './dto/venda-totem.dto';
  * pela forma REAL do PointPayment (o cliente escolheu na maquininha). Cobre o bug
  * do relatório mostrar tudo como "credito".
  */
-function montar(point: { status: string; tipo: string } | null) {
+function montar(
+  point: { status: string; tipo: string; bandeira?: string | null } | null,
+) {
   const criados: any[] = [];
   let enviadoAoRegem: any = null;
   const prisma = {
@@ -65,6 +67,19 @@ describe('VendasService — forma real do cartão (MP Point)', () => {
     const h = montar({ status: 'approved', tipo: 'voucher' });
     await h.service.registrarVendaTotem(CTX, dto('credito'));
     expect(h.criados[0].pagamentos[0].forma).toBe('voucher');
+  });
+
+  it('bandeira → grava junto no pagamento (relatório mostra "forma · bandeira")', async () => {
+    const h = montar({ status: 'approved', tipo: 'debito', bandeira: 'visa' });
+    await h.service.registrarVendaTotem(CTX, dto('credito'));
+    expect(h.criados[0].pagamentos[0].forma).toBe('debito');
+    expect(h.criados[0].pagamentos[0].bandeira).toBe('visa');
+  });
+
+  it('sem bandeira → não injeta o campo', async () => {
+    const h = montar({ status: 'approved', tipo: 'debito', bandeira: null });
+    await h.service.registrarVendaTotem(CTX, dto('credito'));
+    expect(h.criados[0].pagamentos[0].bandeira).toBeUndefined();
   });
 
   it('sem PointPayment (ex.: PIX) → mantém a forma do totem', async () => {

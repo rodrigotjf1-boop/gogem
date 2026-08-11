@@ -220,14 +220,22 @@ export class RelatorioService {
   }
 }
 
-/** Extrai as formas de pagamento (rótulos) do Json de pagamentos. */
+/**
+ * Extrai as formas de pagamento (rótulos) do Json de pagamentos. Quando há
+ * bandeira (payment_method_id do MP Point), mostra "forma · bandeira" — ex.:
+ * "credito · visa", "voucher · alelo".
+ */
 function formasDe(pagamentos: unknown): string[] {
   if (!Array.isArray(pagamentos)) return [];
   const out: string[] = [];
   for (const raw of pagamentos) {
     if (raw && typeof raw === 'object') {
-      const f = (raw as Record<string, unknown>).forma;
-      if (typeof f === 'string' && f) out.push(f);
+      const obj = raw as Record<string, unknown>;
+      const f = obj.forma;
+      if (typeof f === 'string' && f) {
+        const band = typeof obj.bandeira === 'string' ? obj.bandeira : '';
+        out.push(band ? `${f} · ${band}` : f);
+      }
     }
   }
   return out;

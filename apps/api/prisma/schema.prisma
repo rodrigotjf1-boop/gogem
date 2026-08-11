@@ -96,7 +96,8 @@ model PointPayment {
   deviceId    String
   intentId    String?
   amountCents Int
-  tipo        String   @default("credit") // credit | debit
+  tipo        String   @default("credit") // credit|debito|credito|voucher (real após aprovar)
+  bandeira    String? // payment_method_id do MP (visa|master|elo|alelo|sodexo|vr|…)
   status      String   @default("pending") // pending|approved|cancelled|error
   paymentId   String?
   createdAt   DateTime @default(now())

@@ -198,14 +198,19 @@ export class VendasService {
    */
   private async corrigirFormaCartao(
     dto: VendaTotemDto,
-  ): Promise<VendaTotemDto['pagamentos']> {
+  ): Promise<
+    Array<VendaTotemDto['pagamentos'][number] & { bandeira?: string }>
+  > {
     const pp = await this.prisma.pointPayment.findFirst({
       where: { orderId: dto.idempotencyKey },
     });
     const real = pp?.status === 'approved' ? pp.tipo : null;
     if (!real || real === 'credit' || real === 'debit') return dto.pagamentos;
+    const bandeira = pp?.bandeira ?? undefined;
     return dto.pagamentos.map((p) =>
-      ehCartao(p.forma) ? { ...p, forma: real } : p,
+      ehCartao(p.forma)
+        ? { ...p, forma: real, ...(bandeira ? { bandeira } : {}) }
+        : p,
     );
   }
 }
