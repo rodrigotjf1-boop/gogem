@@ -121,6 +121,14 @@ export class PointService {
     return this._view(await this._reconciliar(p, gw));
   }
 
+  /** F10: status por orderId (recuperação no boot). null = não há cobrança. */
+  async statusPorOrder(orderId: string): Promise<PointView | null> {
+    const p = await this.prisma.pointPayment.findFirst({ where: { orderId } });
+    if (!p) return null;
+    const gw = await this.pspResolver.resolverPoint(p.deviceId);
+    return this._view(await this._reconciliar(p, gw));
+  }
+
   async cancelar(id: string): Promise<PointView> {
     const p = await this.prisma.pointPayment.findFirst({ where: { id } });
     if (!p) throw new NotFoundException('Cobrança Point não encontrada.');

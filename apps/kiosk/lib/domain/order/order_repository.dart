@@ -44,6 +44,47 @@ class OrderRepository {
     return senha;
   }
 
+  /// F10 write-ahead: grava o pedido (com senha) ANTES de cobrar, em
+  /// 'aguardando_pagamento'. Se o totem cair entre pagar e salvar, o pedido não
+  /// se perde — o boot reconcilia por uuid (resolvePendings). Idempotente:
+  /// re-salvar o mesmo uuid não duplica.
+  Future<String> salvarPreCobranca(PedidoLocal pedido) async {
+    final senha = await proximaSenha();
+    await _db.insert(
+      'pedidos_locais',
+      {
+        'uuid': pedido.uuid,
+        'senha': senha,
+        'corpo_json':
+            jsonEncode(pedido.toJson(senhaLocal: int.tryParse(senha))),
+        'status': 'aguardando_pagamento',
+        'criado_em': pedido.criadoEm.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+    final r = await _db.query('pedidos_locais',
+        columns: ['senha'], where: 'uuid = ?', whereArgs: [pedido.uuid]);
+    return r.isNotEmpty ? r.first['senha'] as String : senha;
+  }
+
+  /// Pagamento confirmado → libera o pedido para envio ao Regem.
+  Future<void> marcarPago(String uuid) => _db.update(
+      'pedidos_locais', {'status': 'pendente_envio'},
+      where: 'uuid = ? AND status = ?',
+      whereArgs: [uuid, 'aguardando_pagamento']);
+
+  /// Pagamento NÃO concluído → descarta (não vai pro Regem).
+  Future<void> marcarCancelado(String uuid) => _db.update(
+      'pedidos_locais', {'status': 'cancelado'},
+      where: 'uuid = ? AND status = ?',
+      whereArgs: [uuid, 'aguardando_pagamento']);
+
+  /// Pedidos travados em 'aguardando_pagamento' (recuperação no boot).
+  Future<List<Map<String, Object?>>> listarAguardandoPagamento() => _db.query(
+      'pedidos_locais',
+      where: "status = 'aguardando_pagamento'",
+      orderBy: 'criado_em');
+
   /// Pedidos aguardando envio ao backend (F6 drena com Idempotency-Key=uuid).
   Future<List<Map<String, Object?>>> listarPendentes() => _db.query(
       'pedidos_locais',

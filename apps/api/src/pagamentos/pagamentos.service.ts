@@ -94,6 +94,16 @@ export class PagamentosService {
     return this._view(await this._reconciliar(charge, psp));
   }
 
+  /** F10: status PIX por orderId (recuperação no boot). null = não há. */
+  async statusPixPorOrder(orderId: string): Promise<PixChargeView | null> {
+    const charge = await this.prisma.pixCharge.findFirst({
+      where: { orderId },
+    });
+    if (!charge) return null;
+    const psp = await this.pspResolver.resolver();
+    return this._view(await this._reconciliar(charge, psp));
+  }
+
   /**
    * Webhook do PSP: casa por pspRef (cross-tenant, runAsSystem) e re-consulta o
    * status DENTRO do contexto do tenant da cobrança (para usar as credenciais

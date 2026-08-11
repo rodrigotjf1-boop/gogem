@@ -39,6 +39,46 @@ class FakeOrderRepository implements OrderRepository {
   }
 
   @override
+  Future<String> salvarPreCobranca(PedidoLocal pedido) async {
+    final existente = pedidos.where((p) => p['uuid'] == pedido.uuid);
+    if (existente.isNotEmpty) return existente.first['senha'] as String;
+    final senha = await proximaSenha();
+    pedidos.add({
+      'uuid': pedido.uuid,
+      'senha': senha,
+      'corpo_json': jsonEncode(pedido.toJson()),
+      'status': 'aguardando_pagamento',
+      'criado_em': pedido.criadoEm.toIso8601String(),
+      'tentativas': 0,
+    });
+    return senha;
+  }
+
+  @override
+  Future<void> marcarPago(String uuid) async {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid && p['status'] == 'aguardando_pagamento') {
+        p['status'] = 'pendente_envio';
+      }
+    }
+  }
+
+  @override
+  Future<void> marcarCancelado(String uuid) async {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid && p['status'] == 'aguardando_pagamento') {
+        p['status'] = 'cancelado';
+      }
+    }
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> listarAguardandoPagamento() async => [
+        for (final p in pedidos)
+          if (p['status'] == 'aguardando_pagamento') Map.of(p),
+      ];
+
+  @override
   Future<List<Map<String, Object?>>> listarPendentes() async => [
         for (final p in pedidos)
           if (p['status'] == 'pendente_envio') Map.of(p),

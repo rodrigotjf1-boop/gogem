@@ -79,4 +79,56 @@ void main() {
     expect(rows.first['tentativas'], 1);
     expect(rows.last['tentativas'], 0); // parou no primeiro erro
   });
+
+  group('F10 — recuperação no boot (write-ahead)', () {
+    // Responde ao GET /pagamentos/status/:orderId com um status fixo.
+    MockClient statusFixo(String tipo, String status) => MockClient((req) async {
+          expect(req.url.path, contains('/pagamentos/status/'));
+          return http.Response(
+              jsonEncode({'tipo': tipo, 'status': status}), 200);
+        });
+
+    test('aprovado → libera pro envio (pendente_envio)', () async {
+      final (c, repo) = await montar(statusFixo('point', 'approved'));
+      final p = pedido();
+      await repo.salvarPreCobranca(p); // preso em aguardando_pagamento
+      await c.read(vendaSyncProvider.notifier).resolverPendencias();
+      expect((await repo.listarAguardandoPagamento()), isEmpty);
+      expect(await repo.pendentes(), 1); // virou pendente_envio
+    });
+
+    test('recusado → descarta (cancelado, não vai pro Regem)', () async {
+      final (c, repo) = await montar(statusFixo('point', 'rejected'));
+      final p = pedido();
+      await repo.salvarPreCobranca(p);
+      await c.read(vendaSyncProvider.notifier).resolverPendencias();
+      expect((await repo.listarAguardandoPagamento()), isEmpty);
+      expect(await repo.pendentes(), 0); // NÃO virou pendente
+    });
+
+    test('sem cobrança no backend (nenhum) → descarta', () async {
+      final (c, repo) = await montar(statusFixo('nenhum', 'nenhum'));
+      await repo.salvarPreCobranca(pedido());
+      await c.read(vendaSyncProvider.notifier).resolverPendencias();
+      expect((await repo.listarAguardandoPagamento()), isEmpty);
+      expect(await repo.pendentes(), 0);
+    });
+
+    test('ainda pendente → deixa preso (tenta no próximo boot)', () async {
+      final (c, repo) = await montar(statusFixo('pix', 'pending'));
+      await repo.salvarPreCobranca(pedido());
+      await c.read(vendaSyncProvider.notifier).resolverPendencias();
+      expect((await repo.listarAguardandoPagamento()).length, 1);
+      expect(await repo.pendentes(), 0);
+    });
+
+    test('offline → deixa preso (não perde, não envia)', () async {
+      final (c, repo) =
+          await montar(MockClient((_) async => throw Exception('sem rede')));
+      await repo.salvarPreCobranca(pedido());
+      await c.read(vendaSyncProvider.notifier).resolverPendencias();
+      expect((await repo.listarAguardandoPagamento()).length, 1);
+      expect(await repo.pendentes(), 0);
+    });
+  });
 }

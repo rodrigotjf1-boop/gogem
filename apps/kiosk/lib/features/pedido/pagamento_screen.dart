@@ -39,6 +39,8 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   bool _pointAtivo = false;
   Timer? _pixTimer;
   int _pixSegundos = 300; // contagem regressiva do PIX (5 min)
+  PedidoLocal? _pedidoAtual; // pedido em cobrança (write-ahead F10)
+  String? _senhaAtual; // senha local do pedido em cobrança
 
   @override
   void initState() {
@@ -107,6 +109,13 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       _pixDesafio = null;
       _pointAtivo = false;
     });
+
+    // WRITE-AHEAD (F10): grava o pedido ANTES de cobrar. Se o totem cair entre a
+    // aprovação e o salvamento, o pedido não se perde — o boot reconcilia por
+    // uuid (resolvePendings). A senha é atribuída aqui.
+    final repo = await ref.read(orderRepositoryProvider.future);
+    _pedidoAtual = pedido;
+    _senhaAtual = await repo.salvarPreCobranca(pedido);
 
     // PIX tem fluxo próprio (QR + polling); os demais vão pelo provider genérico.
     if (forma == FormaPagamento.pix) {
@@ -206,7 +215,17 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
 
   void _falhaPagamento(String msg) {
     _pixTimer?.cancel();
-    if (!mounted) return;
+    if (!mounted) return; // descartado: o boot reconcilia o órfão (não-approved)
+    // Write-ahead (F10): o pedido foi gravado antes de cobrar; não pagou →
+    // descarta (best-effort). Se esta marcação não rodar, o boot reconcilia o
+    // 'aguardando_pagamento' órfão (o status remoto não estará approved).
+    final p = _pedidoAtual;
+    if (p != null) {
+      unawaited(ref
+          .read(orderRepositoryProvider.future)
+          .then((r) => r.marcarCancelado(p.uuid)));
+      _pedidoAtual = null;
+    }
     setState(() {
       _processando = false;
       _pixDesafio = null;
@@ -215,11 +234,15 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     });
   }
 
-  /// Pós-aprovação (comum a todas as formas): persiste, imprime (com fila de
-  /// reimpressão na janela residual), dispara o envio ao Regem e confirma.
+  /// Pós-aprovação (comum a todas as formas): marca o pedido (já gravado no
+  /// write-ahead) como PAGO, imprime (com fila na janela residual), envia ao
+  /// Regem e confirma.
   Future<void> _finalizar(PedidoLocal pedido) async {
     final repo = await ref.read(orderRepositoryProvider.future);
-    final senhaLocal = await repo.salvarPedido(pedido);
+    // Pago: 'aguardando_pagamento' → 'pendente_envio' (libera pro Regem).
+    await repo.marcarPago(pedido.uuid);
+    _pedidoAtual = null; // concluído: não é mais candidato a cancelamento
+    final senhaLocal = _senhaAtual ?? '000';
 
     // Mostra a senha do REGEM (a que a cozinha/KDS chama), não a local do totem
     // — senão o cliente sai com um número (001) e a cozinha chama outro (107).
