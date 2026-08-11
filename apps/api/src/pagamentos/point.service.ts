@@ -171,13 +171,23 @@ export class PointService {
   ): Promise<Prisma.PointPaymentGetPayload<object>> {
     if (p.status !== 'pending' || !gw || !p.intentId) return p;
     const r = await gw.consultar(p.intentId);
-    if (r.status !== p.status) {
-      return this.prisma.pointPayment.update({
-        where: { id: p.id },
-        data: { status: r.status, paymentId: r.paymentId ?? p.paymentId },
-      });
+    if (r.status === p.status) return p;
+    // Aprovado: o cliente escolheu a forma NA maquininha (crédito/débito/
+    // voucher) — busca a forma REAL uma vez e grava por cima do placeholder
+    // (relatório de taxas fiel). Se o MP não responder, mantém o placeholder.
+    let tipo = p.tipo;
+    if (r.status === 'approved' && r.paymentId) {
+      try {
+        const pg = await gw.consultarPagamento(r.paymentId);
+        if (pg.tipo) tipo = pg.tipo;
+      } catch {
+        /* mantém o placeholder — não bloqueia a confirmação do pagamento */
+      }
     }
-    return p;
+    return this.prisma.pointPayment.update({
+      where: { id: p.id },
+      data: { status: r.status, paymentId: r.paymentId ?? p.paymentId, tipo },
+    });
   }
 
   private _view(p: Prisma.PointPaymentGetPayload<object>): PointView {

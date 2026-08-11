@@ -3,6 +3,30 @@ const BASE = 'https://api.mercadopago.com';
 /** Status normalizado da cobrança no Point (agnóstico do wire do MP). */
 export type PointStatus = 'pending' | 'approved' | 'cancelled' | 'error';
 
+/**
+ * Forma REAL do pagamento a partir do `payment_type_id` do MP — o cliente
+ * escolhe crédito/débito/voucher na maquininha, então só sabemos depois de
+ * aprovado. Serve pra relatório de taxas (crédito ≠ débito ≠ voucher).
+ * ⚠️ VR/VA (Alelo/Sodexo/…) costumam vir como `debit_card`; distinguir a
+ * bandeira exige o `payment_method_id` (coluna futura) — aqui fica 'debito'.
+ */
+export function normalizarTipoPagamento(paymentTypeId?: string): string {
+  switch ((paymentTypeId ?? '').toLowerCase()) {
+    case 'credit_card':
+      return 'credito';
+    case 'debit_card':
+      return 'debito';
+    case 'prepaid_card':
+      return 'pre-pago';
+    case 'voucher':
+    case 'ticket':
+    case 'account_money':
+      return 'voucher';
+    default:
+      return paymentTypeId ? String(paymentTypeId) : 'outro';
+  }
+}
+
 export interface CriarPointInput {
   amountCents: number;
   orderId: string;
@@ -93,6 +117,19 @@ export class MercadoPagoPointGateway {
       status: this._mapState(b.state ?? '', b.payment?.status),
       paymentId: b.payment?.id ? String(b.payment.id) : undefined,
     };
+  }
+
+  /**
+   * Detalhe do pagamento aprovado (GET /v1/payments/:id) — só pra descobrir a
+   * forma REAL escolhida na maquininha. Chamado UMA vez, na virada pra aprovado.
+   */
+  async consultarPagamento(paymentId: string): Promise<{ tipo: string }> {
+    const res = await fetch(`${BASE}/v1/payments/${paymentId}`, {
+      headers: this._headers(),
+    });
+    if (!res.ok) throw new Error(`Point payment ${res.status}`);
+    const b = (await res.json()) as { payment_type_id?: string };
+    return { tipo: normalizarTipoPagamento(b.payment_type_id) };
   }
 
   /** Cancela a intent (só enquanto não finalizada). */

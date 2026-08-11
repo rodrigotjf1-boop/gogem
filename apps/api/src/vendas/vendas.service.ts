@@ -83,10 +83,14 @@ export class VendasService {
     // 2. Cria (ou reabre um pedido que falhou) em status `pendente`. O
     //    `tenantId` NÃO entra no data — o middleware injeta (§2); o cast segue
     //    o padrão do DispositivoService (satisfies Omit<...,'tenantId'>).
+    // Forma REAL do cartão: o cliente escolhe crédito/débito/voucher NA
+    // maquininha, então o totem manda 'credito' como placeholder. Corrige pela
+    // forma real (do PointPayment) — vale pro relatório do GoGeM E pro Regem.
+    const pagamentosReais = await this.corrigirFormaCartao(dto);
     const itens = dto.itens as unknown as Prisma.InputJsonValue;
-    const pagamentos = dto.pagamentos as unknown as Prisma.InputJsonValue;
+    const pagamentos = pagamentosReais as unknown as Prisma.InputJsonValue;
     // Total do pedido (centavos) = soma dos pagamentos — base do faturamento.
-    const totalCentavos = dto.pagamentos.reduce(
+    const totalCentavos = pagamentosReais.reduce(
       (s, p) => s + (p.valor || 0),
       0,
     );
@@ -137,7 +141,7 @@ export class VendasService {
         itens: dto.itens,
         // Borda de saída: o Regem espera REAIS decimais e senha em string
         // (o GoGeM guarda tudo em centavos/inteiro internamente).
-        pagamentos: dto.pagamentos.map((p) => ({
+        pagamentos: pagamentosReais.map((p) => ({
           forma: p.forma,
           valor: centavosParaReais(p.valor),
           nsu: p.nsu,
@@ -182,4 +186,32 @@ export class VendasService {
       nfce: resposta.nfce,
     };
   }
+
+  /**
+   * Troca o rótulo do pagamento de cartão pela forma REAL do MP Point. O totem
+   * manda 'credito' como placeholder (o cliente só escolhe crédito/débito/
+   * voucher NA maquininha). Se há um PointPayment aprovado deste pedido
+   * (orderId = idempotencyKey), usa o `tipo` já enriquecido pelo backend
+   * (credito|debito|voucher|…). PIX/dinheiro não mudam. Se não houver
+   * PointPayment ou o `tipo` ainda for o placeholder inglês ('credit'/'debit',
+   * = o enriquecimento no MP não rodou), mantém o que veio do totem.
+   */
+  private async corrigirFormaCartao(
+    dto: VendaTotemDto,
+  ): Promise<VendaTotemDto['pagamentos']> {
+    const pp = await this.prisma.pointPayment.findFirst({
+      where: { orderId: dto.idempotencyKey },
+    });
+    const real = pp?.status === 'approved' ? pp.tipo : null;
+    if (!real || real === 'credit' || real === 'debit') return dto.pagamentos;
+    return dto.pagamentos.map((p) =>
+      ehCartao(p.forma) ? { ...p, forma: real } : p,
+    );
+  }
+}
+
+/** Rótulos que representam cartão (placeholder do totem) — não PIX/dinheiro. */
+function ehCartao(forma: string): boolean {
+  const f = (forma ?? '').toLowerCase();
+  return f !== 'pix' && f !== 'dinheiro';
 }
