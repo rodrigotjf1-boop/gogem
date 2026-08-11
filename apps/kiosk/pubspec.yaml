@@ -23,12 +23,20 @@ dependencies:
     path: ../../packages/escpos
   gogem_payment:
     path: ../../packages/payment
+  # Windows (totem em PC — F13). sqflite não tem plugin desktop: usamos o
+  # sqflite_common_ffi (+ sqlite3 nativo empacotado). win32/ffi = impressão RAW
+  # pela fila do Windows (winspool). window_manager = tela cheia (desktop-only,
+  # não registra no Android). Tudo guardado por Platform.isWindows no runtime.
+  sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.5.24
+  win32: ^5.5.0
+  ffi: ^2.1.0
+  window_manager: ^0.4.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  sqflite_common_ffi: ^2.3.3
 
 flutter:
   uses-material-design: true

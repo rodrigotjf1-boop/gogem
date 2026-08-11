@@ -2,16 +2,27 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gogem_escpos/escpos.dart';
 import 'usb_transport.dart';
+import 'winspool_printer.dart';
 
-/// Seleção do transporte por provisionamento:
+/// Seleção do transporte USB/fake (Android/bancada):
 /// --dart-define=GOGEM_PRINTER=usb|fake  (default: fake para dev/bancada).
 final printerTransportProvider = Provider<PrinterTransport>((ref) {
   const modo = String.fromEnvironment('GOGEM_PRINTER', defaultValue: 'fake');
   return modo == 'usb' ? UsbChannelTransport() : FakeTransport();
 });
 
-final printerDriverProvider =
-    Provider<EpsonT88>((ref) => EpsonT88(ref.watch(printerTransportProvider)));
+/// Driver por provisionamento (--dart-define=GOGEM_PRINTER):
+///  - `winspool` (Windows/F13): fila do Windows RAW; nome em GOGEM_PRINTER_NAME;
+///  - `usb` (Android): Epson via USB (canal nativo);
+///  - `fake` (default): Epson sobre transporte fake (dev/bancada/testes).
+final printerDriverProvider = Provider<PrinterDriver>((ref) {
+  const modo = String.fromEnvironment('GOGEM_PRINTER', defaultValue: 'fake');
+  if (modo == 'winspool') {
+    const nome = String.fromEnvironment('GOGEM_PRINTER_NAME', defaultValue: '');
+    return WinspoolPrinter(nome);
+  }
+  return EpsonT88(ref.watch(printerTransportProvider));
+});
 
 class PrinterHealth {
   const PrinterHealth({
