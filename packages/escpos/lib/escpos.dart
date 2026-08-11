@@ -7,4 +7,5 @@ export 'src/status.dart';
 export 'src/transport.dart';
 export 'src/fake_transport.dart';
 export 'src/builder.dart';
+export 'src/printer_driver.dart';
 export 'src/epson_t88.dart';
