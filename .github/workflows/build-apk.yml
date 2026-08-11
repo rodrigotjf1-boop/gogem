@@ -55,24 +55,33 @@ jobs:
 
       # `flutter create` NÃO declara INTERNET no manifesto principal (só nos de
       # debug/profile). Sem isso o APK de release não alcança a API. Injeta a
-      # permissão como filha de <manifest>, antes de <application>.
-      - name: Permitir acesso à internet (release)
+      # permissão como filha de <manifest>, antes de <application>. E declara o
+      # intent-filter USB_DEVICE_ATTACHED + meta-data (device_filter) DENTRO da
+      # <activity>, para o Android conceder a permissão da Epson ao plugar.
+      - name: Permitir internet + impressora USB (release)
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$MANIFEST"
           fi
-          grep -n 'INTERNET' "$MANIFEST"
+          if ! grep -q 'USB_DEVICE_ATTACHED' "$MANIFEST"; then
+            sed -i 's#</activity>#    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>\n            </intent-filter>\n            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter"/>\n        </activity>#' "$MANIFEST"
+          fi
+          mkdir -p android/app/src/main/res/xml
+          printf '%s\n' '<resources><usb-device vendor-id="1208"/></resources>' \
+            > android/app/src/main/res/xml/device_filter.xml
+          grep -nE 'INTERNET|USB_DEVICE_ATTACHED' "$MANIFEST"
 
-      # Modo quiosque: substitui o MainActivity gerado pelo que tem lock task
-      # (canal 'gogem/kiosk'). O caminho segue --org com.dms.gogem + nome do
-      # projeto (gogem_kiosk).
-      - name: Instalar MainActivity de quiosque
+      # Modo quiosque + impressora: substitui o MainActivity gerado pelo que tem
+      # lock task (canal 'gogem/kiosk') e registra o UsbPrinterPlugin (canal
+      # 'gogem/usb_printer'). Caminho segue --org com.dms.gogem + gogem_kiosk.
+      - name: Instalar MainActivity + plugin USB
         run: |
           DEST=android/app/src/main/kotlin/com/dms/gogem/gogem_kiosk
           mkdir -p "$DEST"
           cp tool/kiosk_mainactivity.kt "$DEST/MainActivity.kt"
-          echo "MainActivity de quiosque instalada em $DEST"
+          cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
+          echo "MainActivity + UsbPrinterPlugin instalados em $DEST"
 
       - name: Build APK (armeabi-v7a + arm64)
         run: >-
@@ -80,6 +89,7 @@ jobs:
           --target-platform android-arm,android-arm64
           --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
           --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }}
+          --dart-define=GOGEM_PRINTER=usb
 
       - name: Publicar APKs como artifact
         uses: actions/upload-artifact@v4

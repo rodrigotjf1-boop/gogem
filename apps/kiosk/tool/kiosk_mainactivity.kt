@@ -1,9 +1,10 @@
-// MainActivity com suporte a MODO QUIOSQUE (lock task).
+// MainActivity com suporte a MODO QUIOSQUE (lock task) + impressora USB.
 //
 // Este arquivo é COPIADO pelo workflow build-apk.yml para o projeto Android
 // gerado por `flutter create --org com.dms.gogem` (a pasta android/ não é
 // versionada). O canal 'gogem/kiosk' liga o KioskService (Dart) ao lock task
-// nativo: entrar() = startLockTask, sair() = stopLockTask.
+// nativo: entrar() = startLockTask, sair() = stopLockTask. O UsbPrinterPlugin
+// (copiado junto) registra o canal 'gogem/usb_printer' da impressora TM-T88.
 //
 // Sem Device Owner, o Android mostra o aviso de "tela fixada" (barreira leve);
 // como Device Owner, a fixação é silenciosa e sem saída (kiosk de verdade).
@@ -18,6 +19,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Impressora USB (canal gogem/usb_printer + ASB).
+        UsbPrinterPlugin(applicationContext).registrar(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, canal)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
