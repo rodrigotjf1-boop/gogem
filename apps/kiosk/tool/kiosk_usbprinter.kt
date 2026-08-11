@@ -92,8 +92,11 @@ class UsbPrinterPlugin(private val ctx: Context) {
             }
         if (dev == null) {
             Log.w(TAG, "nenhuma impressora encontrada (nem Epson 0x04B8 nem classe 7)")
+            fechar() // device sumiu → descarta conexão velha (unplug)
             return false
         }
+        // Já conectado E o device ainda está presente → reusa (check barato).
+        if (conn != null && epOut != null && epIn != null) return true
         if (!mgr.hasPermission(dev)) {
             Log.w(TAG, "sem permissão para vid=0x%04X — abrindo diálogo".format(dev.vendorId))
             solicitarPermissao(mgr, dev)

@@ -28,12 +28,18 @@ class EpsonT88 implements PrinterDriver {
   }
 
   @override
-  Future<PrinterStatus> consultarStatus() async => PrinterStatus.fromDleEot(
-        printer: await _eot(Cmd.eotPrinter),
-        offlineCause: await _eot(Cmd.eotOffline),
-        error: await _eot(Cmd.eotError),
-        paper: await _eot(Cmd.eotPaper),
-      );
+  Future<PrinterStatus> consultarStatus() async {
+    final printer = await _eot(Cmd.eotPrinter);
+    final offlineCause = await _eot(Cmd.eotOffline);
+    final error = await _eot(Cmd.eotError);
+    final paper = await _eot(Cmd.eotPaper);
+    return PrinterStatus.fromDleEot(
+      printer: printer,
+      offlineCause: offlineCause,
+      error: error,
+      paper: paper,
+    );
+  }
 
   @override
   Future<void> habilitarAsb() => _t.write(Cmd.asbOn);
@@ -42,12 +48,24 @@ class EpsonT88 implements PrinterDriver {
   Stream<PrinterStatus> get statusStream =>
       _t.incoming.where((b) => b.length >= 4).map(PrinterStatus.fromAsb);
 
-  /// Resultado da impressão com o status pós-escrita.
+  /// Resultado da impressão. A ESCRITA USB é confiável; a LEITURA de status
+  /// (DLE EOT) é flaky sobre USB. Então só BLOQUEIA se conseguiu LER o status e
+  /// ele diz "não pronta" (sem papel/tampa). Status ilegível → imprime mesmo
+  /// assim (não travar a venda por causa de um byte que não voltou).
   @override
   Future<PrinterStatus> imprimir(Uint8List cupom) async {
-    final antes = await consultarStatus();
-    if (!antes.prontaParaVenda) return antes; // portão: não grava nada
+    PrinterStatus? antes;
+    try {
+      antes = await consultarStatus();
+    } catch (_) {
+      antes = null; // status ilegível — segue e imprime
+    }
+    if (antes != null && !antes.prontaParaVenda) return antes; // portão real
     await _t.write(cupom);
-    return consultarStatus(); // near-end/fim durante a impressão aparece aqui
+    try {
+      return await consultarStatus();
+    } catch (_) {
+      return const PrinterStatus(); // imprimiu; status pós ilegível = assume ok
+    }
   }
 }
