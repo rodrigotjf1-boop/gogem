@@ -71,7 +71,11 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
     await checarAgora();
   }
 
-  /// Checagem SÍNCRONA (DLE EOT) — usada nos portões (antes do pagamento).
+  /// Checagem do portão. A LEITURA de status (DLE EOT) é flaky sobre USB, então
+  /// o critério de "desconectada" é a AUSÊNCIA física do device (conectar/open
+  /// falha), NÃO o status não ter voltado. Se o device está presente mas o
+  /// status é ilegível, assume PRONTA (não trava a venda por um byte perdido) —
+  /// a proteção de papel real vem quando o status É lido (ou de imprimir()).
   Future<PrinterHealth> checarAgora() async {
     final d = ref.read(printerDriverProvider);
     try {
@@ -80,23 +84,22 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
       print('[printerHealth] status=$s');
       state = PrinterHealth(
           status: s, desconectada: false, ultimaChecagem: DateTime.now());
-    } on Object catch (e) {
+      return state;
+    } catch (e) {
       // ignore: avoid_print
-      print('[printerHealth] consultarStatus falhou: $e — reconectando');
-      // tenta reconectar uma vez (cabo religado etc.)
-      try {
-        await d.conectar();
-        final s = await d.consultarStatus();
-        // ignore: avoid_print
-        print('[printerHealth] status (retry)=$s');
-        state = PrinterHealth(
-            status: s, desconectada: false, ultimaChecagem: DateTime.now());
-      } catch (e2) {
-        // ignore: avoid_print
-        print('[printerHealth] retry falhou: $e2');
-        state =
-            PrinterHealth(desconectada: true, ultimaChecagem: DateTime.now());
-      }
+      print('[printerHealth] status ilegível: $e');
+    }
+    // Status não leu — o device ainda está conectado? (open sem erro = presente)
+    try {
+      await d.conectar();
+      // ignore: avoid_print
+      print('[printerHealth] conectada, status desconhecido → assumindo pronta');
+      state = PrinterHealth(
+          desconectada: false, ultimaChecagem: DateTime.now());
+    } catch (e2) {
+      // ignore: avoid_print
+      print('[printerHealth] desconectada: $e2');
+      state = PrinterHealth(desconectada: true, ultimaChecagem: DateTime.now());
     }
     return state;
   }
