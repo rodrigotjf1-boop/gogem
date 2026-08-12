@@ -67,6 +67,18 @@ class Updater {
       debugPrint('[updater] falhou: $e');
     }
   }
+
+  /// No BOOT: se a versão mais nova é OBRIGATÓRIA, aplica JÁ — não espera a
+  /// janela de 3h do descanso (é isso que faz o flag `obrigatorio` "valer"). A
+  /// não-obrigatória segue no ciclo normal. Nunca lança.
+  Future<void> verificarObrigatorio() async {
+    try {
+      final r = await checar();
+      if (r != null && r.obrigatorio) await baixarEInstalar(r);
+    } catch (e) {
+      debugPrint('[updater] obrigatório falhou: $e');
+    }
+  }
 }
 
 final updaterProvider = Provider<Updater>((ref) {

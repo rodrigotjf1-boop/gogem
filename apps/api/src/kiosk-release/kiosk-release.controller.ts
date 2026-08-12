@@ -13,6 +13,7 @@ import { DeviceTokenGuard } from '../auth/device-token.guard';
 import { OrgAuthGuard } from '../org-auth/org-auth.guard';
 import { ApkEnviado, KioskReleaseService } from './kiosk-release.service';
 import { PublicarReleaseDto } from './dto/publicar-release.dto';
+import { PublicarWindowsDto } from './dto/publicar-windows.dto';
 
 /**
  * Releases do APK do totem (auto-update).
@@ -45,5 +46,23 @@ export class KioskReleaseController {
   @UseInterceptors(FileInterceptor('apk'))
   publicar(@Body() dto: PublicarReleaseDto, @UploadedFile() apk?: ApkEnviado) {
     return this.service.publicar(dto, apk);
+  }
+
+  // ── Windows (só download; sem auto-update) — org-only ──────────────────────
+
+  @Get('windows')
+  @UseGuards(OrgAuthGuard)
+  listaWindows() {
+    return this.service.listaWindows();
+  }
+
+  @Post('windows')
+  @UseGuards(OrgAuthGuard)
+  @UseInterceptors(FileInterceptor('build'))
+  publicarWindows(
+    @Body() dto: PublicarWindowsDto,
+    @UploadedFile() build?: ApkEnviado,
+  ) {
+    return this.service.publicarWindows(dto, build);
   }
 }

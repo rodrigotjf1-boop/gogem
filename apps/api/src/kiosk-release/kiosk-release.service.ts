@@ -3,8 +3,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MidiaService } from '../midia/midia.service';
 import { PublicarReleaseDto } from './dto/publicar-release.dto';
+import { PublicarWindowsDto } from './dto/publicar-windows.dto';
 
-/** APK enviado (subset do Multer — evita @types/multer). */
+/** Arquivo enviado (subset do Multer — evita @types/multer). */
 export interface ApkEnviado {
   buffer: Buffer;
   mimetype: string;
@@ -12,6 +13,12 @@ export interface ApkEnviado {
 }
 
 const MAX_APK = 150 * 1024 * 1024; // 150 MB
+const MAX_WIN = 300 * 1024 * 1024; // 300 MB (pasta Release + DLLs)
+
+/** Todo arquivo .apk/.zip começa com a assinatura "PK" (0x50 0x4B). */
+function ehZip(buf: Buffer): boolean {
+  return buf[0] === 0x50 && buf[1] === 0x4b;
+}
 
 /**
  * KioskReleaseService — releases do APK do totem (auto-update). GLOBAL: o modelo
@@ -90,6 +97,45 @@ export class KioskReleaseService {
         obrigatorio: dto.obrigatorio ?? false,
         ativo: true,
       },
+    });
+  }
+
+  // ── Windows (só download; sem auto-update) ─────────────────────────────────
+
+  /** Builds Windows (mais novo primeiro) — para o painel da Distribuição. */
+  async listaWindows() {
+    return this.prisma.windowsBuild.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Publica (ou re-publica por `versao`) um build Windows (.zip). */
+  async publicarWindows(dto: PublicarWindowsDto, build?: ApkEnviado) {
+    if (!build) throw new BadRequestException('Envie o .zip no campo "build".');
+    if (build.size > MAX_WIN) {
+      throw new BadRequestException('Build muito grande (máximo 300 MB).');
+    }
+    if (!ehZip(build.buffer)) {
+      throw new BadRequestException('Arquivo não parece um .zip válido.');
+    }
+    const sha256 = createHash('sha256').update(build.buffer).digest('hex');
+    const key = `kiosk/windows/${dto.versao}-${randomUUID()}.zip`;
+    const url = await this.midia.uploadBinario(
+      key,
+      build.buffer,
+      'application/zip',
+    );
+
+    return this.prisma.windowsBuild.upsert({
+      where: { versao: dto.versao },
+      create: {
+        versao: dto.versao,
+        url,
+        sha256,
+        notas: dto.notas ?? null,
+        ativo: true,
+      },
+      update: { url, sha256, notas: dto.notas ?? null, ativo: true },
     });
   }
 }
