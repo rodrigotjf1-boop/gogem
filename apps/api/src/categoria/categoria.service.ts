@@ -55,6 +55,9 @@ export class CategoriaService {
       nome: dto.nome,
       ordem: dto.ordem ?? 0,
       cardapioId,
+      imagemUrl: dto.imagemUrl ?? null,
+      emoji: dto.emoji ?? null,
+      cor: dto.cor ?? null,
     } satisfies Omit<Prisma.CategoriaUncheckedCreateInput, 'tenantId'>;
     return this.prisma.categoria.create({
       data: data as Prisma.CategoriaUncheckedCreateInput,
@@ -66,7 +69,13 @@ export class CategoriaService {
     await this.getOne(id); // garante existência + escopo de tenant.
     return this.prisma.categoria.update({
       where: { id },
-      data: { nome: dto.nome, ordem: dto.ordem },
+      data: {
+        nome: dto.nome,
+        ordem: dto.ordem,
+        imagemUrl: dto.imagemUrl,
+        emoji: dto.emoji,
+        cor: dto.cor,
+      },
     });
   }
 

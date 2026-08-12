@@ -38,4 +38,32 @@ export class CreateCategoriaDto {
   @IsOptional()
   @IsUUID()
   cardapioId?: string;
+
+  @ApiProperty({
+    description: 'URL pública da imagem da categoria (roleta do totem).',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imagemUrl?: string;
+
+  @ApiProperty({
+    description: 'Emoji da categoria (fallback quando não há imagem).',
+    example: '🍔',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  emoji?: string;
+
+  @ApiProperty({
+    description: 'Cor de destaque da categoria (hex, ex.: "#E03A2F").',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(9)
+  cor?: string;
 }

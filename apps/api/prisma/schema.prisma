@@ -347,6 +347,11 @@ model Categoria {
   cardapioId String?
   nome       String
   ordem      Int      @default(0)
+  // Arte da categoria (usada na roleta do totem: imagem ▸ emoji ▸ cor).
+  // Todos opcionais; o totem cai no emoji derivado do nome quando vazios.
+  imagemUrl  String?
+  emoji      String?
+  cor        String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

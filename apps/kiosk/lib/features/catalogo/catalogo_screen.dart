@@ -7,6 +7,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../gogen/gogen_catalogo_screen.dart';
+import '../gogen/gogen_category_wheel.dart';
 import 'produto_imagem.dart';
 
 /// Catálogo (Fatia 2): categorias + produtos do snapshot LOCAL (SQLite),
@@ -97,6 +98,56 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                   final catId = _categoriaId ??
                       (snap.categorias.isNotEmpty ? snap.categorias.first.id : '');
                   final produtos = snap.produtosDa(catId);
+                  final grid = produtos.isEmpty
+                      ? const _Vazio(titulo: 'Nada disponível nesta categoria')
+                      : GridView.builder(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          gridDelegate: lateral
+                              ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 520,
+                                  mainAxisExtent: 112,
+                                  mainAxisSpacing: 12,
+                                  crossAxisSpacing: 12,
+                                )
+                              : const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 320,
+                                  mainAxisExtent: 288,
+                                  mainAxisSpacing: 16,
+                                  crossAxisSpacing: 16,
+                                ),
+                          itemCount: produtos.length,
+                          itemBuilder: (_, i) => _ProdutoCard(
+                              p: produtos[i],
+                              lateral: lateral,
+                              brasa: ap.brasa,
+                              burger: ap.burger),
+                        );
+
+                  // Brasa: a MESMA roleta do GoGen, pintada com as cores do
+                  // brasa (dourado no escuro), ancorada no rodapé no lugar dos
+                  // chips. Grid de produtos escuro do brasa fica por cima.
+                  if (ap.brasa) {
+                    return Column(children: [
+                      Expanded(child: grid),
+                      GogenCategoryWheel(
+                        categorias: snap.categorias,
+                        selecionadaId: catId,
+                        onSelecionar: (id) => setState(() => _categoriaId = id),
+                        trilho: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            ap.corPrimaria,
+                            Color.alphaBlend(Colors.black26, ap.corPrimaria),
+                          ],
+                        ),
+                        corCentro: const Color(0xFF1A1206),
+                        corLateral: GogemColors.inkDim,
+                        artClara: true,
+                      ),
+                    ]);
+                  }
+
                   return Column(children: [
                     SizedBox(
                       height: 56,
@@ -124,32 +175,7 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Expanded(
-                      child: produtos.isEmpty
-                          ? const _Vazio(titulo: 'Nada disponível nesta categoria')
-                          : GridView.builder(
-                              padding: const EdgeInsets.only(bottom: 16),
-                              gridDelegate: lateral
-                                  ? const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 520,
-                                      mainAxisExtent: 112,
-                                      mainAxisSpacing: 12,
-                                      crossAxisSpacing: 12,
-                                    )
-                                  : const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 320,
-                                      mainAxisExtent: 288,
-                                      mainAxisSpacing: 16,
-                                      crossAxisSpacing: 16,
-                                    ),
-                              itemCount: produtos.length,
-                              itemBuilder: (_, i) => _ProdutoCard(
-                                  p: produtos[i],
-                                  lateral: lateral,
-                                  brasa: ap.brasa,
-                                  burger: ap.burger),
-                            ),
-                    ),
+                    Expanded(child: grid),
                   ]);
                 },
               ),

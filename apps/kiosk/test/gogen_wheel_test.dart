@@ -58,4 +58,44 @@ void main() {
     expect(Aparencia.fromJson({'temaPreset': 'brasa'}).gogen, isFalse);
     expect(Aparencia.padrao.gogen, isFalse);
   });
+
+  test('Categoria.fromJson parseia arte (imagem/emoji/cor)', () {
+    final c = Categoria.fromJson({
+      'id': 'c9',
+      'nome': 'Tacos',
+      'imagemUrl': 'https://x/y.png',
+      'emoji': '🌮',
+      'cor': '#E03A2F',
+    });
+    expect(c.imagemUrl, 'https://x/y.png');
+    expect(c.emoji, '🌮');
+    expect(c.cor, '#E03A2F');
+    // Ausentes = null (cai no emoji por palavra-chave no render).
+    final vazio = Categoria.fromJson({'id': 'c0', 'nome': 'X'});
+    expect(vazio.imagemUrl, isNull);
+    expect(vazio.emoji, isNull);
+    expect(vazio.cor, isNull);
+  });
+
+  testWidgets('roleta usa o emoji próprio da categoria quando definido', (t) async {
+    const cats = [
+      Categoria(id: 'c1', nome: 'Tacos', emoji: '🌮'),
+      Categoria(id: 'c2', nome: 'Bebidas'),
+    ];
+    await t.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: GogenCategoryWheel(
+            categorias: cats,
+            selecionadaId: 'c1',
+            onSelecionar: _noop,
+          ),
+        ),
+      ),
+    ));
+    await t.pump();
+    expect(find.text('🌮'), findsOneWidget); // emoji da categoria, não o do nome
+  });
 }
+
+void _noop(String _) {}

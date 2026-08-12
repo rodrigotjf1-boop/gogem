@@ -25,9 +25,18 @@ class GogenColors {
   );
 }
 
-/// Emoji por categoria — nosso `Categoria` só tem id+nome, então derivamos um
-/// ícone por palavra-chave (refino futuro: campo de arte por categoria no
-/// backend). Fallback genérico.
+/// "#RRGGBB" (ou "RRGGBB") → Color; inválido/nulo → null.
+Color? gogenCorHex(String? hex) {
+  if (hex == null) return null;
+  var h = hex.replaceAll('#', '').trim();
+  if (h.length == 6) h = 'FF$h';
+  if (h.length != 8) return null;
+  final v = int.tryParse(h, radix: 16);
+  return v == null ? null : Color(v);
+}
+
+/// Emoji por categoria — quando a categoria não tem imagem/emoji próprios,
+/// derivamos um ícone por palavra-chave do nome. Fallback genérico.
 String gogenEmojiCategoria(String nome) {
   final n = nome.toLowerCase();
   bool tem(List<String> ks) => ks.any(n.contains);

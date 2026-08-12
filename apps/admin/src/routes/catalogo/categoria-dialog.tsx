@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
+import { ImageUploadTile } from '@/components/ui/image-upload';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -38,6 +39,9 @@ export function CategoriaDialog({
 
   const [nome, setNome] = React.useState('');
   const [ordem, setOrdem] = React.useState('0');
+  const [imagemUrl, setImagemUrl] = React.useState<string | null>(null);
+  const [emoji, setEmoji] = React.useState('');
+  const [cor, setCor] = React.useState('');
   const [erros, setErros] = React.useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
 
@@ -46,6 +50,9 @@ export function CategoriaDialog({
     if (!aberto) return;
     setNome(categoria?.nome ?? '');
     setOrdem(String(categoria?.ordem ?? 0));
+    setImagemUrl(categoria?.imagemUrl ?? null);
+    setEmoji(categoria?.emoji ?? '');
+    setCor(categoria?.cor ?? '');
     setErros({});
     setErroGeral(null);
   }, [aberto, categoria]);
@@ -62,11 +69,17 @@ export function CategoriaDialog({
       return;
     }
     setErros({});
+    const input = {
+      ...parsed.data,
+      imagemUrl,
+      emoji: emoji.trim() || null,
+      cor: cor.trim() || null,
+    };
     try {
       if (categoria) {
-        await atualizar.mutateAsync({ id: categoria.id, input: parsed.data });
+        await atualizar.mutateAsync({ id: categoria.id, input });
       } else {
-        await criar.mutateAsync(parsed.data);
+        await criar.mutateAsync(input);
       }
       onFechar();
     } catch {
@@ -115,6 +128,68 @@ export function CategoriaDialog({
           {erros.ordem && (
             <p className="text-xs text-destructive">{erros.ordem}</p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <Label>Imagem da categoria</Label>
+          <ImageUploadTile
+            value={imagemUrl}
+            onChange={setImagemUrl}
+            disabled={enviando}
+          />
+          <p className="text-xs text-muted-foreground">
+            Aparece na roleta do totem. Sem imagem, usa o emoji abaixo.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="cat-emoji">Emoji</Label>
+            <Input
+              id="cat-emoji"
+              value={emoji}
+              onChange={(e) => setEmoji(e.target.value)}
+              placeholder="🍔"
+              maxLength={16}
+              disabled={enviando}
+              className="max-w-24 text-2xl"
+            />
+            <p className="text-xs text-muted-foreground">Sem imagem.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cat-cor">Cor de destaque</Label>
+            <div className="flex items-center gap-2">
+              <input
+                id="cat-cor"
+                type="color"
+                value={cor || '#E2A340'}
+                onChange={(e) => setCor(e.target.value)}
+                disabled={enviando}
+                className="h-9 w-12 cursor-pointer rounded border border-input bg-transparent"
+                aria-label="Cor de destaque da categoria"
+              />
+              <Input
+                value={cor}
+                onChange={(e) => setCor(e.target.value)}
+                placeholder="#E03A2F"
+                maxLength={9}
+                disabled={enviando}
+                className="max-w-28"
+              />
+              {cor && (
+                <button
+                  type="button"
+                  onClick={() => setCor('')}
+                  disabled={enviando}
+                  className="text-xs text-muted-foreground underline"
+                >
+                  limpar
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">Opcional.</p>
+          </div>
         </div>
 
         {erroGeral && (

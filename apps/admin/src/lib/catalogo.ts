@@ -26,6 +26,10 @@ export interface Categoria {
   id: string;
   nome: string;
   ordem: number;
+  // Arte da categoria (roleta do totem): imagem ▸ emoji ▸ cor.
+  imagemUrl: string | null;
+  emoji: string | null;
+  cor: string | null;
 }
 
 export interface Produto {
@@ -44,6 +48,9 @@ export interface CategoriaInput {
   nome: string;
   ordem?: number;
   cardapioId?: string;
+  imagemUrl?: string | null;
+  emoji?: string | null;
+  cor?: string | null;
 }
 
 export interface ProdutoInput {
