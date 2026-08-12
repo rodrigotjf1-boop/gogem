@@ -24,7 +24,7 @@ import FrotaPage from '@/routes/frota';
 import OrgLoginPage from '@/routes/distribuicao/login';
 import DistribuicaoHome from '@/routes/distribuicao/home';
 import VersoesPage from '@/routes/distribuicao/versoes';
-import EmBreve from '@/routes/distribuicao/em-breve';
+import TelemetriaPage from '@/routes/distribuicao/telemetria';
 
 export default function App() {
   return (
@@ -56,10 +56,7 @@ export default function App() {
               >
                 <Route index element={<DistribuicaoHome />} />
                 <Route path="versoes" element={<VersoesPage />} />
-                <Route
-                  path="telemetria"
-                  element={<EmBreve titulo="Telemetria" />}
-                />
+                <Route path="telemetria" element={<TelemetriaPage />} />
               </Route>
             </Route>
 

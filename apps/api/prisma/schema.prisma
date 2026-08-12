@@ -147,6 +147,25 @@ model OrgUsuario {
   @@map("org_usuarios")
 }
 
+// Evento de telemetria de um totem (erro/aviso/info). O totem SOBE os erros
+// (X-Device-Token); o Console da Distribuição vê CROSS-TENANT (org, runAsSystem)
+// pra acompanhar bugs da frota. Tenant-scoped: a escrita do device injeta o
+// tenantId pelo contexto; a leitura org bypassa via runAsSystem.
+model TelemetriaEvento {
+  id           String   @id @default(uuid())
+  tenantId     String
+  dispositivoId String
+  nivel        String   @default("erro") // erro | aviso | info
+  mensagem     String
+  detalhe      String? // stack/contexto (texto)
+  appVersao    String?
+  createdAt    DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([createdAt])
+  @@map("telemetria_eventos")
+}
+
 // Aparência do totem POR LOJA (Fase 6). O admin configura e o totem aplica no
 // próximo sync (vai no `/catalogo/publicado`). O render é do app do totem; aqui
 // só guardamos os tokens. Cores em hex; `descansoMidias` = [{ url, tipo }].

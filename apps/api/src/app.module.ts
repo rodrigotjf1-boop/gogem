@@ -21,6 +21,7 @@ import { OpenDeliveryModule } from './open-delivery/open-delivery.module';
 import { KioskReleaseModule } from './kiosk-release/kiosk-release.module';
 import { PagamentosModule } from './pagamentos/pagamentos.module';
 import { OrgAuthModule } from './org-auth/org-auth.module';
+import { TelemetriaModule } from './telemetria/telemetria.module';
 import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
 
 @Module({
@@ -49,6 +50,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     KioskReleaseModule,
     PagamentosModule,
     OrgAuthModule,
+    TelemetriaModule,
   ],
   providers: [
     // Rate limiting global (por IP). Primeiro guard: barra o abuso antes de

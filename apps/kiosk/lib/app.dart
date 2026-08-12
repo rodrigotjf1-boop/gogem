@@ -5,6 +5,7 @@ import 'core/kiosk/kiosk_service.dart';
 import 'core/pareamento/device_token.dart';
 import 'core/router.dart';
 import 'core/telemetria/heartbeat.dart';
+import 'core/telemetria/telemetria_reporter.dart';
 import 'core/theme/gogem_theme.dart';
 import 'data/catalog/aparencia.dart';
 import 'data/catalog/catalog_sync.dart';
@@ -32,6 +33,9 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();
         // Telemetria: heartbeat periódico (só envia quando pareado).
         ref.read(heartbeatProvider.notifier).iniciar();
+        // Reporter de erros → Distribuição. Expõe a instância pros handlers
+        // globais (main) que rodam fora do ProviderScope.
+        TelemetriaReporter.instance = ref.read(telemetriaReporterProvider);
         // Modo quiosque: fixa a tela (best-effort; silencioso sem Device Owner).
         KioskService.entrar();
       });

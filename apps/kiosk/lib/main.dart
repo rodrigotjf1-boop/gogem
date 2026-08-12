@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:window_manager/window_manager.dart';
 import 'app.dart';
+import 'core/telemetria/telemetria_reporter.dart';
 
 /// Trava de quiosque no Windows (bloqueia fechar a janela — Alt+F4). Produção =
 /// true; para testar sem travar, buildar com --dart-define=GOGEM_KIOSK_LOCK=false.
@@ -12,8 +14,28 @@ import 'app.dart';
 /// ver docs/totem-windows.md), não código.
 const _kioskLock = bool.fromEnvironment('GOGEM_KIOSK_LOCK', defaultValue: true);
 
-Future<void> main() async {
+void main() {
+  // Zona guardada: erros assíncronos não capturados sobem pra a Distribuição
+  // (best-effort). O ensureInitialized + runApp precisam rodar NESTA zona.
+  runZonedGuarded(_bootstrap, (error, stack) {
+    TelemetriaReporter.instance
+        ?.reportar(error.toString(), detalhe: stack.toString());
+  });
+}
+
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Erros do Flutter (build/render/framework) → sobem pra a Distribuição, além
+  // do tratamento padrão (log/tela vermelha em debug).
+  final flutterOnError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    flutterOnError?.call(details);
+    TelemetriaReporter.instance?.reportar(
+      details.exceptionAsString(),
+      detalhe: details.stack?.toString(),
+    );
+  };
 
   if (Platform.isWindows) {
     // Totem em PC (F13). sqflite não tem plugin desktop → banco pelo FFI
