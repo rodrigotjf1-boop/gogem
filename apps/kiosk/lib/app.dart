@@ -9,6 +9,7 @@ import 'core/telemetria/telemetria_reporter.dart';
 import 'core/theme/gogem_theme.dart';
 import 'data/catalog/aparencia.dart';
 import 'data/catalog/catalog_sync.dart';
+import 'data/update/updater.dart';
 import 'domain/order/cart.dart';
 import 'domain/order/venda_sync.dart';
 
@@ -36,6 +37,8 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         // Reporter de erros → Distribuição. Expõe a instância pros handlers
         // globais (main) que rodam fora do ProviderScope.
         TelemetriaReporter.instance = ref.read(telemetriaReporterProvider);
+        // Update OBRIGATÓRIO: aplica no boot (não espera a janela de 3h).
+        ref.read(updaterProvider).verificarObrigatorio();
         // Modo quiosque: fixa a tela (best-effort; silencioso sem Device Owner).
         KioskService.entrar();
       });

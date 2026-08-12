@@ -54,3 +54,43 @@ export function usePublicarRelease() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['org-kiosk-releases'] }),
   });
 }
+
+// ── Windows (só download; sem auto-update) ──────────────────────────────────
+
+export interface WindowsBuild {
+  id: string;
+  versao: string;
+  url: string;
+  sha256: string;
+  notas: string | null;
+  ativo: boolean;
+  createdAt: string;
+}
+
+export function useWindowsBuilds(): UseQueryResult<WindowsBuild[]> {
+  return useQuery({
+    queryKey: ['org-windows-builds'],
+    queryFn: () => orgGet<WindowsBuild[]>('/kiosk/windows'),
+    retry: false,
+  });
+}
+
+export interface PublicarWindowsInput {
+  build: File;
+  versao: string;
+  notas?: string;
+}
+
+export function usePublicarWindows() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PublicarWindowsInput) => {
+      const form = new FormData();
+      form.append('build', input.build);
+      form.append('versao', input.versao);
+      if (input.notas) form.append('notas', input.notas);
+      return orgPost<WindowsBuild, FormData>('/kiosk/windows', form);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['org-windows-builds'] }),
+  });
+}

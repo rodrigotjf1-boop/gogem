@@ -129,6 +129,22 @@ model KioskRelease {
   @@map("kiosk_releases")
 }
 
+// Build do totem para WINDOWS. Diferente do APK: é só DOWNLOAD (não há
+// auto-update no Windows) — o operador baixa o .zip da pasta Release e segue o
+// tutorial (docs/totem-windows.md). GLOBAL (não tenant-scoped). `versao` livre
+// (string), não versionCode.
+model WindowsBuild {
+  id        String   @id @default(uuid())
+  versao    String   @unique
+  url       String
+  sha256    String
+  notas     String?
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("windows_builds")
+}
+
 // Usuário da ORGANIZAÇÃO (DMS) — acesso ao Console da Distribuição. É CROSS-TENANT
 // (fora da hierarquia por-tenant): NÃO tem tenantId e NÃO entra no
 // TENANT_SCOPED_MODELS, então o middleware não escopa. E-mail único GLOBAL. Auth
