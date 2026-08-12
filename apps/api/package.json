@@ -14,6 +14,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "backfill:forma-cartao": "ts-node src/scripts/backfill-forma-cartao.ts",
+    "seed:org-admin": "ts-node src/scripts/seed-org-admin.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

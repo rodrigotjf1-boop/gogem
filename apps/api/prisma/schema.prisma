@@ -129,6 +129,24 @@ model KioskRelease {
   @@map("kiosk_releases")
 }
 
+// Usuário da ORGANIZAÇÃO (DMS) — acesso ao Console da Distribuição. É CROSS-TENANT
+// (fora da hierarquia por-tenant): NÃO tem tenantId e NÃO entra no
+// TENANT_SCOPED_MODELS, então o middleware não escopa. E-mail único GLOBAL. Auth
+// própria (JWT com `tipo: 'org'`), separada do login do cliente. `papel` fica
+// simples por ora ('admin'); RBAC fino da org pode evoluir depois.
+model OrgUsuario {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  senhaHash String
+  nome      String
+  papel     String   @default("admin")
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("org_usuarios")
+}
+
 // Aparência do totem POR LOJA (Fase 6). O admin configura e o totem aplica no
 // próximo sync (vai no `/catalogo/publicado`). O render é do app do totem; aqui
 // só guardamos os tokens. Cores em hex; `descansoMidias` = [{ url, tipo }].
