@@ -151,11 +151,35 @@ String? _urlOuNull(dynamic v) {
 }
 
 class Categoria {
-  const Categoria({required this.id, required this.nome});
+  const Categoria({
+    required this.id,
+    required this.nome,
+    this.imagemUrl,
+    this.emoji,
+    this.cor,
+  });
   final String id;
   final String nome;
-  factory Categoria.fromJson(Map j) =>
-      Categoria(id: _id(j['id']), nome: '${j['nome'] ?? ''}');
+
+  /// Arte da categoria (roleta do totem): imagem ▸ emoji ▸ cor. Todos opcionais
+  /// — vêm do admin; sem eles o totem cai no emoji derivado do nome.
+  final String? imagemUrl;
+  final String? emoji;
+  final String? cor; // hex "#RRGGBB"
+
+  factory Categoria.fromJson(Map j) => Categoria(
+        id: _id(j['id']),
+        nome: '${j['nome'] ?? ''}',
+        imagemUrl: _urlOuNull(j['imagemUrl'] ?? j['imagem_url']),
+        emoji: () {
+          final e = j['emoji']?.toString().trim();
+          return (e == null || e.isEmpty) ? null : e;
+        }(),
+        cor: () {
+          final c = j['cor']?.toString().trim();
+          return (c == null || c.isEmpty) ? null : c;
+        }(),
+      );
 }
 
 class MenuSnapshot {

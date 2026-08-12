@@ -2,23 +2,43 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../data/catalog/catalog_models.dart';
+import '../catalogo/produto_imagem.dart';
 import 'gogen_tokens.dart';
 
 /// Roleta cilíndrica HORIZONTAL de categorias (rodapé do menu GoGen). Porta a
 /// física do template: projeção de cilindro deitado (item central = ativo),
 /// arrasto + inércia + snap, e destaque CONTÍNUO do centro (escala/cor/nitidez
 /// graduais). Rola sem começo nem fim (o último liga no primeiro).
+///
+/// A paleta é PARAMETRIZÁVEL (`trilho`/`corCentro`/`corLateral`) — assim a mesma
+/// roleta serve o tema GoGen (flame) e o brasa (dourado no escuro). A arte de
+/// cada item vem da própria categoria: imagem ▸ emoji ▸ emoji por palavra-chave.
 class GogenCategoryWheel extends StatefulWidget {
   const GogenCategoryWheel({
     super.key,
     required this.categorias,
     required this.selecionadaId,
     required this.onSelecionar,
+    this.trilho = GogenColors.grad,
+    this.corCentro = Colors.white,
+    this.corLateral = GogenColors.ink2,
+    this.artClara = false,
   });
 
   final List<Categoria> categorias;
   final String? selecionadaId;
   final ValueChanged<String> onSelecionar;
+
+  /// Gradiente do trilho de destaque no centro (flame no GoGen, dourado no brasa).
+  final Gradient trilho;
+
+  /// Cor do rótulo no centro (ativo) e nas laterais (esmaece até esta).
+  final Color corCentro;
+  final Color corLateral;
+
+  /// Em fundo escuro (brasa), o emoji/arte precisa de um "prato" claro atrás pra
+  /// não sumir. Em fundo claro (GoGen) fica sem prato.
+  final bool artClara;
 
   @override
   State<GogenCategoryWheel> createState() => _GogenCategoryWheelState();
@@ -123,7 +143,7 @@ class _GogenCategoryWheelState extends State<GogenCategoryWheel>
                   child: Container(
                     width: 200,
                     decoration: BoxDecoration(
-                      gradient: GogenColors.grad,
+                      gradient: widget.trilho,
                       borderRadius: BorderRadius.circular(28),
                       boxShadow: const [
                         BoxShadow(
@@ -154,7 +174,8 @@ class _GogenCategoryWheelState extends State<GogenCategoryWheel>
     final cN = math.max(0.0, 1 - ad); // proximidade do centro (0..1)
     final borda = math.min(1.0, (_vis - ad) / 0.7);
     final opacity = (0.14 + 0.86 * cos * cos) * borda;
-    final cor = Color.lerp(GogenColors.ink2, Colors.white, cN)!;
+    final cor = Color.lerp(widget.corLateral, widget.corCentro, cN)!;
+    final cat = widget.categorias[i];
 
     const w = 196.0;
     final m = Matrix4.identity()
@@ -182,18 +203,11 @@ class _GogenCategoryWheelState extends State<GogenCategoryWheel>
                 children: [
                   Transform.scale(
                     scale: 1 + 0.38 * cN,
-                    child: Text(
-                      gogenEmojiCategoria(widget.categorias[i].nome),
-                      style: TextStyle(
-                        fontSize: 54,
-                        // "dessatura" leve fora do centro via opacidade do texto
-                        color: Colors.black.withValues(alpha: 0.15 + 0.85 * cN),
-                      ),
-                    ),
+                    child: _Arte(categoria: cat, cN: cN, prato: widget.artClara),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    widget.categorias[i].nome,
+                    cat.nome,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -210,5 +224,42 @@ class _GogenCategoryWheelState extends State<GogenCategoryWheel>
         ),
       ),
     ];
+  }
+}
+
+/// Arte de uma categoria na roleta: imagem ▸ emoji ▸ emoji por palavra-chave.
+/// A `cor` da categoria vira o "prato" atrás do emoji; em fundo escuro (brasa)
+/// um prato claro garante contraste mesmo sem cor definida.
+class _Arte extends StatelessWidget {
+  const _Arte({required this.categoria, required this.cN, required this.prato});
+  final Categoria categoria;
+  final double cN;
+  final bool prato;
+
+  static const double _size = 62;
+
+  @override
+  Widget build(BuildContext context) {
+    if (categoria.imagemUrl != null) {
+      return SizedBox(
+        width: _size,
+        height: _size,
+        child: ProdutoImagem(
+          url: categoria.imagemUrl,
+          borderRadius: BorderRadius.circular(18),
+        ),
+      );
+    }
+    final emoji = categoria.emoji ?? gogenEmojiCategoria(categoria.nome);
+    final corCat = gogenCorHex(categoria.cor);
+    final fundo = corCat ?? (prato ? Colors.white.withValues(alpha: 0.10) : null);
+    return Container(
+      width: _size,
+      height: _size,
+      alignment: Alignment.center,
+      decoration:
+          fundo == null ? null : BoxDecoration(color: fundo, shape: BoxShape.circle),
+      child: Text(emoji, style: const TextStyle(fontSize: 40)),
+    );
   }
 }

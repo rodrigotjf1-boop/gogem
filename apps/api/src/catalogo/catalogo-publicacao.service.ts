@@ -204,6 +204,9 @@ export class CatalogoPublicacaoService {
         id: c.id,
         nome: c.nome,
         ordem: c.ordem,
+        imagemUrl: c.imagemUrl,
+        emoji: c.emoji,
+        cor: c.cor,
       })),
       produtos: produtos.map((p) => ({
         id: p.id,
@@ -267,7 +270,14 @@ function isUniqueViolation(err: unknown): boolean {
 
 interface CatalogoSnapshot {
   geradoEm: string;
-  categorias: Array<{ id: string; nome: string; ordem: number }>;
+  categorias: Array<{
+    id: string;
+    nome: string;
+    ordem: number;
+    imagemUrl: string | null;
+    emoji: string | null;
+    cor: string | null;
+  }>;
   produtos: Array<{
     id: string;
     nome: string;

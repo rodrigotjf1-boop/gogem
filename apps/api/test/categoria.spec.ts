@@ -45,7 +45,14 @@ describe('CategoriaService', () => {
     prisma.categoria.create.mockResolvedValue({ id: 'c-1' });
     await service.create({ nome: 'Bebidas', ordem: 2 });
     expect(prisma.categoria.create).toHaveBeenCalledWith({
-      data: { nome: 'Bebidas', ordem: 2, cardapioId: 'card-1' },
+      data: {
+        nome: 'Bebidas',
+        ordem: 2,
+        cardapioId: 'card-1',
+        imagemUrl: null,
+        emoji: null,
+        cor: null,
+      },
     });
     expect('tenantId' in prisma.categoria.create.mock.calls[0][0].data).toBe(
       false,
@@ -57,7 +64,14 @@ describe('CategoriaService', () => {
     prisma.categoria.create.mockResolvedValue({ id: 'c-2' });
     await service.create({ nome: 'Lanches' });
     expect(prisma.categoria.create).toHaveBeenCalledWith({
-      data: { nome: 'Lanches', ordem: 0, cardapioId: 'card-1' },
+      data: {
+        nome: 'Lanches',
+        ordem: 0,
+        cardapioId: 'card-1',
+        imagemUrl: null,
+        emoji: null,
+        cor: null,
+      },
     });
   });
 
@@ -74,7 +88,13 @@ describe('CategoriaService', () => {
     await service.update('c-1', { nome: 'Novo' });
     expect(prisma.categoria.update).toHaveBeenCalledWith({
       where: { id: 'c-1' },
-      data: { nome: 'Novo', ordem: undefined },
+      data: {
+        nome: 'Novo',
+        ordem: undefined,
+        imagemUrl: undefined,
+        emoji: undefined,
+        cor: undefined,
+      },
     });
     expect('tenantId' in prisma.categoria.update.mock.calls[0][0].where).toBe(
       false,
