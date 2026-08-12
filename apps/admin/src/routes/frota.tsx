@@ -3,7 +3,6 @@ import { Loader2, Plus, Radio, RotateCcw, Ban, CreditCard } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { AtualizacoesTotem } from '@/routes/frota-atualizacoes';
 import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -224,8 +223,6 @@ export default function FrotaPage() {
         }}
         onFechar={() => setRemovendo(undefined)}
       />
-
-      <AtualizacoesTotem />
     </section>
   );
 }
