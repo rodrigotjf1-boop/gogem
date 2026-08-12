@@ -22,10 +22,18 @@ on:
         description: 'OPCIONAL: JWT de gestor p/ pular o pareamento (dev). Em produção deixe VAZIO — o totem pareia no 1º boot (Frota).'
         required: false
         default: ''
+      payment_provider:
+        description: 'Provedor de pagamento do cartão: mppoint (maquininha Mercado Pago Point — produção) ou fake (bancada, aprova sozinho). PIX é sempre no QR do totem.'
+        required: true
+        default: 'mppoint'
+        type: choice
+        options:
+          - mppoint
+          - fake
 
 jobs:
   apk:
-    name: Flutter build apk (release, split-per-abi)
+    name: Flutter build apk (release, universal)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -95,6 +103,7 @@ jobs:
           --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
           --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }}
           --dart-define=GOGEM_PRINTER=usb
+          --dart-define=GOGEM_PAYMENT_PROVIDER=${{ inputs.payment_provider }}
 
       - name: Publicar APK universal como artifact
         uses: actions/upload-artifact@v4
