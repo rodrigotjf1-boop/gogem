@@ -8,7 +8,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../data/api/gogem_api.dart';
-import '../../data/catalog/catalog_sync.dart' show gogemApiProvider;
+import '../../data/catalog/aparencia.dart';
+import '../../data/catalog/catalog_sync.dart' show gogemApiProvider, aparenciaProvider;
+import '../gogen/gogen_pagamento.dart';
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 import '../../domain/order/order_repository.dart';
@@ -405,6 +407,29 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final cart = ref.watch(cartProvider);
+
+    // Template GoGen: mesmo comportamento (só PIX e Cartão; no cartão o cliente
+    // escolhe crédito/débito/vale na maquininha Mercado Pago Point), visual flame.
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) {
+      return GogenPagamentoView(
+        totalCentavos: cart.totalCentavos,
+        bloqueado: _bloqueado,
+        motivo: _motivo,
+        processando: _processando,
+        erro: _erroPagamento,
+        pointAtivo: _pointAtivo,
+        pixCopiaECola: _pixDesafio?.copiaECola,
+        pixContador: _mmss(_pixSegundos),
+        onVoltar: () => context.go('/identificacao'),
+        onVoltarCarrinho: () => context.go('/carrinho'),
+        onTentarNovamente: _portao,
+        onPagarPix: () => _pagar(FormaPagamento.pix),
+        onPagarCartao: () => _pagar(FormaPagamento.credito),
+        onCancelarPix: () => ref.read(pixProviderProvider).cancelar(),
+        onCancelarPoint: () => ref.read(pointProviderProvider).cancelar(),
+      );
+    }
 
     if (_bloqueado) {
       return Scaffold(

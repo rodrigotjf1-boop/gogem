@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
+import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../catalogo/produto_imagem.dart';
+import '../gogen/gogen_produto.dart';
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 
@@ -52,6 +54,32 @@ class _ProdutoScreenState extends ConsumerState<ProdutoScreen> {
     final unit = p.precoCentavos +
         [for (final l in _sel.values) ...l]
             .fold<int>(0, (s, o) => s + o.precoCentavosDelta);
+
+    void adicionar() {
+      ref.read(cartProvider.notifier).adicionar(ItemCarrinho(
+            produto: p,
+            selecoes: Map.of(_sel),
+            quantidade: _qtd,
+          ));
+      context.go('/carrinho');
+    }
+
+    // Template GoGen: mesma lógica, apresentação clara/flame.
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) {
+      return GogenProdutoView(
+        produto: p,
+        selecoes: _sel,
+        qtd: _qtd,
+        valido: valido,
+        totalCentavos: unit * _qtd,
+        onToggle: _toggle,
+        onMenos: () => setState(() => _qtd = _qtd > 1 ? _qtd - 1 : 1),
+        onMais: () => setState(() => _qtd++),
+        onAdicionar: adicionar,
+        onVoltar: () => context.pop(),
+      );
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -101,14 +129,7 @@ class _ProdutoScreenState extends ConsumerState<ProdutoScreen> {
             onMais: () => setState(() => _qtd++),
             habilitado: valido,
             totalCentavos: unit * _qtd,
-            onAdicionar: () {
-              ref.read(cartProvider.notifier).adicionar(ItemCarrinho(
-                    produto: p,
-                    selecoes: Map.of(_sel),
-                    quantidade: _qtd,
-                  ));
-              context.go('/carrinho');
-            },
+            onAdicionar: adicionar,
           ),
         ]),
       ),

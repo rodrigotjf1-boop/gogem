@@ -10,6 +10,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../../data/update/updater.dart';
 import '../../widgets/gogem_robot.dart';
+import '../gogen/gogen_standby.dart';
 
 /// Throttle do auto-update: checa no máximo 1x a cada 3h (a tela de descanso
 /// monta várias vezes ao dia; não queremos bater na API a cada retorno ao idle).
@@ -84,47 +85,61 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
           if (!bloqueado) context.go('/catalogo');
         },
         child: Stack(children: [
-          // Fundo: carrossel da loja OU o robô/branding padrão.
-          if (ap.carrossel)
-            _Carrossel(
-                midias: ap.descansoMidias,
-                intervalo: ap.descansoIntervaloSeg,
+          // Template GoGen: atrator próprio (flame + brasas + ticker). Substitui
+          // fundo+marca+chamada; os PORTÕES abaixo (near-end/bloqueado) seguem.
+          if (ap.gogen)
+            Positioned.fill(
+              child: GogenStandby(
+                nomeLoja: ap.nomeLoja,
+                logoUrl: ap.logoUrl,
+                chamada: ap.chamada,
+                precoIsca: ap.precoIsca,
                 anima: anima,
-                brasa: ap.editorial,
-                corKicker: ap.corPrimaria)
-          else
-            _FundoRobo(idle: _idle, caps: caps, anima: anima),
+              ),
+            )
+          else ...[
+            // Fundo: carrossel da loja OU o robô/branding padrão.
+            if (ap.carrossel)
+              _Carrossel(
+                  midias: ap.descansoMidias,
+                  intervalo: ap.descansoIntervaloSeg,
+                  anima: anima,
+                  brasa: ap.editorial,
+                  corKicker: ap.corPrimaria)
+            else
+              _FundoRobo(idle: _idle, caps: caps, anima: anima),
 
-          // Marca da loja no topo (logo ou nome).
-          Positioned(
-            top: 28, left: 0, right: 0,
-            child: Center(child: _Marca(ap: ap, t: t)),
-          ),
-
-          // Chamada + isca + pulso na base.
-          Positioned(
-            left: 0, right: 0, bottom: 40,
-            child: Column(children: [
-              if (ap.precoIsca != null) _IscaTag(texto: ap.precoIsca!, cor: ap.corPrimaria),
-              const SizedBox(height: 14),
-              Text(ap.chamada,
-                  textAlign: TextAlign.center,
-                  style: t.displayLarge?.copyWith(fontSize: 46)),
-              const SizedBox(height: 10),
-              Text('rápido · sem fila · do seu jeito',
-                  style: t.bodyMedium?.copyWith(fontSize: 20)),
-              const SizedBox(height: 34),
-              if (anima) const _PulseDot() else const SizedBox(height: 22),
-            ]),
-          ),
-
-          Positioned(
-            bottom: 8, left: 0, right: 0,
-            child: Center(
-              child: Text('GoGeM · by DMS',
-                  style: t.bodyMedium?.copyWith(color: GogemColors.inkDim, fontSize: 12)),
+            // Marca da loja no topo (logo ou nome).
+            Positioned(
+              top: 28, left: 0, right: 0,
+              child: Center(child: _Marca(ap: ap, t: t)),
             ),
-          ),
+
+            // Chamada + isca + pulso na base.
+            Positioned(
+              left: 0, right: 0, bottom: 40,
+              child: Column(children: [
+                if (ap.precoIsca != null) _IscaTag(texto: ap.precoIsca!, cor: ap.corPrimaria),
+                const SizedBox(height: 14),
+                Text(ap.chamada,
+                    textAlign: TextAlign.center,
+                    style: t.displayLarge?.copyWith(fontSize: 46)),
+                const SizedBox(height: 10),
+                Text('rápido · sem fila · do seu jeito',
+                    style: t.bodyMedium?.copyWith(fontSize: 20)),
+                const SizedBox(height: 34),
+                if (anima) const _PulseDot() else const SizedBox(height: 22),
+              ]),
+            ),
+
+            Positioned(
+              bottom: 8, left: 0, right: 0,
+              child: Center(
+                child: Text('GoGeM · by DMS',
+                    style: t.bodyMedium?.copyWith(color: GogemColors.inkDim, fontSize: 12)),
+              ),
+            ),
+          ],
 
           if (saude.pertoDoFim && !bloqueado)
             Positioned(

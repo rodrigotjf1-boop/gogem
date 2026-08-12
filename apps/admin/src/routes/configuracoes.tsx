@@ -151,11 +151,12 @@ export default function ConfiguracoesPage() {
             <SelectField
               label="Estilo do totem"
               value={form.temaPreset}
-              options={['padrao', 'brasa', 'burger']}
+              options={['padrao', 'brasa', 'burger', 'gogen']}
               rotulos={{
                 padrao: 'Padrão GoGeM',
                 brasa: 'Brasa (steakhouse)',
                 burger: 'Burger House (hambúrguer)',
+                gogen: 'GoGen (roleta / flame)',
               }}
               onChange={(v) =>
                 aplicarPreset(v as Aparencia['temaPreset'])

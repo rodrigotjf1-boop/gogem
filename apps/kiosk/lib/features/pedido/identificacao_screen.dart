@@ -3,8 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/cpf.dart';
+import '../../data/catalog/aparencia.dart';
+import '../../data/catalog/catalog_sync.dart' show aparenciaProvider;
 import '../../domain/order/cart.dart';
 import '../../widgets/numpad.dart';
+import '../gogen/gogen_identificacao.dart';
 
 /// CPF na nota — opcional. "PULAR" segue sem CPF; com CPF, só avança se os
 /// dígitos verificadores baterem.
@@ -30,9 +33,43 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
   void _salvarNome() =>
       ref.read(checkoutProvider.notifier).setCliente(_nomeCtrl.text.trim());
 
+  void _pular() {
+    _salvarNome();
+    ref.read(checkoutProvider.notifier).setCpf('');
+    context.go('/pagamento');
+  }
+
+  void _confirmar() {
+    _salvarNome();
+    ref.read(checkoutProvider.notifier).setCpf(_cpf);
+    context.go('/pagamento');
+  }
+
+  void _digito(String d) => setState(() {
+        if (_cpf.length < 11) _cpf += d;
+      });
+
+  void _apagar() => setState(() {
+        if (_cpf.isNotEmpty) _cpf = _cpf.substring(0, _cpf.length - 1);
+      });
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) {
+      return GogenIdentificacaoView(
+        nomeController: _nomeCtrl,
+        cpf: _cpf,
+        completo: _completo,
+        valido: _valido,
+        onDigito: _digito,
+        onApagar: _apagar,
+        onPular: _pular,
+        onConfirmar: _completo && _valido ? _confirmar : () {},
+        onVoltar: () => context.go('/carrinho'),
+      );
+    }
     return Scaffold(
       body: SafeArea(
         child: Column(children: [

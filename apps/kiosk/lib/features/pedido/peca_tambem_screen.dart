@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
+import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
-import '../../data/catalog/catalog_sync.dart' show menuProvider;
+import '../../data/catalog/catalog_sync.dart' show menuProvider, aparenciaProvider;
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
+import '../gogen/gogen_peca_tambem.dart';
 
 /// "Peça também" (F2): entre o carrinho e a identificação, sugere produtos
 /// configurados (upsell) nos itens do carrinho. Sem sugestões → segue direto.
@@ -82,6 +84,16 @@ class _PecaTambemScreenState extends ConsumerState<PecaTambemScreen> {
         });
       }
       return const Scaffold(body: SizedBox.shrink());
+    }
+
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) {
+      return GogenPecaTambemView(
+        sugeridos: sugeridos,
+        onAdicionar: _adicionar,
+        onVoltar: () => context.go('/carrinho'),
+        onContinuar: () => context.go('/identificacao'),
+      );
     }
 
     return Scaffold(

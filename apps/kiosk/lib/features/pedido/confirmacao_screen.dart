@@ -1,22 +1,26 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
+import '../../data/catalog/aparencia.dart';
+import '../../data/catalog/catalog_sync.dart';
 import '../../widgets/gogem_robot.dart';
+import '../gogen/gogen_sucesso.dart';
 
 /// Pedido confirmado: o robô "imprime" (paperExtent 0→1, animação única — sem
 /// loop, seguro para pumpAndSettle) e a SENHA aparece em fonte gigante.
 /// Auto-retorno ao descanso em 8s (regra da tela: senha visível mesmo se a
 /// impressora falhar — antecipa o comportamento da F4).
-class ConfirmacaoScreen extends StatefulWidget {
+class ConfirmacaoScreen extends ConsumerStatefulWidget {
   const ConfirmacaoScreen({super.key, required this.senha, this.impresso = true});
   final String senha;
   final bool impresso;
   @override
-  State<ConfirmacaoScreen> createState() => _ConfirmacaoScreenState();
+  ConsumerState<ConfirmacaoScreen> createState() => _ConfirmacaoScreenState();
 }
 
-class _ConfirmacaoScreenState extends State<ConfirmacaoScreen>
+class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _print = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400))
@@ -41,6 +45,18 @@ class _ConfirmacaoScreenState extends State<ConfirmacaoScreen>
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) {
+      return AnimatedBuilder(
+        animation: _print,
+        builder: (_, __) => GogenSucessoView(
+          senha: widget.senha,
+          impresso: widget.impresso,
+          entrada: _print.value,
+          onNovoPedido: () => context.go('/descanso'),
+        ),
+      );
+    }
     return Scaffold(
       body: SafeArea(
         // Rola se o conteúdo (senha gigante + aviso opcional) exceder telas

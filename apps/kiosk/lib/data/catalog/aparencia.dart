@@ -82,6 +82,9 @@ class Aparencia {
   bool get carrossel => descansoTipo == 'carrossel' && descansoMidias.isNotEmpty;
   bool get brasa => temaPreset == 'brasa';
   bool get burger => temaPreset == 'burger';
+  /// Template "GoGen" — layout PRÓPRIO (roleta de categorias, standby rico etc.),
+  /// não só cores. As telas do fluxo delegam pras variantes GoGen quando true.
+  bool get gogen => temaPreset == 'gogen';
 
   /// Presets "editoriais" (Brasa/Burger House): tipografia display maior, peso e
   /// caixa-alta, fundo/cards quentes. Agrupa os tratamentos comuns aos dois.

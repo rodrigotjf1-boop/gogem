@@ -6,6 +6,7 @@ import '../../core/util/moeda.dart';
 import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
+import '../gogen/gogen_catalogo_screen.dart';
 import 'produto_imagem.dart';
 
 /// Catálogo (Fatia 2): categorias + produtos do snapshot LOCAL (SQLite),
@@ -26,6 +27,8 @@ class _CatalogoScreenState extends ConsumerState<CatalogoScreen> {
     final menu = ref.watch(menuProvider);
     final sync = ref.watch(catalogSyncProvider);
     final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    // Template GoGen: layout próprio (roleta de categorias). Delega inteiro.
+    if (ap.gogen) return const GogenCatalogoScreen();
     final lateral = ap.cardLateral;
     return Scaffold(
       body: Container(
