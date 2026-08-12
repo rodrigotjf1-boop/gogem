@@ -113,6 +113,34 @@ class GogemApi {
     }
   }
 
+  /// POST /telemetria/evento — sobe um evento/erro do totem (device-authed).
+  /// Best-effort: sem token de dispositivo, nem tenta (nada a reportar antes do
+  /// pareamento). Silencioso — erros aqui NUNCA propagam (não derruba o app).
+  Future<void> reportarErro({
+    required String mensagem,
+    String? detalhe,
+    String nivel = 'erro',
+    String? appVersao,
+  }) async {
+    if (deviceToken == null || deviceToken!.isEmpty) return;
+    try {
+      await _client
+          .post(
+            Uri.parse('$baseUrl/telemetria/evento'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'nivel': nivel,
+              'mensagem': mensagem,
+              if (detalhe != null) 'detalhe': detalhe,
+              if (appVersao != null) 'appVersao': appVersao,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // telemetria é best-effort; nunca propaga.
+    }
+  }
+
   /// POST /vendas — lançamento idempotente do pedido pago (F6).
   /// `Idempotency-Key` = uuid do pedido: reenvio JAMAIS duplica; o backend
   /// responde 200/201 (ou 409 já-processado, tratado como sucesso pelo sync).
