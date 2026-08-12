@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
+import '../../data/catalog/aparencia.dart';
+import '../../data/catalog/catalog_sync.dart';
 import '../../domain/order/cart.dart';
+import '../gogen/gogen_carrinho.dart';
 
 class CarrinhoScreen extends ConsumerWidget {
   const CarrinhoScreen({super.key});
@@ -11,6 +14,8 @@ class CarrinhoScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context).textTheme;
     final cart = ref.watch(cartProvider);
+    final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    if (ap.gogen) return const GogenCarrinhoScreen();
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
