@@ -5,7 +5,11 @@ name: Build APK (totem)
 # URL da API publicada e um JWT de gestor (temporário, vale ~12h — até o
 # pareamento de dispositivo existir). Baixe o APK nos "Artifacts" do run.
 #
-# Os Tinker Board S são ARM 32-bit → instale o `app-armeabi-v7a-release.apk`.
+# APK UNIVERSAL: um único `app-release.apk` com armeabi-v7a + arm64 num arquivo
+# só. Serve pra frota mista (32 e 64-bit) — publique 1 arquivo / 1 versionCode
+# no Console → Versões e cada aparelho instala a parte que precisa. (O
+# /kiosk/latest devolve 1 APK por versionCode, sem distinguir ABI — por isso o
+# arquivo tem que carregar as duas.)
 
 on:
   workflow_dispatch:
@@ -84,18 +88,18 @@ jobs:
           cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
           echo "MainActivity + UsbPrinterPlugin instalados em $DEST"
 
-      - name: Build APK (armeabi-v7a + arm64)
+      - name: Build APK universal (v7 + arm64 num arquivo só)
         run: >-
-          flutter build apk --release --split-per-abi
+          flutter build apk --release
           --target-platform android-arm,android-arm64
           --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
           --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }}
           --dart-define=GOGEM_PRINTER=usb
 
-      - name: Publicar APKs como artifact
+      - name: Publicar APK universal como artifact
         uses: actions/upload-artifact@v4
         with:
           name: gogem-totem-apk
-          path: apps/kiosk/build/app/outputs/flutter-apk/*.apk
+          path: apps/kiosk/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
