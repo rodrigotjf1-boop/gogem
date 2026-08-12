@@ -1,8 +1,16 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Navigate,
+  Outlet,
+  Route,
+  Routes,
+} from 'react-router-dom';
 import { queryClient } from '@/lib/query';
 import { AuthProvider, RequireAuth } from '@/auth/auth-context';
+import { OrgAuthProvider, RequireOrgAuth } from '@/auth/org-auth-context';
 import { Shell } from '@/components/app-shell/shell';
+import { ConsoleShell } from '@/components/distribuicao/console-shell';
 import LoginPage from '@/routes/login';
 import RegistroPage from '@/routes/registro';
 import CatalogoPage from '@/routes/catalogo';
@@ -13,6 +21,9 @@ import OpenDeliveryPage from '@/routes/open-delivery';
 import PublicarPage from '@/routes/publicar';
 import RelatoriosPage from '@/routes/relatorios';
 import FrotaPage from '@/routes/frota';
+import OrgLoginPage from '@/routes/distribuicao/login';
+import DistribuicaoHome from '@/routes/distribuicao/home';
+import EmBreve from '@/routes/distribuicao/em-breve';
 
 export default function App() {
   return (
@@ -23,6 +34,36 @@ export default function App() {
             {/* Públicas */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/registro" element={<RegistroPage />} />
+
+            {/* Console da Distribuição (organização/DMS) — provider e sessão
+                PRÓPRIOS, isolados do admin do cliente. */}
+            <Route
+              element={
+                <OrgAuthProvider>
+                  <Outlet />
+                </OrgAuthProvider>
+              }
+            >
+              <Route path="/distribuicao/login" element={<OrgLoginPage />} />
+              <Route
+                path="/distribuicao"
+                element={
+                  <RequireOrgAuth>
+                    <ConsoleShell />
+                  </RequireOrgAuth>
+                }
+              >
+                <Route index element={<DistribuicaoHome />} />
+                <Route
+                  path="versoes"
+                  element={<EmBreve titulo="Versões" />}
+                />
+                <Route
+                  path="telemetria"
+                  element={<EmBreve titulo="Telemetria" />}
+                />
+              </Route>
+            </Route>
 
             {/* Privadas (dentro do Shell) */}
             <Route
