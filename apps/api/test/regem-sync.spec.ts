@@ -11,6 +11,8 @@ import type { CatalogoPublicacaoService } from '../src/catalogo/catalogo-publica
 function makeImport() {
   const prisma = {
     produto: { findMany: vi.fn(), update: vi.fn().mockResolvedValue({}) },
+    // Fonte da verdade: sem config = padrão (Regem espelha preço e disponib.).
+    integracao: { findFirst: vi.fn().mockResolvedValue(null) },
   };
   const client = { fetchCatalogo: vi.fn() };
   const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
@@ -121,6 +123,42 @@ describe('RegemImportService.sincronizarLinkados', () => {
     expect(prisma.produto.update.mock.calls[0][0].data).toEqual({
       disponivel: false,
     });
+  });
+
+  it('fonte da verdade: preço/disponibilidade DESLIGADOS não são sobrescritos', async () => {
+    const { service, prisma, client } = makeImport();
+    prisma.integracao.findFirst.mockResolvedValue({
+      config: { precoSegueRegem: 'false', dispSegueRegem: 'false' },
+    });
+    client.fetchCatalogo.mockResolvedValue({
+      geradoEm: '2026-07-31',
+      categorias: [],
+      produtos: [
+        {
+          codigo: '101',
+          nome: 'X-Burger', // igual → não muda nome
+          precoVenda: 34.9, // difere, mas preço está DESLIGADO
+          ativo: false,
+          disponivelCardapio: false, // difere, mas disponib. DESLIGADA
+          canaisPausados: ['totem'],
+        },
+      ],
+    });
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 'p1',
+        nome: 'X-Burger',
+        descricao: null,
+        precoCentavos: 2990,
+        disponivel: true,
+        externalRefs: [{ sistema: 'regem', codigo_pdv: '101' }],
+      },
+    ]);
+
+    const r = await service.sincronizarLinkados();
+    // Preço e disponibilidade gerenciados no GoGeM → nada a atualizar.
+    expect(r.alterados).toBe(0);
+    expect(prisma.produto.update).not.toHaveBeenCalled();
   });
 });
 

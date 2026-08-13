@@ -114,6 +114,18 @@ export class RegemImportService {
     const alvo = await this.cardapios.resolverAlvo(cardapioId);
     const catalogo = await this.client.fetchCatalogo();
 
+    // Fonte da verdade configurável (por loja): por padrão o Regem espelha
+    // preço e disponibilidade; a loja pode desligar cada um p/ gerir no GoGeM.
+    const integ = await this.prisma.integracao.findFirst({
+      where: { tipo: 'regem' },
+    });
+    const cfg = (integ?.config ?? {}) as {
+      precoSegueRegem?: string;
+      dispSegueRegem?: string;
+    };
+    const precoSegue = cfg.precoSegueRegem !== 'false'; // default: espelha
+    const dispSegue = cfg.dispSegueRegem !== 'false';
+
     // Estado desejado por código PDV (a partir do Regem).
     const desejado = new Map<
       string,
@@ -158,9 +170,9 @@ export class RegemImportService {
       verificados += 1;
 
       const patch: Record<string, unknown> = {};
-      if (alvoRegem.precoCentavos !== p.precoCentavos)
+      if (precoSegue && alvoRegem.precoCentavos !== p.precoCentavos)
         patch.precoCentavos = alvoRegem.precoCentavos;
-      if (alvoRegem.disponivel !== p.disponivel)
+      if (dispSegue && alvoRegem.disponivel !== p.disponivel)
         patch.disponivel = alvoRegem.disponivel;
       if (alvoRegem.nome !== p.nome) patch.nome = alvoRegem.nome;
       if ((alvoRegem.descricao ?? null) !== (p.descricao ?? null))

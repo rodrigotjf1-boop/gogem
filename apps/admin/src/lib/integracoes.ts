@@ -19,6 +19,7 @@ export interface IntegracaoCampo {
   secret: boolean;
   url?: boolean;
   ajuda?: string;
+  tipo?: 'texto' | 'toggle';
   preenchido: boolean;
   valor: string;
 }

@@ -287,25 +287,44 @@ function ConfigDialog({
       descricao="Credenciais guardadas por loja. Segredos ficam mascarados."
     >
       <form className="space-y-4" onSubmit={onSalvar} noValidate>
-        {integracao.campos.map((c) => (
-          <div key={c.key} className="space-y-2">
-            <Label htmlFor={`int-${c.key}`}>{c.label}</Label>
-            <Input
-              id={`int-${c.key}`}
-              type={c.secret ? 'password' : c.url ? 'url' : 'text'}
-              value={valores[c.key] ?? ''}
-              onChange={(e) => set(c.key, e.target.value)}
-              placeholder={
-                c.secret && c.preenchido ? '•••••••• (guardado)' : c.ajuda
-              }
-              disabled={ocupado}
-              autoComplete="off"
-            />
-            {c.ajuda && !c.secret && (
-              <p className="text-xs text-muted-foreground">{c.ajuda}</p>
-            )}
-          </div>
-        ))}
+        {integracao.campos.map((c) =>
+          c.tipo === 'toggle' ? (
+            <div key={c.key} className="space-y-1">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id={`int-${c.key}`}
+                  type="checkbox"
+                  checked={(valores[c.key] ?? 'true') !== 'false'}
+                  onChange={(e) => set(c.key, e.target.checked ? 'true' : 'false')}
+                  disabled={ocupado}
+                  className="size-4 rounded border-input accent-[hsl(var(--primary))]"
+                />
+                {c.label}
+              </label>
+              {c.ajuda && (
+                <p className="pl-6 text-xs text-muted-foreground">{c.ajuda}</p>
+              )}
+            </div>
+          ) : (
+            <div key={c.key} className="space-y-2">
+              <Label htmlFor={`int-${c.key}`}>{c.label}</Label>
+              <Input
+                id={`int-${c.key}`}
+                type={c.secret ? 'password' : c.url ? 'url' : 'text'}
+                value={valores[c.key] ?? ''}
+                onChange={(e) => set(c.key, e.target.value)}
+                placeholder={
+                  c.secret && c.preenchido ? '•••••••• (guardado)' : c.ajuda
+                }
+                disabled={ocupado}
+                autoComplete="off"
+              />
+              {c.ajuda && !c.secret && (
+                <p className="text-xs text-muted-foreground">{c.ajuda}</p>
+              )}
+            </div>
+          ),
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input
