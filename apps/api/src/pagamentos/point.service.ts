@@ -96,6 +96,7 @@ export class PointService {
           paymentId: null,
         },
       });
+      await this.registrar(upd, 'reuso');
       return this._view(upd);
     }
 
@@ -110,7 +111,51 @@ export class PointService {
     const criado = await this.prisma.pointPayment.create({
       data: data as Prisma.PointPaymentUncheckedCreateInput,
     });
+    await this.registrar(criado, 'criar');
     return this._view(criado);
+  }
+
+  /**
+   * F10 — grava um evento no journal append-only. Best-effort: NUNCA lança (o
+   * journal é auditoria, não pode derrubar a cobrança). O tenantId é injetado
+   * pelo middleware (o create roda no contexto do tenant da cobrança).
+   */
+  private async registrar(
+    p: Prisma.PointPaymentGetPayload<object>,
+    origem: string,
+  ): Promise<void> {
+    try {
+      const data = {
+        pointPaymentId: p.id,
+        orderId: p.orderId,
+        deviceId: p.deviceId,
+        intentId: p.intentId,
+        amountCents: p.amountCents,
+        tipo: p.tipo,
+        bandeira: p.bandeira,
+        status: p.status,
+        paymentId: p.paymentId,
+        origem,
+      } satisfies Omit<Prisma.PointJournalUncheckedCreateInput, 'tenantId'>;
+      await this.prisma.pointJournal.create({
+        data: data as Prisma.PointJournalUncheckedCreateInput,
+      });
+    } catch {
+      /* journal é best-effort — não bloqueia o fluxo de pagamento */
+    }
+  }
+
+  /** F10 — journal (append-only) das transações Point, p/ reconciliação. Por
+   * orderId (ordem cronológica) ou os mais recentes da loja. */
+  async journal(
+    orderId?: string,
+    limite = 200,
+  ): Promise<Prisma.PointJournalGetPayload<object>[]> {
+    return this.prisma.pointJournal.findMany({
+      where: orderId ? { orderId } : {},
+      orderBy: { createdAt: orderId ? 'asc' : 'desc' },
+      take: Math.min(Math.max(limite, 1), 500),
+    });
   }
 
   async status(id: string): Promise<PointView> {
@@ -135,12 +180,12 @@ export class PointService {
     if (p.status === 'pending') {
       const gw = await this.pspResolver.resolverPoint(p.deviceId);
       if (gw && p.intentId) await gw.cancelar(p.intentId);
-      return this._view(
-        await this.prisma.pointPayment.update({
-          where: { id: p.id },
-          data: { status: 'cancelled' },
-        }),
-      );
+      const cancelado = await this.prisma.pointPayment.update({
+        where: { id: p.id },
+        data: { status: 'cancelled' },
+      });
+      await this.registrar(cancelado, 'cancelar');
+      return this._view(cancelado);
     }
     return this._view(p);
   }
@@ -186,7 +231,7 @@ export class PointService {
         /* mantém o placeholder — não bloqueia a confirmação do pagamento */
       }
     }
-    return this.prisma.pointPayment.update({
+    const atualizado = await this.prisma.pointPayment.update({
       where: { id: p.id },
       data: {
         status: r.status,
@@ -195,6 +240,8 @@ export class PointService {
         bandeira,
       },
     });
+    await this.registrar(atualizado, 'reconciliacao');
+    return atualizado;
   }
 
   private _view(p: Prisma.PointPaymentGetPayload<object>): PointView {

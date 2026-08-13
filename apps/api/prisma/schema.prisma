@@ -54,6 +54,7 @@ model Tenant {
   aparencia          Aparencia?
   pixCharges         PixCharge[]
   pointPayments      PointPayment[]
+  pointJournal       PointJournal[]
 
   @@map("tenants")
 }
@@ -109,6 +110,33 @@ model PointPayment {
   @@index([tenantId])
   @@index([intentId])
   @@map("point_payments")
+}
+
+// F10 — journal (APPEND-ONLY) das transações Point: uma linha por EVENTO
+// (criar|reuso|cancelar|reconciliacao), com o snapshot do estado naquele
+// momento. `PointPayment` guarda o estado ATUAL (mutável); aqui fica o
+// histórico IMUTÁVEL, para auditoria e reconciliação com o Mercado Pago.
+model PointJournal {
+  id             String   @id @default(uuid())
+  tenantId       String
+  pointPaymentId String
+  orderId        String
+  deviceId       String
+  intentId       String?
+  amountCents    Int
+  tipo           String?
+  bandeira       String?
+  status         String
+  paymentId      String?
+  origem         String // criar|reuso|cancelar|reconciliacao
+  createdAt      DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([pointPaymentId])
+  @@index([orderId])
+  @@map("point_journal")
 }
 
 // Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o
