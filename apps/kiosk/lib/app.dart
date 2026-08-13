@@ -13,6 +13,10 @@ import 'data/update/updater.dart';
 import 'domain/order/cart.dart';
 import 'domain/order/venda_sync.dart';
 
+/// Modo quiosque (fixa a tela no Android). Ligado por padrão; nos builds de
+/// TESTE (celular) sai com `--dart-define=GOGEM_KIOSK_LOCK=false`.
+const _kioskLock = bool.fromEnvironment('GOGEM_KIOSK_LOCK', defaultValue: true);
+
 class GogemKioskApp extends ConsumerStatefulWidget {
   const GogemKioskApp({super.key, this.iniciarSync = true});
   /// Desligável em testes de widget (evita rede/banco reais).
@@ -40,7 +44,8 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         // Update OBRIGATÓRIO: aplica no boot (não espera a janela de 3h).
         ref.read(updaterProvider).verificarObrigatorio();
         // Modo quiosque: fixa a tela (best-effort; silencioso sem Device Owner).
-        KioskService.entrar();
+        // Desligável p/ build de TESTE (celular): --dart-define=GOGEM_KIOSK_LOCK=false.
+        if (_kioskLock) KioskService.entrar();
       });
     }
   }
