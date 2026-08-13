@@ -55,6 +55,7 @@ model Tenant {
   pixCharges         PixCharge[]
   pointPayments      PointPayment[]
   pointJournal       PointJournal[]
+  catalogoConflitos  CatalogoConflito[]
 
   @@map("tenants")
 }
@@ -137,6 +138,29 @@ model PointJournal {
   @@index([pointPaymentId])
   @@index([orderId])
   @@map("point_journal")
+}
+
+// F3 do espelho — fila de conflitos: quando a loja é a fonte da verdade de um
+// campo (preço/disponibilidade DESLIGADO) e o Regem diverge, registra aqui em
+// vez de sobrescrever. `status`: aberto (mostra) | ignorado ("manter o meu",
+// silencia até o Regem mudar o valor de novo). Um por (produto, campo).
+model CatalogoConflito {
+  id         String   @id @default(uuid())
+  tenantId   String
+  produtoId  String
+  codigo     String
+  campo      String // preco | disponivel
+  valorRegem String
+  valorGogem String
+  status     String   @default("aberto")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, produtoId, campo])
+  @@index([tenantId])
+  @@map("catalogo_conflitos")
 }
 
 // Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o

@@ -56,3 +56,37 @@ export function useImportarRegem() {
     },
   });
 }
+
+/** Conflito do espelho (loja é a fonte e o Regem diverge). */
+export interface RegemConflito {
+  id: string;
+  produtoId: string;
+  nome: string;
+  codigo: string;
+  campo: 'preco' | 'disponivel';
+  valorRegem: string;
+  valorGogem: string;
+}
+
+export function useRegemConflitos(): UseQueryResult<RegemConflito[]> {
+  return useQuery({
+    queryKey: ['regem', 'conflitos'],
+    queryFn: () => apiGet<RegemConflito[]>('/import/regem/conflitos'),
+    retry: false,
+  });
+}
+
+export function useResolverConflito() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; escolha: 'regem' | 'gogem' }) =>
+      apiPost<{ id: string }, { escolha: 'regem' | 'gogem' }>(
+        `/import/regem/conflitos/${v.id}/resolver`,
+        { escolha: v.escolha },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['regem', 'conflitos'] });
+      qc.invalidateQueries({ queryKey: ['produtos'] });
+    },
+  });
+}

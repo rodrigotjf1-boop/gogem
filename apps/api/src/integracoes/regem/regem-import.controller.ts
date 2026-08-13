@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -62,5 +63,27 @@ export class RegemImportController {
   @ApiOkResponse({ description: 'Marca um código do Regem como ignorado.' })
   ignorar(@Body() body: { codigo?: string }) {
     return this.service.ignorarNovidade(body?.codigo ?? '');
+  }
+
+  @Get('conflitos')
+  @Roles('gerente')
+  @ApiOkResponse({
+    description: 'Conflitos abertos (loja é a fonte e o Regem diverge).',
+  })
+  conflitos() {
+    return this.service.conflitos();
+  }
+
+  @Post('conflitos/:id/resolver')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Resolve um conflito (regem | gogem).' })
+  resolverConflito(
+    @Param('id') id: string,
+    @Body() body: { escolha?: 'regem' | 'gogem' },
+  ) {
+    return this.service.resolverConflito(
+      id,
+      body?.escolha === 'gogem' ? 'gogem' : 'regem',
+    );
   }
 }
