@@ -48,6 +48,18 @@ export class RelatorioController {
     return this.service.porProduto(de, ate);
   }
 
+  @Get('pagamentos')
+  pagamentos(@Query() q: RelatorioPeriodoDto) {
+    const { de, ate } = periodo(q);
+    return this.service.porPagamento(de, ate);
+  }
+
+  @Get('horarios')
+  horarios(@Query() q: RelatorioPeriodoDto) {
+    const { de, ate } = periodo(q);
+    return this.service.porHorario(de, ate);
+  }
+
   @Post('pedidos/:id/cancelar')
   cancelar(@Param('id') id: string, @Body() dto: CancelarPedidoDto) {
     return this.service.cancelar(id, dto.motivo, new Date());

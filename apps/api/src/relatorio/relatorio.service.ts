@@ -36,6 +36,21 @@ export interface ProdutoRanking {
   pedidos: number;
 }
 
+/** Vendas agrupadas por forma de pagamento (com bandeira quando houver). */
+export interface PagamentoRanking {
+  forma: string;
+  bandeira: string | null;
+  pedidos: number;
+  totalCentavos: number;
+}
+
+/** Vendas por hora do dia (0–23, fuso America/Sao_Paulo). */
+export interface HorarioPonto {
+  hora: number;
+  pedidos: number;
+  totalCentavos: number;
+}
+
 /**
  * RelatorioService — relatórios operacionais (Fase 7). Agrega em memória a
  * partir de leituras tenant-scoped (volume típico de totem por período é baixo).
@@ -160,6 +175,73 @@ export class RelatorioService {
         pedidos: v.pedidos,
       }))
       .sort((a, b) => b.quantidade - a.quantidade);
+  }
+
+  /**
+   * Vendas por forma de pagamento (pedidos `enviado`). Agrupa por forma +
+   * bandeira (ex.: "credito · visa", "pix"). Valor por pagamento vem de
+   * `pagamentos[].valor`; sem ele, rateia o total do pedido entre as formas.
+   */
+  async porPagamento(de: Date, ate: Date): Promise<PagamentoRanking[]> {
+    const pedidos = await this.prisma.pedido.findMany({
+      where: { status: 'enviado', createdAt: { gte: de, lte: ate } },
+      select: { pagamentos: true, totalCentavos: true },
+    });
+    const acc = new Map<string, PagamentoRanking>();
+    for (const p of pedidos) {
+      if (!Array.isArray(p.pagamentos) || p.pagamentos.length === 0) continue;
+      const n = p.pagamentos.length;
+      const vistos = new Set<string>();
+      for (const raw of p.pagamentos) {
+        if (!raw || typeof raw !== 'object') continue;
+        const pg = raw as Record<string, unknown>;
+        const forma = (pg.forma ?? '').toString().trim() || 'outro';
+        const bandeira =
+          typeof pg.bandeira === 'string' && pg.bandeira ? pg.bandeira : null;
+        const valor = Number(pg.valor) || Math.round(p.totalCentavos / n);
+        const key = `${forma}·${bandeira ?? ''}`;
+        const cur = acc.get(key) ?? {
+          forma,
+          bandeira,
+          pedidos: 0,
+          totalCentavos: 0,
+        };
+        cur.totalCentavos += valor;
+        if (!vistos.has(key)) {
+          cur.pedidos += 1;
+          vistos.add(key);
+        }
+        acc.set(key, cur);
+      }
+    }
+    return [...acc.values()].sort((a, b) => b.totalCentavos - a.totalCentavos);
+  }
+
+  /**
+   * Vendas por hora do dia (pedidos `enviado`), no fuso America/Sao_Paulo
+   * (o createdAt é UTC). Sempre devolve as 24 horas (com zeros) — bom p/ gráfico.
+   */
+  async porHorario(de: Date, ate: Date): Promise<HorarioPonto[]> {
+    const pedidos = await this.prisma.pedido.findMany({
+      where: { status: 'enviado', createdAt: { gte: de, lte: ate } },
+      select: { createdAt: true, totalCentavos: true },
+    });
+    const fmtHora = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    });
+    const horas: HorarioPonto[] = Array.from({ length: 24 }, (_, h) => ({
+      hora: h,
+      pedidos: 0,
+      totalCentavos: 0,
+    }));
+    for (const p of pedidos) {
+      const h = Number(fmtHora.format(p.createdAt)) % 24;
+      horas[h].pedidos += 1;
+      horas[h].totalCentavos += p.totalCentavos;
+    }
+    return horas;
   }
 
   /** Cancela um pedido (local). Propagação ao Regem = follow-up cross-repo. */

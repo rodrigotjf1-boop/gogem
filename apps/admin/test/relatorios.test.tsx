@@ -72,8 +72,10 @@ describe('Relatórios', () => {
     baseHandlers();
     montar('gerente');
 
-    expect(await screen.findByText('Hoje')).toBeInTheDocument();
-    expect(screen.getByText('Mês atual')).toBeInTheDocument();
+    // Ancora nos cards do resumo por um texto que só existe neles (o preset
+    // "Hoje" também renderiza um botão com esse texto).
+    expect(await screen.findByText('Mês atual')).toBeInTheDocument();
+    expect(screen.getByText('Últimos 7 dias')).toBeInTheDocument();
     // 30000 vs 20000 = +50%
     expect(await screen.findByText(/50% vs mês anterior/)).toBeInTheDocument();
   });

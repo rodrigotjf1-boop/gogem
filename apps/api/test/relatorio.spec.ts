@@ -134,4 +134,59 @@ describe('RelatorioService', () => {
     prisma.pedido.findFirst.mockResolvedValue(null);
     await expect(service.cancelar('nope', 'x', new Date())).rejects.toThrow();
   });
+
+  it('porPagamento agrupa por forma·bandeira e soma os valores', async () => {
+    const { service, prisma } = makeService();
+    prisma.pedido.findMany.mockResolvedValue([
+      {
+        totalCentavos: 3000,
+        pagamentos: [{ forma: 'credito', bandeira: 'visa', valor: 3000 }],
+      },
+      {
+        totalCentavos: 1000,
+        pagamentos: [{ forma: 'credito', bandeira: 'visa', valor: 1000 }],
+      },
+      {
+        totalCentavos: 500,
+        pagamentos: [{ forma: 'pix', valor: 500 }],
+      },
+      {
+        // sem `valor` → rateia o total entre as formas (aqui, 1 forma = total)
+        totalCentavos: 800,
+        pagamentos: [{ forma: 'dinheiro' }],
+      },
+    ]);
+
+    const out = await service.porPagamento(new Date(0), new Date());
+    // Ordenado por total desc.
+    expect(out[0]).toEqual({
+      forma: 'credito',
+      bandeira: 'visa',
+      pedidos: 2,
+      totalCentavos: 4000,
+    });
+    const pix = out.find((r) => r.forma === 'pix');
+    expect(pix).toEqual({
+      forma: 'pix',
+      bandeira: null,
+      pedidos: 1,
+      totalCentavos: 500,
+    });
+    const din = out.find((r) => r.forma === 'dinheiro');
+    expect(din?.totalCentavos).toBe(800); // rateio do total sem `valor`
+  });
+
+  it('porHorario devolve 24 horas e agrupa no fuso America/Sao_Paulo', async () => {
+    const { service, prisma } = makeService();
+    // 23:30 UTC = 20:30 em São Paulo (UTC-3).
+    prisma.pedido.findMany.mockResolvedValue([
+      { createdAt: new Date('2026-07-10T23:30:00Z'), totalCentavos: 1000 },
+      { createdAt: new Date('2026-07-10T23:45:00Z'), totalCentavos: 2000 },
+    ]);
+
+    const out = await service.porHorario(new Date(0), new Date());
+    expect(out).toHaveLength(24);
+    expect(out[20]).toEqual({ hora: 20, pedidos: 2, totalCentavos: 3000 });
+    expect(out[23].pedidos).toBe(0); // 23h UTC não vira 23h local
+  });
 });

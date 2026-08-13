@@ -46,6 +46,19 @@ export interface ProdutoRanking {
   pedidos: number;
 }
 
+export interface PagamentoRanking {
+  forma: string;
+  bandeira: string | null;
+  pedidos: number;
+  totalCentavos: number;
+}
+
+export interface HorarioPonto {
+  hora: number;
+  pedidos: number;
+  totalCentavos: number;
+}
+
 /** Filtro de período (datas YYYY-MM-DD) + status opcional. */
 export interface FiltroRelatorio {
   de: string;
@@ -84,6 +97,30 @@ export function useProdutos(
     queryKey: ['relatorios', 'produtos', f.de, f.ate],
     queryFn: () =>
       apiGet<ProdutoRanking[]>('/relatorios/produtos', { params: { de, ate } }),
+  });
+}
+
+export function useRelatorioPagamentos(
+  f: Pick<FiltroRelatorio, 'de' | 'ate'>,
+): UseQueryResult<PagamentoRanking[]> {
+  const { de, ate } = intervalo(f.de, f.ate);
+  return useQuery({
+    queryKey: ['relatorios', 'pagamentos', f.de, f.ate],
+    queryFn: () =>
+      apiGet<PagamentoRanking[]>('/relatorios/pagamentos', {
+        params: { de, ate },
+      }),
+  });
+}
+
+export function useRelatorioHorarios(
+  f: Pick<FiltroRelatorio, 'de' | 'ate'>,
+): UseQueryResult<HorarioPonto[]> {
+  const { de, ate } = intervalo(f.de, f.ate);
+  return useQuery({
+    queryKey: ['relatorios', 'horarios', f.de, f.ate],
+    queryFn: () =>
+      apiGet<HorarioPonto[]>('/relatorios/horarios', { params: { de, ate } }),
   });
 }
 
