@@ -8,7 +8,7 @@ import type { PrismaService } from '../src/prisma/prisma.service';
 function makeService() {
   const prisma = {
     tenant: { create: vi.fn() },
-    usuario: { create: vi.fn(), findFirst: vi.fn() },
+    usuario: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   };
   const jwt = { sign: vi.fn().mockReturnValue('tok.jwt') };
   const service = new AuthService(
@@ -78,17 +78,19 @@ describe('AuthService.login', () => {
   it('assina JWT com o payload correto quando a senha confere', async () => {
     const { service, prisma, jwt } = makeService();
     const senhaHash = await bcrypt.hash('segredo123', 10);
-    prisma.usuario.findFirst.mockResolvedValue({
-      id: 'u-9',
-      tenantId: 't-9',
-      nome: 'Ana',
-      email: 'ana@bar.com',
-      senhaHash,
-      papel: 'gerente',
-      unidadeId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+    prisma.usuario.findMany.mockResolvedValue([
+      {
+        id: 'u-9',
+        tenantId: 't-9',
+        nome: 'Ana',
+        email: 'ana@bar.com',
+        senhaHash,
+        papel: 'gerente',
+        unidadeId: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
 
     const res = await service.login({
       email: 'ana@bar.com',
@@ -107,13 +109,15 @@ describe('AuthService.login', () => {
 
   it('rejeita senha incorreta com Unauthorized', async () => {
     const { service, prisma } = makeService();
-    prisma.usuario.findFirst.mockResolvedValue({
-      id: 'u-9',
-      tenantId: 't-9',
-      email: 'ana@bar.com',
-      senhaHash: await bcrypt.hash('certa', 10),
-      papel: 'gerente',
-    });
+    prisma.usuario.findMany.mockResolvedValue([
+      {
+        id: 'u-9',
+        tenantId: 't-9',
+        email: 'ana@bar.com',
+        senhaHash: await bcrypt.hash('certa', 10),
+        papel: 'gerente',
+      },
+    ]);
     await expect(
       service.login({ email: 'ana@bar.com', senha: 'errada' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
@@ -121,9 +125,41 @@ describe('AuthService.login', () => {
 
   it('rejeita e-mail inexistente com Unauthorized', async () => {
     const { service, prisma } = makeService();
-    prisma.usuario.findFirst.mockResolvedValue(null);
+    prisma.usuario.findMany.mockResolvedValue([]);
     await expect(
       service.login({ email: 'x@y.com', senha: 'qualquer1' }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('multi-tenant: mesmo e-mail em 2 lojas → loga na conta cuja senha casa', async () => {
+    const { service, prisma, jwt } = makeService();
+    // Duas contas com o MESMO e-mail (único por tenant), senhas diferentes.
+    prisma.usuario.findMany.mockResolvedValue([
+      {
+        id: 'u-A',
+        tenantId: 't-A',
+        email: 'chef@rede.com',
+        senhaHash: await bcrypt.hash('senhaA', 10),
+        papel: 'gerente',
+      },
+      {
+        id: 'u-B',
+        tenantId: 't-B',
+        email: 'chef@rede.com',
+        senhaHash: await bcrypt.hash('senhaB', 10),
+        papel: 'presidente',
+      },
+    ]);
+
+    const res = await service.login({
+      email: 'chef@rede.com',
+      senha: 'senhaB',
+    });
+
+    // Logou na conta do tenant B (a que a senha casa), não na primeira.
+    expect(jwt.sign).toHaveBeenCalledWith(
+      expect.objectContaining({ sub: 'u-B', tenant: 't-B' }),
+    );
+    expect(res.user).not.toHaveProperty('senhaHash');
   });
 });

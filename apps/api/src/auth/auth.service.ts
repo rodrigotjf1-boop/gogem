@@ -57,26 +57,29 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResult> {
-    // Busca global por e-mail (login ainda não tem tenant no contexto).
-    // O `await` DENTRO do runAsSystem é obrigatório: mantém o contexto de
-    // sistema (AsyncLocalStorage) vivo durante a query + o middleware do Prisma.
-    // Com callback síncrono (`() => findFirst()`), o contexto é descartado antes
-    // do Prisma rodar e o middleware fail-closed derruba com 403.
-    const usuario = await TenantContext.runAsSystem(async () => {
-      const encontrado = await this.prisma.usuario.findFirst({
-        where: { email: dto.email },
-      });
-      return encontrado;
+    // O e-mail é único POR TENANT (não global) → o MESMO e-mail pode existir em
+    // várias lojas. Buscamos TODOS os registros e casamos pela senha, pra logar
+    // na conta certa (findFirst pegaria um arbitrário e falharia com a senha do
+    // outro tenant). Busca global: login ainda não tem tenant no contexto — o
+    // `await` DENTRO do runAsSystem mantém o AsyncLocalStorage vivo durante a
+    // query (callback síncrono descartaria o contexto e o middleware derruba).
+    const usuarios = await TenantContext.runAsSystem(async () => {
+      return this.prisma.usuario.findMany({ where: { email: dto.email } });
     });
 
-    const senhaOk =
-      usuario && (await bcrypt.compare(dto.senha, usuario.senhaHash));
-    if (!usuario || !senhaOk) {
+    let autenticado: Usuario | null = null;
+    for (const u of usuarios) {
+      if (await bcrypt.compare(dto.senha, u.senhaHash)) {
+        autenticado = u;
+        break;
+      }
+    }
+    if (!autenticado) {
       // Mensagem genérica: não revela se o e-mail existe.
       throw new UnauthorizedException('Credenciais inválidas.');
     }
 
-    return this.emitir(usuario);
+    return this.emitir(autenticado);
   }
 
   /** Assina o JWT e devolve o usuário sem o hash. */
