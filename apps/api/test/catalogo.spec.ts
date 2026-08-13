@@ -235,6 +235,55 @@ describe('CatalogoPublicacaoService — publicar', () => {
     expect(prisma.menuVersion.create.mock.calls[0][0].data.versao).toBe(3);
     expect(prisma.menuVersion.create.mock.calls[1][0].data.versao).toBe(4);
   });
+
+  it('categoria pausada some do snapshot (ela e seus produtos) e dos totais', async () => {
+    const { service, prisma } = makeService();
+    prisma.categoria.findMany.mockResolvedValue([
+      { id: 'c-1', nome: 'Lanches', ordem: 0, pausada: false },
+      { id: 'c-2', nome: 'Bebidas', ordem: 1, pausada: true },
+    ]);
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 'p-1',
+        nome: 'X-Salada',
+        descricao: null,
+        precoCentavos: 100,
+        disponivel: true,
+        imagemUrl: null,
+        selo: null,
+        categoriaId: 'c-1',
+        externalRefs: [],
+        complementos: [],
+      },
+      {
+        id: 'p-2',
+        nome: 'Refri',
+        descricao: null,
+        precoCentavos: 50,
+        disponivel: true,
+        imagemUrl: null,
+        selo: null,
+        categoriaId: 'c-2', // pertence à categoria pausada
+        externalRefs: [],
+        complementos: [],
+      },
+    ]);
+    prisma.menuVersion.aggregate.mockResolvedValue({ _max: { versao: 0 } });
+    prisma.menuVersion.create.mockResolvedValue({
+      versao: 1,
+      publishedAt: new Date('2026-08-13T00:00:00.000Z'),
+    });
+
+    const res = await service.publicar('u-1');
+    const snap = prisma.menuVersion.create.mock.calls[0][0].data.snapshot;
+
+    // A categoria pausada (c-2) e seu produto (p-2) somem; os ativos ficam.
+    expect(snap.categorias.map((c: { id: string }) => c.id)).toEqual(['c-1']);
+    expect(snap.produtos.map((p: { id: string }) => p.id)).toEqual(['p-1']);
+    // Totais refletem só o publicado.
+    expect(res.totais.categorias).toBe(1);
+    expect(res.totais.produtos).toBe(1);
+  });
 });
 
 describe('CatalogoPublicacaoService — publicado / versoes', () => {

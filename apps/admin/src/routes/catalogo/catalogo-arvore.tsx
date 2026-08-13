@@ -18,8 +18,10 @@ import { formatarBRL } from '@/lib/money';
 import {
   codigoPdvRegem,
   useCategorias,
+  usePausarCategoria,
   usePausarProduto,
   useProdutos,
+  useRemoverCategoria,
   useRemoverProduto,
   type Categoria,
   type Produto,
@@ -101,6 +103,7 @@ export function CatalogoArvore() {
               ativa={sel === c.id}
               onSelect={() => setSel(c.id)}
               onEditar={podeEscrever ? () => setEditandoCategoria(c) : undefined}
+              categoria={podeEscrever ? c : undefined}
             />
           ))}
           {cats.length === 0 && (
@@ -188,12 +191,20 @@ function CategoriaItem({
   ativa,
   onSelect,
   onEditar,
+  categoria,
 }: {
   nome: string;
   ativa: boolean;
   onSelect: () => void;
   onEditar?: () => void;
+  /** Categoria real (habilita pausar/excluir). Ausente = item "Todas". */
+  categoria?: Categoria;
 }) {
+  const pausar = usePausarCategoria();
+  const remover = useRemoverCategoria();
+  const [removendo, setRemovendo] = React.useState(false);
+  const pausada = categoria?.pausada ?? false;
+
   return (
     <li className="group flex items-center">
       <button
@@ -207,17 +218,65 @@ function CategoriaItem({
         }`}
       >
         {nome}
+        {pausada && (
+          <Badge variant="outline" className="ml-2 align-middle">
+            pausada
+          </Badge>
+        )}
       </button>
-      {onEditar && (
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Editar ${nome}`}
-          className="opacity-0 group-hover:opacity-100"
-          onClick={onEditar}
-        >
-          <Pencil className="size-3.5" aria-hidden />
-        </Button>
+      {categoria && (
+        <div className="flex items-center opacity-0 group-hover:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={pausada ? `Despausar ${nome}` : `Pausar ${nome}`}
+            title={
+              pausada
+                ? 'Despausar (volta ao totem)'
+                : 'Pausar a categoria inteira no totem'
+            }
+            disabled={pausar.isPending}
+            onClick={() =>
+              pausar.mutate({ id: categoria.id, pausada: !pausada })
+            }
+          >
+            {pausada ? (
+              <Play className="size-3.5 text-primary" aria-hidden />
+            ) : (
+              <Pause className="size-3.5" aria-hidden />
+            )}
+          </Button>
+          {onEditar && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Editar ${nome}`}
+              onClick={onEditar}
+            >
+              <Pencil className="size-3.5" aria-hidden />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={`Excluir ${nome}`}
+            onClick={() => setRemovendo(true)}
+          >
+            <Trash2 className="size-3.5 text-destructive" aria-hidden />
+          </Button>
+        </div>
+      )}
+
+      {categoria && (
+        <ConfirmDialog
+          aberto={removendo}
+          titulo="Excluir categoria"
+          descricao={`Excluir "${nome}"? Categoria com produtos vinculados não pode ser excluída — realoque ou exclua os produtos antes.`}
+          onConfirmar={async () => {
+            await remover.mutateAsync(categoria.id);
+          }}
+          onFechar={() => setRemovendo(false)}
+        />
       )}
     </li>
   );
