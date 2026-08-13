@@ -17,6 +17,10 @@ export interface ConectorCampo {
   url?: boolean;
   /** Opcional: não conta para "configurado"/ativação (ex.: device do Point). */
   opcional?: boolean;
+  /** Tipo de UI: 'texto' (default) ou 'toggle' (liga/desliga, valor 'true'/'false'). */
+  tipo?: 'texto' | 'toggle';
+  /** Valor padrão de um toggle quando ainda não foi salvo ('true'/'false'). */
+  padrao?: string;
 }
 
 /** Metadados de um conector. */
@@ -53,6 +57,28 @@ export const CONECTORES: Record<string, Conector> = {
         label: 'Token de sincronização',
         secret: true,
         ajuda: 'Token do equipamento "servidor local" no Regem (X-Sync-Token).',
+      },
+      {
+        key: 'precoSegueRegem',
+        label: 'Preço segue o Regem',
+        secret: false,
+        opcional: true,
+        tipo: 'toggle',
+        padrao: 'true',
+        ajuda:
+          'Ligado: a sincronização espelha o preço do Regem no totem. ' +
+          'Desligado: o preço é gerenciado no GoGeM (o Regem não sobrescreve).',
+      },
+      {
+        key: 'dispSegueRegem',
+        label: 'Disponibilidade segue o Regem',
+        secret: false,
+        opcional: true,
+        tipo: 'toggle',
+        padrao: 'true',
+        ajuda:
+          'Ligado: pausar/despausar no Regem reflete no totem. Desligado: a ' +
+          'disponibilidade é gerenciada no GoGeM.',
       },
     ],
   },

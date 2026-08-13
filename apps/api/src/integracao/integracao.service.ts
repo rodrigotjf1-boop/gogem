@@ -22,6 +22,7 @@ export interface IntegracaoCampoView {
   url?: boolean;
   ajuda?: string;
   opcional?: boolean;
+  tipo?: 'texto' | 'toggle';
   /** Há valor guardado para este campo? */
   preenchido: boolean;
   /** Valor exibível: o valor real (não-segredo) ou máscara/'' (segredo). */
@@ -290,6 +291,16 @@ export class IntegracaoService {
     const campos: IntegracaoCampoView[] = conector.campos.map((f) => {
       const bruto = (config[f.key] ?? '').trim();
       const preenchido = bruto.length > 0;
+      // Toggle: valor sempre presente (usa o padrão quando ainda não salvo).
+      const valor = f.secret
+        ? preenchido
+          ? SECRET_MASK
+          : ''
+        : f.tipo === 'toggle'
+          ? preenchido
+            ? bruto
+            : (f.padrao ?? 'true')
+          : bruto;
       return {
         key: f.key,
         label: f.label,
@@ -297,8 +308,9 @@ export class IntegracaoService {
         url: f.url,
         ajuda: f.ajuda,
         opcional: f.opcional,
+        tipo: f.tipo,
         preenchido,
-        valor: f.secret ? (preenchido ? SECRET_MASK : '') : bruto,
+        valor,
       };
     });
     return {
