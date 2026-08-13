@@ -1,7 +1,7 @@
 name: gogem_kiosk
 description: "GoGeM - app de autoatendimento (totem) by DMS"
 publish_to: "none"
-version: 0.5.18+23
+version: 0.5.19+24
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

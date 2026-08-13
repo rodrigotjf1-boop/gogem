@@ -22,14 +22,14 @@ on:
         description: 'OPCIONAL: JWT de gestor p/ pular o pareamento (dev). Em produção deixe VAZIO — o totem pareia no 1º boot (Frota).'
         required: false
         default: ''
-      payment_provider:
-        description: 'Provedor de pagamento do cartão: mppoint (maquininha Mercado Pago Point — produção) ou fake (bancada, aprova sozinho). PIX é sempre no QR do totem.'
+      perfil:
+        description: 'Perfil do build. producao = totem real (cartão na maquininha MP Point, impressora USB, quiosque travado). teste = celular (cartão aprova sozinho, impressora fake sem travas de papel/tampa, quiosque DESLIGADO).'
         required: true
-        default: 'mppoint'
+        default: 'producao'
         type: choice
         options:
-          - mppoint
-          - fake
+          - producao
+          - teste
 
 jobs:
   apk:
@@ -96,19 +96,28 @@ jobs:
           cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
           echo "MainActivity + UsbPrinterPlugin instalados em $DEST"
 
+      # Perfil → defines. producao = totem (maquininha/impressora/quiosque);
+      # teste = celular (tudo fake, SEM travas de papel/tampa, quiosque OFF).
       - name: Build APK universal (v7 + arm64 num arquivo só)
-        run: >-
-          flutter build apk --release
-          --target-platform android-arm,android-arm64
-          --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
-          --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }}
-          --dart-define=GOGEM_PRINTER=usb
-          --dart-define=GOGEM_PAYMENT_PROVIDER=${{ inputs.payment_provider }}
+        run: |
+          if [ "${{ inputs.perfil }}" = "teste" ]; then
+            PAY=fake; PRN=fake; KIOSK=false
+          else
+            PAY=mppoint; PRN=usb; KIOSK=true
+          fi
+          echo "perfil=${{ inputs.perfil }} → PAY=$PAY PRN=$PRN KIOSK=$KIOSK"
+          flutter build apk --release \
+            --target-platform android-arm,android-arm64 \
+            --dart-define=GOGEM_API_URL=${{ inputs.api_url }} \
+            --dart-define=GOGEM_DEV_JWT=${{ inputs.dev_jwt }} \
+            --dart-define=GOGEM_PRINTER=$PRN \
+            --dart-define=GOGEM_PAYMENT_PROVIDER=$PAY \
+            --dart-define=GOGEM_KIOSK_LOCK=$KIOSK
 
       - name: Publicar APK universal como artifact
         uses: actions/upload-artifact@v4
         with:
-          name: gogem-totem-apk
+          name: gogem-totem-apk-${{ inputs.perfil }}
           path: apps/kiosk/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
