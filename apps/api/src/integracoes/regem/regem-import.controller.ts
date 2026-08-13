@@ -1,6 +1,8 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Get,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -43,5 +45,22 @@ export class RegemImportController {
       );
     }
     return this.service.importar();
+  }
+
+  @Get('novidades')
+  @Roles('gerente')
+  @ApiOkResponse({
+    description:
+      'Diferenças Regem×GoGeM: novos (a importar) e órfãos (sumiram do Regem).',
+  })
+  novidades() {
+    return this.service.novidades();
+  }
+
+  @Post('ignorar')
+  @Roles('gerente')
+  @ApiOkResponse({ description: 'Marca um código do Regem como ignorado.' })
+  ignorar(@Body() body: { codigo?: string }) {
+    return this.service.ignorarNovidade(body?.codigo ?? '');
   }
 }

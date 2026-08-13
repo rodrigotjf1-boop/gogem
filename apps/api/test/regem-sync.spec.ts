@@ -12,7 +12,10 @@ function makeImport() {
   const prisma = {
     produto: { findMany: vi.fn(), update: vi.fn().mockResolvedValue({}) },
     // Fonte da verdade: sem config = padrão (Regem espelha preço e disponib.).
-    integracao: { findFirst: vi.fn().mockResolvedValue(null) },
+    integracao: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      update: vi.fn().mockResolvedValue({}),
+    },
   };
   const client = { fetchCatalogo: vi.fn() };
   const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
@@ -159,6 +162,59 @@ describe('RegemImportService.sincronizarLinkados', () => {
     // Preço e disponibilidade gerenciados no GoGeM → nada a atualizar.
     expect(r.alterados).toBe(0);
     expect(prisma.produto.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('RegemImportService.novidades / ignorarNovidade', () => {
+  it('lista novos (sem par + não-ignorados) e órfãos (sumiram do Regem)', async () => {
+    const { service, prisma, client } = makeImport();
+    prisma.integracao.findFirst.mockResolvedValue({
+      config: { ignorados: ['303'] },
+    });
+    client.fetchCatalogo.mockResolvedValue({
+      geradoEm: '2026-07-31',
+      categorias: [],
+      produtos: [
+        { codigo: '101', nome: 'X-Burger', precoVenda: 29.9 }, // linkado
+        { codigo: '202', nome: 'Novo Combo', precoVenda: 39.9 }, // novo
+        { codigo: '303', nome: 'Ignorado', precoVenda: 9.9 }, // ignorado
+      ],
+    });
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 'p1',
+        nome: 'X-Burger',
+        externalRefs: [{ sistema: 'regem', codigo_pdv: '101' }],
+      },
+      {
+        id: 'p9',
+        nome: 'Sumiu do Regem',
+        externalRefs: [{ sistema: 'regem', codigo_pdv: '999' }],
+      },
+    ]);
+
+    const out = await service.novidades();
+    expect(out.novos).toEqual([
+      { codigo: '202', nome: 'Novo Combo', precoCentavos: 3990 },
+    ]);
+    expect(out.orfaos).toEqual([
+      { id: 'p9', nome: 'Sumiu do Regem', codigo: '999' },
+    ]);
+  });
+
+  it('ignorarNovidade acrescenta o código sem duplicar', async () => {
+    const { service, prisma } = makeImport();
+    prisma.integracao.findFirst.mockResolvedValue({
+      id: 'int-1',
+      config: { ignorados: ['303'] },
+    });
+
+    const r = await service.ignorarNovidade('202');
+    expect(r.ignorados).toEqual(['303', '202']);
+    expect(prisma.integracao.update).toHaveBeenCalledWith({
+      where: { id: 'int-1' },
+      data: { config: { ignorados: ['303', '202'] } },
+    });
   });
 });
 
