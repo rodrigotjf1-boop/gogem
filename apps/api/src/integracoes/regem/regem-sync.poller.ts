@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CatalogoPublicacaoService } from '../../catalogo/catalogo-publicacao.service';
@@ -77,11 +78,30 @@ export class RegemSyncPoller implements OnModuleInit, OnModuleDestroy {
         await TenantContext.run({ tenantId }, async () => {
           try {
             const { alterados } = await this.imports.sincronizarLinkados();
+            const conflitos = await this.prisma.catalogoConflito.count({
+              where: { status: 'aberto' },
+            });
             if (alterados > 0) {
               await this.publicacao.publicar(null);
               this.logger.log(
                 `Regem→GoGeM: ${alterados} produto(s) sincronizado(s) (tenant ${tenantId}).`,
               );
+            }
+            // F4 — telemetria do espelho: registra o ciclo (só quando há
+            // atividade) para o Console da Distribuição. dispositivoId sentinela
+            // (o poller é server-side, não um totem).
+            if (alterados > 0 || conflitos > 0) {
+              const data = {
+                dispositivoId: 'espelho-regem',
+                nivel: conflitos > 0 ? 'aviso' : 'info',
+                mensagem: `Espelho Regem: ${alterados} sincronizado(s), ${conflitos} conflito(s) aberto(s)`,
+              } satisfies Omit<
+                Prisma.TelemetriaEventoUncheckedCreateInput,
+                'tenantId'
+              >;
+              await this.prisma.telemetriaEvento.create({
+                data: data as Prisma.TelemetriaEventoUncheckedCreateInput,
+              });
             }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
