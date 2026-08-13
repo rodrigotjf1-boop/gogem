@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CardapioService } from '../../cardapio/cardapio.service';
@@ -184,6 +184,84 @@ export class RegemImportService {
       }
     }
     return { verificados, alterados };
+  }
+
+  /**
+   * F2 do espelho — diferenças entre o Regem e o GoGeM (sem escrever nada):
+   * - `novos`: produtos do Regem SEM par no GoGeM (candidatos a importar), fora
+   *   os que a loja marcou "ignorar" (`config.ignorados`).
+   * - `orfaos`: produtos GoGeM linkados cujo código sumiu do catálogo do Regem
+   *   (candidatos a pausar/excluir).
+   */
+  async novidades(cardapioId?: string): Promise<{
+    novos: { codigo: string; nome: string; precoCentavos: number }[];
+    orfaos: { id: string; nome: string; codigo: string }[];
+  }> {
+    const alvo = await this.cardapios.resolverAlvo(cardapioId);
+    const catalogo = await this.client.fetchCatalogo();
+    const integ = await this.prisma.integracao.findFirst({
+      where: { tipo: 'regem' },
+    });
+    const cfg = (integ?.config ?? {}) as { ignorados?: unknown };
+    const ignorados = new Set(
+      (Array.isArray(cfg.ignorados) ? cfg.ignorados : []).map((c) =>
+        String(c).trim(),
+      ),
+    );
+
+    const regemPorCodigo = new Map<string, RegemProduto>();
+    for (const rp of catalogo.produtos) {
+      const c = (rp.codigo ?? '').trim();
+      if (c) regemPorCodigo.set(c, rp);
+    }
+
+    const produtos = await this.prisma.produto.findMany({
+      where: { cardapioId: alvo },
+      select: { id: true, nome: true, externalRefs: true },
+    });
+    const gogemCodigos = new Set<string>();
+    const orfaos: { id: string; nome: string; codigo: string }[] = [];
+    for (const p of produtos) {
+      const c = codigoRegem(p.externalRefs);
+      if (!c) continue;
+      gogemCodigos.add(c);
+      if (!regemPorCodigo.has(c)) {
+        orfaos.push({ id: p.id, nome: p.nome, codigo: c });
+      }
+    }
+
+    const novos: { codigo: string; nome: string; precoCentavos: number }[] = [];
+    for (const [codigo, rp] of regemPorCodigo) {
+      if (gogemCodigos.has(codigo) || ignorados.has(codigo)) continue;
+      novos.push({
+        codigo,
+        nome: rp.nome,
+        precoCentavos: reaisToCentavos(rp.precoVenda),
+      });
+    }
+    return { novos, orfaos };
+  }
+
+  /** F2 — marca um código do Regem como "ignorar" (some da lista de novidades). */
+  async ignorarNovidade(codigo: string): Promise<{ ignorados: string[] }> {
+    const alvo = (codigo ?? '').trim();
+    if (!alvo) throw new BadRequestException('Código inválido.');
+    const integ = await this.prisma.integracao.findFirst({
+      where: { tipo: 'regem' },
+    });
+    if (!integ) {
+      throw new BadRequestException('Integração Regem não configurada.');
+    }
+    const cfg = (integ.config ?? {}) as Record<string, unknown>;
+    const atuais = Array.isArray(cfg.ignorados)
+      ? cfg.ignorados.map((c) => String(c))
+      : [];
+    const ignorados = [...new Set([...atuais, alvo])];
+    await this.prisma.integracao.update({
+      where: { id: integ.id },
+      data: { config: { ...cfg, ignorados } as Prisma.InputJsonValue },
+    });
+    return { ignorados };
   }
 
   /**

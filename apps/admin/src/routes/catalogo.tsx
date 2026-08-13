@@ -1,6 +1,7 @@
 import { AlertTriangle } from 'lucide-react';
 import { useCardapios, useSelectedCardapio } from '@/lib/cardapios';
 import { CatalogoArvore } from './catalogo/catalogo-arvore';
+import { RegemNovidades } from './catalogo/regem-novidades';
 
 /**
  * Catálogo — árvore Categoria → Produto → Complemento → Opção (espelha o Regem):
@@ -19,6 +20,8 @@ export default function CatalogoPage() {
       </header>
 
       <CardapioSelector />
+
+      <RegemNovidades />
 
       <CatalogoArvore />
     </section>
