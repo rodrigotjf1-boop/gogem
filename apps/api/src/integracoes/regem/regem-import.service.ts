@@ -160,6 +160,19 @@ export class RegemImportService {
       },
     });
 
+    // Conflitos já registrados (F3): mapa (produtoId·campo) → estado.
+    const conflitoMap = new Map<
+      string,
+      { id: string; status: string; valorRegem: string }
+    >();
+    for (const c of await this.prisma.catalogoConflito.findMany()) {
+      conflitoMap.set(`${c.produtoId}·${c.campo}`, {
+        id: c.id,
+        status: c.status,
+        valorRegem: c.valorRegem,
+      });
+    }
+
     let verificados = 0;
     let alterados = 0;
     for (const p of produtos) {
@@ -182,8 +195,70 @@ export class RegemImportService {
         await this.prisma.produto.update({ where: { id: p.id }, data: patch });
         alterados += 1;
       }
+
+      // F3 — quando a loja é a fonte de um campo e o Regem diverge, vira fila.
+      await this.conciliar(
+        conflitoMap,
+        p.id,
+        codigo,
+        'preco',
+        String(alvoRegem.precoCentavos),
+        String(p.precoCentavos),
+        precoSegue,
+      );
+      await this.conciliar(
+        conflitoMap,
+        p.id,
+        codigo,
+        'disponivel',
+        String(alvoRegem.disponivel),
+        String(p.disponivel),
+        dispSegue,
+      );
     }
     return { verificados, alterados };
+  }
+
+  /**
+   * F3 — concilia um campo com a fila de conflitos:
+   * - segue o Regem (ou valores iguais) → limpa qualquer conflito do campo;
+   * - loja é a fonte e diverge → abre/atualiza o conflito, salvo se estiver
+   *   "ignorado" para exatamente este valor do Regem (não re-alerta à toa).
+   */
+  private async conciliar(
+    mapa: Map<string, { id: string; status: string; valorRegem: string }>,
+    produtoId: string,
+    codigo: string,
+    campo: string,
+    valorRegem: string,
+    valorGogem: string,
+    segueRegem: boolean,
+  ): Promise<void> {
+    const ex = mapa.get(`${produtoId}·${campo}`);
+    const diverge = valorRegem !== valorGogem;
+    if (segueRegem || !diverge) {
+      if (ex)
+        await this.prisma.catalogoConflito.delete({ where: { id: ex.id } });
+      return;
+    }
+    if (ex && ex.status === 'ignorado' && ex.valorRegem === valorRegem) return;
+    if (ex) {
+      await this.prisma.catalogoConflito.update({
+        where: { id: ex.id },
+        data: { status: 'aberto', valorRegem, valorGogem, codigo },
+      });
+    } else {
+      const data = {
+        produtoId,
+        codigo,
+        campo,
+        valorRegem,
+        valorGogem,
+      } satisfies Omit<Prisma.CatalogoConflitoUncheckedCreateInput, 'tenantId'>;
+      await this.prisma.catalogoConflito.create({
+        data: data as Prisma.CatalogoConflitoUncheckedCreateInput,
+      });
+    }
   }
 
   /**
@@ -262,6 +337,68 @@ export class RegemImportService {
       data: { config: { ...cfg, ignorados } as Prisma.InputJsonValue },
     });
     return { ignorados };
+  }
+
+  /** F3 — conflitos abertos (loja é a fonte e o Regem diverge), com o nome. */
+  async conflitos(): Promise<
+    Array<{
+      id: string;
+      produtoId: string;
+      nome: string;
+      codigo: string;
+      campo: string;
+      valorRegem: string;
+      valorGogem: string;
+    }>
+  > {
+    const rows = await this.prisma.catalogoConflito.findMany({
+      where: { status: 'aberto' },
+      orderBy: { updatedAt: 'desc' },
+    });
+    if (rows.length === 0) return [];
+    const produtos = await this.prisma.produto.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.produtoId))] } },
+      select: { id: true, nome: true },
+    });
+    const nomes = new Map(produtos.map((p) => [p.id, p.nome]));
+    return rows.map((r) => ({
+      id: r.id,
+      produtoId: r.produtoId,
+      nome: nomes.get(r.produtoId) ?? r.produtoId,
+      codigo: r.codigo,
+      campo: r.campo,
+      valorRegem: r.valorRegem,
+      valorGogem: r.valorGogem,
+    }));
+  }
+
+  /**
+   * F3 — resolve um conflito: 'regem' aplica o valor do Regem no produto e
+   * fecha; 'gogem' silencia (mantém o valor da loja até o Regem mudar de novo).
+   */
+  async resolverConflito(
+    id: string,
+    escolha: 'regem' | 'gogem',
+  ): Promise<{ id: string }> {
+    const c = await this.prisma.catalogoConflito.findFirst({ where: { id } });
+    if (!c) throw new BadRequestException('Conflito não encontrado.');
+    if (escolha === 'regem') {
+      const patch =
+        c.campo === 'preco'
+          ? { precoCentavos: Number(c.valorRegem) || 0 }
+          : { disponivel: c.valorRegem === 'true' };
+      await this.prisma.produto.update({
+        where: { id: c.produtoId },
+        data: patch,
+      });
+      await this.prisma.catalogoConflito.delete({ where: { id: c.id } });
+    } else {
+      await this.prisma.catalogoConflito.update({
+        where: { id: c.id },
+        data: { status: 'ignorado' },
+      });
+    }
+    return { id };
   }
 
   /**

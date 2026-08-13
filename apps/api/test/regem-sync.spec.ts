@@ -16,6 +16,13 @@ function makeImport() {
       findFirst: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({}),
     },
+    catalogoConflito: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findFirst: vi.fn(),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue({}),
+    },
   };
   const client = { fetchCatalogo: vi.fn() };
   const cardapios = { resolverAlvo: vi.fn().mockResolvedValue('card-1') };
@@ -214,6 +221,86 @@ describe('RegemImportService.novidades / ignorarNovidade', () => {
     expect(prisma.integracao.update).toHaveBeenCalledWith({
       where: { id: 'int-1' },
       data: { config: { ignorados: ['303', '202'] } },
+    });
+  });
+});
+
+describe('RegemImportService — conflitos (F3)', () => {
+  it('loja é a fonte do preço e o Regem diverge → abre conflito', async () => {
+    const { service, prisma, client } = makeImport();
+    prisma.integracao.findFirst.mockResolvedValue({
+      config: { precoSegueRegem: 'false' }, // preço gerido no GoGeM
+    });
+    client.fetchCatalogo.mockResolvedValue({
+      geradoEm: '2026-07-31',
+      categorias: [],
+      produtos: [
+        {
+          codigo: '101',
+          nome: 'X-Burger',
+          precoVenda: 34.9, // diverge do GoGeM (29,90)
+          ativo: true,
+          disponivelCardapio: true,
+        },
+      ],
+    });
+    prisma.produto.findMany.mockResolvedValue([
+      {
+        id: 'p1',
+        nome: 'X-Burger',
+        descricao: null,
+        precoCentavos: 2990,
+        disponivel: true,
+        externalRefs: [{ sistema: 'regem', codigo_pdv: '101' }],
+      },
+    ]);
+
+    await service.sincronizarLinkados();
+    // Preço não sobrescrito; conflito aberto com os dois valores.
+    expect(prisma.produto.update).not.toHaveBeenCalled();
+    expect(prisma.catalogoConflito.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        produtoId: 'p1',
+        campo: 'preco',
+        valorRegem: '3490',
+        valorGogem: '2990',
+      }),
+    });
+  });
+
+  it('resolver "regem" aplica o valor do Regem no produto e fecha', async () => {
+    const { service, prisma } = makeImport();
+    prisma.catalogoConflito.findFirst.mockResolvedValue({
+      id: 'cf1',
+      produtoId: 'p1',
+      campo: 'preco',
+      valorRegem: '3490',
+    });
+
+    await service.resolverConflito('cf1', 'regem');
+    expect(prisma.produto.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: { precoCentavos: 3490 },
+    });
+    expect(prisma.catalogoConflito.delete).toHaveBeenCalledWith({
+      where: { id: 'cf1' },
+    });
+  });
+
+  it('resolver "gogem" silencia (status ignorado), sem tocar no produto', async () => {
+    const { service, prisma } = makeImport();
+    prisma.catalogoConflito.findFirst.mockResolvedValue({
+      id: 'cf1',
+      produtoId: 'p1',
+      campo: 'preco',
+      valorRegem: '3490',
+    });
+
+    await service.resolverConflito('cf1', 'gogem');
+    expect(prisma.produto.update).not.toHaveBeenCalled();
+    expect(prisma.catalogoConflito.update).toHaveBeenCalledWith({
+      where: { id: 'cf1' },
+      data: { status: 'ignorado' },
     });
   });
 });
