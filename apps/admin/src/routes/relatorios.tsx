@@ -12,6 +12,8 @@ import {
   useCancelarPedido,
   usePedidos,
   useProdutos,
+  useRelatorioHorarios,
+  useRelatorioPagamentos,
   useResumo,
   type FaturamentoCard,
   type PedidoRelatorio,
@@ -51,7 +53,18 @@ export default function RelatoriosPage() {
   const [de, setDe] = React.useState(padrao.de);
   const [ate, setAte] = React.useState(padrao.ate);
   const [status, setStatus] = React.useState<PedidoStatus | 'todos'>('todos');
-  const [aba, setAba] = React.useState<'pedidos' | 'produtos'>('pedidos');
+  const [aba, setAba] = React.useState<
+    'pedidos' | 'produtos' | 'pagamentos' | 'horarios'
+  >('pedidos');
+
+  // Presets de período: define de/ate pros últimos N dias (até hoje).
+  function ultimosDias(dias: number) {
+    const hoje = new Date();
+    const ini = new Date(hoje);
+    ini.setDate(ini.getDate() - (dias - 1));
+    setDe(iso(ini));
+    setAte(iso(hoje));
+  }
 
   return (
     <section className="mx-auto max-w-5xl space-y-6">
@@ -89,6 +102,17 @@ export default function RelatoriosPage() {
             className="w-40"
           />
         </div>
+        <div className="flex flex-wrap items-center gap-1 self-end">
+          <Button variant="outline" size="sm" onClick={() => ultimosDias(1)}>
+            Hoje
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => ultimosDias(7)}>
+            Última semana
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => ultimosDias(30)}>
+            Último mês
+          </Button>
+        </div>
         {aba === 'pedidos' && (
           <div className="space-y-1">
             <Label htmlFor="rel-status">Status</Label>
@@ -116,17 +140,27 @@ export default function RelatoriosPage() {
         <TabButton ativo={aba === 'produtos'} onClick={() => setAba('produtos')}>
           Ranking de produtos
         </TabButton>
+        <TabButton
+          ativo={aba === 'pagamentos'}
+          onClick={() => setAba('pagamentos')}
+        >
+          Por pagamento
+        </TabButton>
+        <TabButton ativo={aba === 'horarios'} onClick={() => setAba('horarios')}>
+          Por horário
+        </TabButton>
       </div>
 
-      {aba === 'pedidos' ? (
+      {aba === 'pedidos' && (
         <PedidosTabela
           de={de}
           ate={ate}
           status={status === 'todos' ? undefined : status}
         />
-      ) : (
-        <ProdutosTabela de={de} ate={ate} />
       )}
+      {aba === 'produtos' && <ProdutosTabela de={de} ate={ate} />}
+      {aba === 'pagamentos' && <PagamentosTabela de={de} ate={ate} />}
+      {aba === 'horarios' && <HorariosBloco de={de} ate={ate} />}
     </section>
   );
 }
@@ -394,6 +428,164 @@ function ProdutosTabela({ de, ate }: { de: string; ate: string }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function PagamentosTabela({ de, ate }: { de: string; ate: string }) {
+  const { data, isLoading, isError, refetch } = useRelatorioPagamentos({
+    de,
+    ate,
+  });
+  if (isLoading) return <Carregando texto="Somando por forma de pagamento…" />;
+  if (isError) return <ErroBloco onRetry={() => refetch()} />;
+  if (!data || data.length === 0)
+    return (
+      <VazioBloco
+        icone={<BarChart3 className="size-5" aria-hidden />}
+        titulo="Sem vendas no período"
+        texto="Usa apenas pedidos enviados ao Regem."
+      />
+    );
+
+  const total = data.reduce((s, r) => s + r.totalCentavos, 0) || 1;
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border">
+      <table className="w-full text-sm">
+        <caption className="sr-only">Vendas por forma de pagamento</caption>
+        <thead className="bg-secondary/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="px-4 py-2 font-medium">Forma</th>
+            <th className="px-4 py-2 text-right font-medium">Pedidos</th>
+            <th className="px-4 py-2 text-right font-medium">Total</th>
+            <th className="px-4 py-2 text-right font-medium">%</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {data.map((r) => (
+            <tr
+              key={`${r.forma}·${r.bandeira ?? ''}`}
+              className="hover:bg-secondary/30"
+            >
+              <td className="px-4 py-2">
+                <span className="font-medium capitalize">{r.forma}</span>
+                {r.bandeira && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {r.bandeira}
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                {r.pedidos}
+              </td>
+              <td className="px-4 py-2 text-right font-mono font-semibold">
+                {formatarBRL(r.totalCentavos)}
+              </td>
+              <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                {Math.round((r.totalCentavos / total) * 100)}%
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function HorariosBloco({ de, ate }: { de: string; ate: string }) {
+  const { data, isLoading, isError, refetch } = useRelatorioHorarios({
+    de,
+    ate,
+  });
+  const [modo, setModo] = React.useState<'grafico' | 'tabela'>('grafico');
+  if (isLoading) return <Carregando texto="Distribuindo por horário…" />;
+  if (isError) return <ErroBloco onRetry={() => refetch()} />;
+  const horas = data ?? [];
+  if (horas.every((h) => h.pedidos === 0))
+    return (
+      <VazioBloco
+        icone={<BarChart3 className="size-5" aria-hidden />}
+        titulo="Sem vendas no período"
+        texto="Usa apenas pedidos enviados ao Regem."
+      />
+    );
+
+  const maior = Math.max(...horas.map((h) => h.totalCentavos), 1);
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end gap-1">
+        <Button
+          variant={modo === 'grafico' ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() => setModo('grafico')}
+        >
+          Gráfico
+        </Button>
+        <Button
+          variant={modo === 'tabela' ? 'primary' : 'outline'}
+          size="sm"
+          onClick={() => setModo('tabela')}
+        >
+          Tabela
+        </Button>
+      </div>
+
+      {modo === 'grafico' ? (
+        <div className="overflow-x-auto rounded-lg border border-border p-4">
+          <div className="flex h-56 min-w-[640px] items-end gap-1">
+            {horas.map((h) => (
+              <div
+                key={h.hora}
+                className="flex flex-1 flex-col items-center gap-1"
+                title={`${String(h.hora).padStart(2, '0')}h · ${h.pedidos} pedido(s) · ${formatarBRL(h.totalCentavos)}`}
+              >
+                <div
+                  className="w-full rounded-t bg-primary"
+                  style={{
+                    height: `${Math.max(2, (h.totalCentavos / maior) * 100)}%`,
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">
+                  {String(h.hora).padStart(2, '0')}
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Faturamento por hora do dia (fuso de Brasília).
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-border">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Vendas por horário</caption>
+            <thead className="bg-secondary/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">Hora</th>
+                <th className="px-4 py-2 text-right font-medium">Pedidos</th>
+                <th className="px-4 py-2 text-right font-medium">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {horas
+                .filter((h) => h.pedidos > 0)
+                .map((h) => (
+                  <tr key={h.hora} className="hover:bg-secondary/30">
+                    <td className="px-4 py-2 font-mono">
+                      {String(h.hora).padStart(2, '0')}h
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono text-muted-foreground">
+                      {h.pedidos}
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono font-semibold">
+                      {formatarBRL(h.totalCentavos)}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
