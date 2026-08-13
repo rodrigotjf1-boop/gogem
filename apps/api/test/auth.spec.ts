@@ -151,7 +151,10 @@ describe('AuthService.login', () => {
       },
     ]);
 
-    const res = await service.login({ email: 'chef@rede.com', senha: 'senhaB' });
+    const res = await service.login({
+      email: 'chef@rede.com',
+      senha: 'senhaB',
+    });
 
     // Logou na conta do tenant B (a que a senha casa), não na primeira.
     expect(jwt.sign).toHaveBeenCalledWith(
