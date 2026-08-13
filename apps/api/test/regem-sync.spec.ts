@@ -306,7 +306,11 @@ describe('RegemImportService — conflitos (F3)', () => {
 });
 
 function makePoller() {
-  const prisma = { integracao: { findMany: vi.fn() } };
+  const prisma = {
+    integracao: { findMany: vi.fn() },
+    catalogoConflito: { count: vi.fn().mockResolvedValue(0) },
+    telemetriaEvento: { create: vi.fn().mockResolvedValue({}) },
+  };
   const config = { get: vi.fn() };
   const imports = { sincronizarLinkados: vi.fn() };
   const publicacao = { publicar: vi.fn().mockResolvedValue({}) };
@@ -359,6 +363,37 @@ describe('RegemSyncPoller.tick', () => {
 
     expect(imports.sincronizarLinkados).toHaveBeenCalledTimes(2);
     expect(publicacao.publicar).toHaveBeenCalledTimes(1); // só o t2 que deu certo
+  });
+
+  it('F4 — registra telemetria do espelho quando há sync ou conflitos', async () => {
+    const { poller, prisma, imports } = makePoller();
+    prisma.integracao.findMany.mockResolvedValue([{ tenantId: 't1' }]);
+    imports.sincronizarLinkados.mockResolvedValue({
+      verificados: 5,
+      alterados: 0,
+    });
+    prisma.catalogoConflito.count.mockResolvedValue(2); // sem sync, mas há conflitos
+
+    await poller.tick();
+
+    expect(prisma.telemetriaEvento.create).toHaveBeenCalledTimes(1);
+    const data = prisma.telemetriaEvento.create.mock.calls[0][0].data;
+    expect(data.dispositivoId).toBe('espelho-regem');
+    expect(data.nivel).toBe('aviso'); // há conflitos → aviso
+    expect(data.mensagem).toContain('2 conflito(s)');
+  });
+
+  it('F4 — sem sync e sem conflitos NÃO registra telemetria (não spamma)', async () => {
+    const { poller, prisma, imports } = makePoller();
+    prisma.integracao.findMany.mockResolvedValue([{ tenantId: 't1' }]);
+    imports.sincronizarLinkados.mockResolvedValue({
+      verificados: 5,
+      alterados: 0,
+    });
+    prisma.catalogoConflito.count.mockResolvedValue(0);
+
+    await poller.tick();
+    expect(prisma.telemetriaEvento.create).not.toHaveBeenCalled();
   });
 });
 
