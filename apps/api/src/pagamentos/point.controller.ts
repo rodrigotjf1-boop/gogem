@@ -37,6 +37,15 @@ export class PointController {
     return this.service.listarDevices();
   }
 
+  // Admin (JWT): F10 — journal append-only das transações Point (reconciliação).
+  // ANTES de `:id` para não ser capturado pela rota de status.
+  @Get('journal')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('gerente')
+  journal(@Query('orderId') orderId?: string) {
+    return this.service.journal(orderId);
+  }
+
   @Post()
   @UseGuards(DeviceTokenGuard)
   criar(@DeviceCtx() dev: DeviceUser | undefined, @Body() dto: CriarPointDto) {
