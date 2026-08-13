@@ -198,9 +198,20 @@ export class CatalogoPublicacaoService {
       upsellPorProduto.set(r.produtoId, lista);
     }
 
+    // Categorias pausadas somem do totem — elas E seus produtos. Calculamos as
+    // listas "ativas" uma vez e derivamos snapshot + totais delas (senão os
+    // totais contariam itens que não foram publicados).
+    const pausadaIds = new Set(
+      categorias.filter((c) => c.pausada).map((c) => c.id),
+    );
+    const categoriasAtivas = categorias.filter((c) => !c.pausada);
+    const produtosAtivos = produtos.filter(
+      (p) => !(p.categoriaId && pausadaIds.has(p.categoriaId)),
+    );
+
     const snapshot: CatalogoSnapshot = {
       geradoEm: new Date().toISOString(),
-      categorias: categorias.map((c) => ({
+      categorias: categoriasAtivas.map((c) => ({
         id: c.id,
         nome: c.nome,
         ordem: c.ordem,
@@ -208,7 +219,7 @@ export class CatalogoPublicacaoService {
         emoji: c.emoji,
         cor: c.cor,
       })),
-      produtos: produtos.map((p) => ({
+      produtos: produtosAtivos.map((p) => ({
         id: p.id,
         nome: p.nome,
         descricao: p.descricao,
@@ -240,8 +251,11 @@ export class CatalogoPublicacaoService {
       })),
     };
 
-    const grupos = produtos.reduce((n, p) => n + p.complementos.length, 0);
-    const opcoes = produtos.reduce(
+    const grupos = produtosAtivos.reduce(
+      (n, p) => n + p.complementos.length,
+      0,
+    );
+    const opcoes = produtosAtivos.reduce(
       (n, p) =>
         n + p.complementos.reduce((m, pc) => m + pc.grupo.opcoes.length, 0),
       0,
@@ -250,8 +264,8 @@ export class CatalogoPublicacaoService {
     return {
       snapshot,
       totais: {
-        categorias: categorias.length,
-        produtos: produtos.length,
+        categorias: categoriasAtivas.length,
+        produtos: produtosAtivos.length,
         grupos,
         opcoes,
       },

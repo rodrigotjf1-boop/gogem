@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -66,4 +67,13 @@ export class CreateCategoriaDto {
   @IsString()
   @MaxLength(9)
   cor?: string;
+
+  @ApiProperty({
+    description: 'Pausar a categoria (some do totem, ela e seus produtos).',
+    required: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  pausada?: boolean;
 }

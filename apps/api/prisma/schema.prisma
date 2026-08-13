@@ -352,6 +352,9 @@ model Categoria {
   imagemUrl  String?
   emoji      String?
   cor        String?
+  // Pausar a categoria inteira: sai do cardápio do totem (ela e seus produtos)
+  // sem excluir nada. Volta ao despausar.
+  pausada    Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

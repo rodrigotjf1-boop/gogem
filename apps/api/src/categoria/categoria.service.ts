@@ -58,6 +58,7 @@ export class CategoriaService {
       imagemUrl: dto.imagemUrl ?? null,
       emoji: dto.emoji ?? null,
       cor: dto.cor ?? null,
+      pausada: dto.pausada ?? false,
     } satisfies Omit<Prisma.CategoriaUncheckedCreateInput, 'tenantId'>;
     return this.prisma.categoria.create({
       data: data as Prisma.CategoriaUncheckedCreateInput,
@@ -75,6 +76,7 @@ export class CategoriaService {
         imagemUrl: dto.imagemUrl,
         emoji: dto.emoji,
         cor: dto.cor,
+        pausada: dto.pausada,
       },
     });
   }

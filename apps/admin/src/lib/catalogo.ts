@@ -30,6 +30,8 @@ export interface Categoria {
   imagemUrl: string | null;
   emoji: string | null;
   cor: string | null;
+  // Pausada = some do cardápio do totem (ela e seus produtos), sem excluir.
+  pausada: boolean;
 }
 
 export interface Produto {
@@ -51,6 +53,7 @@ export interface CategoriaInput {
   imagemUrl?: string | null;
   emoji?: string | null;
   cor?: string | null;
+  pausada?: boolean;
 }
 
 export interface ProdutoInput {
@@ -114,6 +117,15 @@ export function useRemoverCategoria() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiDelete<{ id: string }>(`/categorias/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categorias'] }),
+  });
+}
+
+export function usePausarCategoria() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, pausada }: { id: string; pausada: boolean }) =>
+      apiPatch<Categoria, { pausada: boolean }>(`/categorias/${id}`, { pausada }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['categorias'] }),
   });
 }

@@ -52,6 +52,7 @@ describe('CategoriaService', () => {
         imagemUrl: null,
         emoji: null,
         cor: null,
+        pausada: false,
       },
     });
     expect('tenantId' in prisma.categoria.create.mock.calls[0][0].data).toBe(
@@ -71,6 +72,7 @@ describe('CategoriaService', () => {
         imagemUrl: null,
         emoji: null,
         cor: null,
+        pausada: false,
       },
     });
   });
@@ -94,6 +96,7 @@ describe('CategoriaService', () => {
         imagemUrl: undefined,
         emoji: undefined,
         cor: undefined,
+        pausada: undefined,
       },
     });
     expect('tenantId' in prisma.categoria.update.mock.calls[0][0].where).toBe(
