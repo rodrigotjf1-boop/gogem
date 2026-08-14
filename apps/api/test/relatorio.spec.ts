@@ -13,8 +13,12 @@ function makeService() {
     dispositivo: { findMany: vi.fn() },
     produto: { findMany: vi.fn() },
   };
-  const service = new RelatorioService(prisma as unknown as PrismaService);
-  return { service, prisma };
+  const auditoria = { registrar: vi.fn() };
+  const service = new RelatorioService(
+    prisma as unknown as PrismaService,
+    auditoria as unknown as import('../src/auditoria/auditoria.service').AuditoriaService,
+  );
+  return { service, prisma, auditoria };
 }
 
 describe('RelatorioService', () => {
