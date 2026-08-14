@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 /** Linha do relatório de pedidos. */
 export interface PedidoRelatorio {
@@ -59,7 +60,10 @@ export interface HorarioPonto {
  */
 @Injectable()
 export class RelatorioService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditoria: AuditoriaService,
+  ) {}
 
   /** Pedidos do período (opcionalmente por status), mais novos primeiro. */
   async pedidos(
@@ -262,6 +266,12 @@ export class RelatorioService {
         canceladoEm: agora,
         canceladoMotivo: motivo,
       },
+    });
+    await this.auditoria.registrar({
+      acao: 'pedido.cancelar',
+      recurso: 'pedido',
+      recursoId: id,
+      detalhe: { motivo },
     });
     return { id };
   }

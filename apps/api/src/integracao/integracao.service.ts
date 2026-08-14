@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
 import { RegemCatalogClient } from '../integracoes/regem/regem-catalog.client';
 import {
@@ -67,6 +68,7 @@ export class IntegracaoService {
     private readonly resolver: RegemConfigResolver,
     private readonly catalog: RegemCatalogClient,
     private readonly regemImport: RegemImportService,
+    private readonly auditoria: AuditoriaService,
   ) {}
 
   /** Lista todos os conectores conhecidos, com o estado do tenant (mascarado). */
@@ -123,6 +125,12 @@ export class IntegracaoService {
         data: create as Prisma.IntegracaoUncheckedCreateInput,
       });
     }
+    await this.auditoria.registrar({
+      acao: 'integracao.salvar',
+      recurso: 'integracao',
+      recursoId: tipo,
+      detalhe: { ativo },
+    });
     return this.getView(tipo);
   }
 

@@ -56,6 +56,7 @@ model Tenant {
   pointPayments      PointPayment[]
   pointJournal       PointJournal[]
   catalogoConflitos  CatalogoConflito[]
+  auditorias         Auditoria[]
 
   @@map("tenants")
 }
@@ -161,6 +162,26 @@ model CatalogoConflito {
   @@unique([tenantId, produtoId, campo])
   @@index([tenantId])
   @@map("catalogo_conflitos")
+}
+
+// Fase 5 (segurança) — trilha de auditoria APPEND-ONLY das ações sensíveis
+// (quem, papel, ação, recurso, quando). Tenant-scoped: cada empresa vê só a
+// sua; o middleware injeta o tenantId. NUNCA é atualizado/apagado.
+model Auditoria {
+  id        String   @id @default(uuid())
+  tenantId  String
+  usuarioId String? // ator (do contexto JWT); nulo em ação de device/sistema
+  papel     String? // papel do ator no momento
+  acao      String // ex.: 'pedido.cancelar', 'integracao.salvar'
+  recurso   String? // ex.: 'pedido', 'integracao'
+  recursoId String?
+  detalhe   Json? // contexto extra (ex.: { motivo }, { ativo })
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@map("auditorias")
 }
 
 // Release do APK do totem (auto-update). GLOBAL — NÃO é por tenant: o app é o

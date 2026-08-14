@@ -31,13 +31,15 @@ function makeService(rows: any[] = []) {
   const resolver = { resolve: vi.fn() };
   const catalog = { fetchCatalogoWith: vi.fn() };
   const regemImport = { importar: vi.fn() };
+  const auditoria = { registrar: vi.fn() };
   const service = new IntegracaoService(
     prisma as unknown as PrismaService,
     resolver as unknown as RegemConfigResolver,
     catalog as unknown as RegemCatalogClient,
     regemImport as unknown as RegemImportService,
+    auditoria as unknown as import('../src/auditoria/auditoria.service').AuditoriaService,
   );
-  return { service, prisma, resolver, catalog, regemImport, store };
+  return { service, prisma, resolver, catalog, regemImport, store, auditoria };
 }
 
 describe('IntegracaoService.list — máscara de segredos', () => {

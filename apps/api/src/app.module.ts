@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuditoriaModule } from './auditoria/auditoria.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { CardapioModule } from './cardapio/cardapio.module';
@@ -32,6 +33,7 @@ import { TenantContextInterceptor } from './tenant/tenant-context.interceptor';
     // múltiplas réplicas, trocar por storage compartilhado (Redis).
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
+    AuditoriaModule,
     HealthModule,
     AuthModule,
     CardapioModule,
