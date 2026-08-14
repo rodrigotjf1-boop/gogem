@@ -37,6 +37,7 @@ export class RegemPauseClient {
         method: 'POST',
         headers: {
           'X-Sync-Token': token,
+          'X-Loja-Token': token,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
