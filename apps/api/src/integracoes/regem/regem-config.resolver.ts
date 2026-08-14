@@ -31,27 +31,45 @@ export class RegemConfigResolver {
    * `ignoreActive` (usado pelo "testar conexão") considera a integração mesmo
    * quando ainda não foi ativada.
    */
-  async resolve(opts?: { ignoreActive?: boolean }): Promise<RegemConfig> {
-    // Tenant-scoped: o middleware injeta o tenant do contexto.
-    const row = await this.prisma.integracao.findFirst({
-      where: { tipo: 'regem' },
-    });
-    if (row && (opts?.ignoreActive || row.ativo)) {
+  async resolve(opts?: {
+    ignoreActive?: boolean;
+    unidadeId?: string | null;
+  }): Promise<RegemConfig> {
+    const ignoreActive = opts?.ignoreActive ?? false;
+    const extrair = (
+      row: { ativo: boolean; config: unknown } | null,
+    ): RegemConfig | null => {
+      if (!row || !(ignoreActive || row.ativo)) return null;
       const cfg = (row.config ?? {}) as { apiBase?: string; token?: string };
       const base = (cfg.apiBase ?? '').trim();
       const token = (cfg.token ?? '').trim();
-      if (base && token) return { base, token };
+      return base && token ? { base, token } : null;
+    };
+
+    // Precedência: (1) integração DA LOJA do contexto → (2) nível empresa
+    // (unidadeId NULL) → (3) envs globais (piloto). Tenant-scoped pelo middleware.
+    if (opts?.unidadeId) {
+      const loja = await this.prisma.integracao.findFirst({
+        where: { tipo: 'regem', unidadeId: opts.unidadeId },
+      });
+      const cfg = extrair(loja);
+      if (cfg) return cfg;
     }
 
-    // Fallback do piloto: envs globais.
+    const empresa = await this.prisma.integracao.findFirst({
+      where: { tipo: 'regem', unidadeId: null },
+    });
+    const cfgEmpresa = extrair(empresa);
+    if (cfgEmpresa) return cfgEmpresa;
+
     const base = this.config.get<string>('REGEM_API_BASE')?.trim();
     const token = this.config.get<string>('REGEM_SYNC_TOKEN')?.trim();
     if (base && token) return { base, token };
 
     throw new Error(
-      'Integração Regem não configurada para este tenant: preencha e ative a ' +
-        'integração Regem (apiBase + token) ou defina REGEM_API_BASE e ' +
-        'REGEM_SYNC_TOKEN no ambiente.',
+      'Integração Regem não configurada para esta loja: preencha e ative a ' +
+        'integração Regem (apiBase + token) na loja ou na empresa, ou defina ' +
+        'REGEM_API_BASE e REGEM_SYNC_TOKEN no ambiente.',
     );
   }
 }

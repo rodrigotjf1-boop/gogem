@@ -364,8 +364,9 @@ model Unidade {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  usuarios Usuario[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  usuarios    Usuario[]
+  integracoes Integracao[]
 
   @@index([tenantId])
   @@map("unidades")
@@ -672,6 +673,9 @@ model Pedido {
 model Integracao {
   id          String   @id @default(uuid())
   tenantId    String
+  // Loja (Unidade) desta integração. NULL = config no nível da EMPRESA (piloto
+  // 1-loja / fallback). Preenchido = integração dedicada da loja (token por loja).
+  unidadeId   String?
   // Discriminador do conector: 'regem' | 'open_delivery' | ...
   tipo        String
   // Rótulo amigável opcional (ex.: "Regem — Loja Centro").
@@ -684,10 +688,12 @@ model Integracao {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant  Tenant   @relation(fields: [tenantId], references: [id])
+  unidade Unidade? @relation(fields: [unidadeId], references: [id])
 
-  // Uma integração por tipo, por tenant.
-  @@unique([tenantId, tipo])
+  // Uma integração por tipo, por (tenant, loja). unidadeId NULL = nível empresa.
+  @@unique([tenantId, unidadeId, tipo])
   @@index([tenantId])
+  @@index([unidadeId])
   @@map("integracoes")
 }

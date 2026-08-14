@@ -110,6 +110,7 @@ export class RegemCatalogClient {
         method: 'GET',
         headers: {
           'X-Sync-Token': token,
+          'X-Loja-Token': token,
           Accept: 'application/json',
         },
         signal: controller.signal,
