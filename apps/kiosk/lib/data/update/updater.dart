@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../api/gogem_api.dart';
 import '../catalog/catalog_sync.dart';
+import 'play_updater.dart';
 
 /// Auto-update do APK do totem.
 ///
@@ -23,6 +24,13 @@ class Updater {
   final GogemApi _api;
 
   static const MethodChannel _canal = MethodChannel('gogem/updater');
+
+  /// Auto-update PRÓPRIO (baixa o APK e instala). Ligado por padrão (builds de
+  /// sideload). Nos builds distribuídos pela **Google Play** sai com
+  /// `--dart-define=GOGEM_SELF_UPDATE=false` — quem atualiza é o Play, e o
+  /// install próprio falharia por assinatura diferente (Play App Signing).
+  static const bool _selfUpdate =
+      bool.fromEnvironment('GOGEM_SELF_UPDATE', defaultValue: true);
 
   /// versionCode do APK instalado (buildNumber do pubspec: `x.y.z+CODE`).
   Future<int> versaoInstalada() async {
@@ -60,6 +68,7 @@ class Updater {
   /// Verifica e, se houver update, baixa e instala. Nunca lança (não pode
   /// derrubar o totem) — em erro, tenta de novo na próxima janela.
   Future<void> verificarEAtualizar() async {
+    if (!_selfUpdate) return PlayUpdater.verificarEPrompt(); // canal Play
     try {
       final r = await checar();
       if (r != null) await baixarEInstalar(r);
@@ -72,6 +81,7 @@ class Updater {
   /// janela de 3h do descanso (é isso que faz o flag `obrigatorio` "valer"). A
   /// não-obrigatória segue no ciclo normal. Nunca lança.
   Future<void> verificarObrigatorio() async {
+    if (!_selfUpdate) return PlayUpdater.verificarEPrompt(); // canal Play
     try {
       final r = await checar();
       if (r != null && r.obrigatorio) await baixarEInstalar(r);
