@@ -19,6 +19,9 @@ dependencies:
   package_info_plus: ^8.0.0
   crypto: ^3.0.3
   qr_flutter: ^4.1.0
+  # Atualização pela Google Play (In-App Update): detecta versão nova e pede
+  # autorização. Só nos builds do Play; sideload usa o updater próprio.
+  in_app_update: ^4.2.3
   gogem_escpos:
     path: ../../packages/escpos
   gogem_payment:

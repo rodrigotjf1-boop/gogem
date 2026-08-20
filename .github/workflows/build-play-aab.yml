@@ -1,0 +1,117 @@
+name: Build AAB (Google Play)
+
+# Gera o Android App Bundle (.aab) ASSINADO para publicar na Google Play
+# (trilha interna/fechada). Diferente do build-apk (sideload/teste):
+#  - saída .aab (o Play exige bundle, não apk);
+#  - assinado com o UPLOAD KEYSTORE (secrets do repo);
+#  - GOGEM_SELF_UPDATE=false → o app NÃO usa o updater próprio; usa o In-App
+#    Update do Play (detecta versão nova e pede autorização).
+#
+# Pré-requisitos (uma vez): gerar o upload keystore e cadastrar os secrets
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
+#   ANDROID_KEY_PASSWORD. Ver docs/publicar-google-play.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'URL base da API'
+        required: true
+        default: 'https://api.gogem.com.br/api/v1'
+
+jobs:
+  aab:
+    name: Flutter build appbundle (release, assinado)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/kiosk
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Gerar projeto Android
+        run: flutter create --platforms=android --org br.com.dms .
+
+      - name: Permitir internet + impressora USB (release)
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' "$MANIFEST"
+          fi
+          if ! grep -q 'USB_DEVICE_ATTACHED' "$MANIFEST"; then
+            sed -i 's#</activity>#    <intent-filter>\n                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"/>\n            </intent-filter>\n            <meta-data android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" android:resource="@xml/device_filter"/>\n        </activity>#' "$MANIFEST"
+          fi
+          mkdir -p android/app/src/main/res/xml
+          printf '%s\n' '<resources><usb-device vendor-id="1208"/></resources>' \
+            > android/app/src/main/res/xml/device_filter.xml
+
+      - name: Instalar MainActivity + plugin USB
+        run: |
+          DEST=android/app/src/main/kotlin/br/com/dms/gogem_kiosk
+          mkdir -p "$DEST"
+          cp tool/kiosk_mainactivity.kt "$DEST/MainActivity.kt"
+          cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
+
+      # Assinatura: decodifica o keystore do secret e injeta o signingConfig no
+      # build.gradle.kts gerado (release passa a assinar com o upload key).
+      - name: Configurar assinatura (upload keystore)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 ausente — cadastre os secrets (ver docs/publicar-google-play.md)."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/upload.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload.jks
+          storePassword=$KS_PASS
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASS
+          EOF
+          GRADLE=android/app/build.gradle.kts
+          # Carrega o key.properties no topo do build.gradle.kts.
+          printf '%s\n' \
+            'import java.util.Properties' \
+            'val keystoreProperties = Properties().apply {' \
+            '    val f = rootProject.file("key.properties")' \
+            '    if (f.exists()) f.inputStream().use { load(it) }' \
+            '}' \
+            "$(cat "$GRADLE")" > "$GRADLE"
+          # signingConfig "release" + usa ela no buildType release.
+          perl -0pi -e 's/(android \{)/$1\n    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }/' "$GRADLE"
+          perl -0pi -e 's/signingConfigs\.getByName\("debug"\)/signingConfigs.getByName("release")/' "$GRADLE"
+          echo "== build.gradle.kts (trecho de assinatura) ==" && grep -nE "signingConfig|keystoreProperties" "$GRADLE" || true
+
+      - name: Build AAB assinado (Play)
+        run: >-
+          flutter build appbundle --release
+          --dart-define=GOGEM_API_URL=${{ inputs.api_url }}
+          --dart-define=GOGEM_DEV_JWT=
+          --dart-define=GOGEM_PRINTER=usb
+          --dart-define=GOGEM_PAYMENT_PROVIDER=mppoint
+          --dart-define=GOGEM_KIOSK_LOCK=true
+          --dart-define=GOGEM_SELF_UPDATE=false
+
+      - name: Publicar AAB como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gogem-play-aab
+          path: apps/kiosk/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
