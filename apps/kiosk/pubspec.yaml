@@ -1,7 +1,7 @@
 name: gogem_kiosk
 description: "GoGeM - app de autoatendimento (totem) by DMS"
 publish_to: "none"
-version: 0.5.19+24
+version: 0.5.20+25
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -40,6 +40,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # Gera os ícones do launcher (mipmaps + adaptive icon) a partir do PNG da marca.
+  # Rodar: dart run flutter_launcher_icons  (após salvar assets/branding/gogem-1024.png)
+  flutter_launcher_icons: ^0.14.1
+
+# Ícone do app (Android). Fonte = logo 1024x1024 da marca.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  image_path: "assets/branding/gogem-1024.png"
+  min_sdk_android: 24
+  adaptive_icon_background: "#0E1613"
+  adaptive_icon_foreground: "assets/branding/gogem-1024.png"
 
 flutter:
   uses-material-design: true

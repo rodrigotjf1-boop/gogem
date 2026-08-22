@@ -44,6 +44,11 @@ jobs:
       - name: Gerar projeto Android
         run: flutter create --platforms=android --org br.com.dms .
 
+      - name: Gerar ícones do launcher (marca)
+        # A partir de assets/branding/gogem-1024.png (config em pubspec.yaml):
+        # mipmaps + adaptive icon. Sobrescreve o ícone padrão do flutter create.
+        run: dart run flutter_launcher_icons
+
       - name: Permitir internet + impressora USB (release)
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
