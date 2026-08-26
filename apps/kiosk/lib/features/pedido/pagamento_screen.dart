@@ -119,6 +119,13 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     _pedidoAtual = pedido;
     _senhaAtual = await repo.salvarPreCobranca(pedido);
 
+    // DINHEIRO: pago no CAIXA. Não cobra aqui — finaliza direto. O cupom destaca
+    // "EFETUAR PAGAMENTO NO CAIXA" e o Regem trata a pendência por forma=='dinheiro'.
+    if (forma == FormaPagamento.dinheiro) {
+      await _finalizar(pedido);
+      return;
+    }
+
     // PIX tem fluxo próprio (QR + polling); os demais vão pelo provider genérico.
     if (forma == FormaPagamento.pix) {
       await _pagarPix(pedido, cart.totalCentavos, checkout.cpf);
@@ -426,6 +433,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         onTentarNovamente: _portao,
         onPagarPix: () => _pagar(FormaPagamento.pix),
         onPagarCartao: () => _pagar(FormaPagamento.credito),
+        onPagarDinheiro: () => _pagar(FormaPagamento.dinheiro),
         onCancelarPix: () => ref.read(pixProviderProvider).cancelar(),
         onCancelarPoint: () => ref.read(pointProviderProvider).cancelar(),
       );
@@ -528,13 +536,19 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                           icone: Icons.credit_card,
                           rotulo: 'CARTÃO',
                           onTap: () => _pagar(FormaPagamento.credito)),
+                      _FormaBtn(
+                          key: const ValueKey('forma-dinheiro'),
+                          icone: Icons.payments,
+                          rotulo: 'DINHEIRO',
+                          onTap: () => _pagar(FormaPagamento.dinheiro)),
                     ],
                   ),
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(40, 0, 40, 16),
                   child: Text(
-                      'No cartão você escolhe crédito, débito ou vale na maquininha.',
+                      'No cartão você escolhe crédito, débito ou vale na maquininha. '
+                      'No dinheiro, o pagamento é feito no caixa.',
                       textAlign: TextAlign.center,
                       style: t.bodyMedium?.copyWith(fontSize: 13)),
                 ),

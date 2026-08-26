@@ -21,4 +21,21 @@ void main() {
     expect(txt, contains('NAO E DOCUMENTO FISCAL'));
     expect(bytes.sublist(bytes.length - 4), [0x1D, 0x56, 0x42, 0x10]);
   });
+
+  test('dinheiro: cupom destaca EFETUAR PAGAMENTO NO CAIXA', () {
+    final menu = MenuSnapshot.fromPublicadoJson(publicadoFixture);
+    final dinheiro = PedidoLocal(
+        itens: [ItemCarrinho(produto: menu.produtos.first, selecoes: {})],
+        forma: FormaPagamento.dinheiro);
+    final txtDin = String.fromCharCodes(montarCupom(dinheiro, '043'));
+    expect(txtDin, contains('EFETUAR PAGAMENTO NO CAIXA'));
+    expect(txtDin, contains('pagamento: dinheiro'));
+
+    // Outras formas NÃO trazem o aviso.
+    final cartao = PedidoLocal(
+        itens: [ItemCarrinho(produto: menu.produtos.first, selecoes: {})],
+        forma: FormaPagamento.credito);
+    final txtCartao = String.fromCharCodes(montarCupom(cartao, '044'));
+    expect(txtCartao, isNot(contains('EFETUAR PAGAMENTO NO CAIXA')));
+  });
 }

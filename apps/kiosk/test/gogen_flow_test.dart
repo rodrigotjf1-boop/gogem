@@ -27,6 +27,7 @@ GogenPagamentoView _pagamento({
       onTentarNovamente: () {},
       onPagarPix: () {},
       onPagarCartao: () {},
+      onPagarDinheiro: () {},
       onCancelarPix: () {},
       onCancelarPoint: () {},
     );

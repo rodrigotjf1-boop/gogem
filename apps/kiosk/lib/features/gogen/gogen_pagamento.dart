@@ -23,6 +23,7 @@ class GogenPagamentoView extends StatelessWidget {
     required this.onTentarNovamente,
     required this.onPagarPix,
     required this.onPagarCartao,
+    required this.onPagarDinheiro,
     required this.onCancelarPix,
     required this.onCancelarPoint,
   });
@@ -40,6 +41,7 @@ class GogenPagamentoView extends StatelessWidget {
   final VoidCallback onTentarNovamente;
   final VoidCallback onPagarPix;
   final VoidCallback onPagarCartao;
+  final VoidCallback onPagarDinheiro;
   final VoidCallback onCancelarPix;
   final VoidCallback onCancelarPoint;
 
@@ -204,12 +206,14 @@ class GogenPagamentoView extends StatelessWidget {
               _FormaBtn(chave: 'forma-pix', icone: Icons.qr_code_2_rounded, rotulo: 'PIX', onTap: onPagarPix),
               const SizedBox(height: 16),
               _FormaBtn(chave: 'forma-cartao', icone: Icons.credit_card_rounded, rotulo: 'Cartão', onTap: onPagarCartao),
+              const SizedBox(height: 16),
+              _FormaBtn(chave: 'forma-dinheiro', icone: Icons.payments_rounded, rotulo: 'Dinheiro', onTap: onPagarDinheiro),
             ],
           ),
         ),
         const Padding(
           padding: EdgeInsets.fromLTRB(40, 0, 40, 16),
-          child: Text('No cartão você escolhe crédito, débito ou vale na maquininha.',
+          child: Text('No cartão você escolhe crédito, débito ou vale na maquininha. No dinheiro, o pagamento é feito no caixa.',
               textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: GogenColors.ink2)),
         ),
       ]);

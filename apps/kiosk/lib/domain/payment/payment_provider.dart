@@ -120,4 +120,7 @@ PaymentMethod metodoDePagamento(FormaPagamento forma) => switch (forma) {
       FormaPagamento.debito => PaymentMethod.debito,
       FormaPagamento.pix => PaymentMethod.pix,
       FormaPagamento.vr => PaymentMethod.voucher,
+      // Dinheiro é pago no caixa — nunca passa por um PaymentProvider.
+      FormaPagamento.dinheiro =>
+        throw UnsupportedError('dinheiro é pago no caixa, não via maquininha'),
     };
