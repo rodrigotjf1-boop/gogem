@@ -293,7 +293,9 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     ref.read(cartProvider.notifier).limpar();
     ref.read(checkoutProvider.notifier).limpar();
     if (mounted) {
-      context.go('/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}');
+      final dinheiro = pedido.forma == FormaPagamento.dinheiro ? 1 : 0;
+      context.go(
+          '/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}&dinheiro=$dinheiro');
     }
   }
 

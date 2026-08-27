@@ -10,12 +10,19 @@ import '../gogen/gogen_sucesso.dart';
 
 /// Pedido confirmado: o robô "imprime" (paperExtent 0→1, animação única — sem
 /// loop, seguro para pumpAndSettle) e a SENHA aparece em fonte gigante.
-/// Auto-retorno ao descanso em 8s (regra da tela: senha visível mesmo se a
-/// impressora falhar — antecipa o comportamento da F4).
+/// Auto-retorno ao descanso em 40s com CONTADOR VISÍVEL (a senha fica visível
+/// mesmo se a impressora falhar). Em `dinheiro`, guia o cliente ao caixa.
 class ConfirmacaoScreen extends ConsumerStatefulWidget {
-  const ConfirmacaoScreen({super.key, required this.senha, this.impresso = true});
+  const ConfirmacaoScreen(
+      {super.key,
+      required this.senha,
+      this.impresso = true,
+      this.dinheiro = false});
   final String senha;
   final bool impresso;
+
+  /// Pagamento em dinheiro: exibe a orientação de pagar no caixa.
+  final bool dinheiro;
   @override
   ConsumerState<ConfirmacaoScreen> createState() => _ConfirmacaoScreenState();
 }
@@ -25,19 +32,31 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
   late final AnimationController _print = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400))
     ..forward();
-  Timer? _volta;
+
+  static const int _totalSeg = 40;
+  int _segundos = _totalSeg;
+  Timer? _tick;
 
   @override
   void initState() {
     super.initState();
-    _volta = Timer(const Duration(seconds: 8), () {
-      if (mounted) context.go('/descanso');
+    // Contador decrescente (40s) até voltar ao descanso — visível na tela.
+    _tick = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _segundos = _segundos > 0 ? _segundos - 1 : 0);
+      if (_segundos <= 0) {
+        t.cancel();
+        context.go('/descanso');
+      }
     });
   }
 
   @override
   void dispose() {
-    _volta?.cancel();
+    _tick?.cancel();
     _print.dispose();
     super.dispose();
   }
@@ -53,6 +72,8 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
           senha: widget.senha,
           impresso: widget.impresso,
           entrada: _print.value,
+          dinheiro: widget.dinheiro,
+          segundos: _segundos,
           onNovoPedido: () => context.go('/descanso'),
         ),
       );
@@ -77,6 +98,34 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
             Text('PEDIDO CONFIRMADO!', style: t.headlineMedium),
             const SizedBox(height: 8),
             Text('retire pelo número', style: t.bodyMedium),
+            if (widget.dinheiro)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+                child: Container(
+                  key: const ValueKey('aviso-caixa'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: GogemColors.cheese.withValues(alpha: 0.12),
+                    border: Border.all(color: GogemColors.cheese, width: 2),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.point_of_sale,
+                        color: GogemColors.cheese, size: 40),
+                    const SizedBox(height: 8),
+                    Text('PAGUE NO CAIXA PARA RETIRAR',
+                        style: t.titleLarge?.copyWith(
+                            color: GogemColors.ink,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('dirija-se ao caixa, informe a senha e efetue o pagamento',
+                        textAlign: TextAlign.center,
+                        style: t.bodyMedium?.copyWith(
+                            color: GogemColors.inkDim)),
+                  ]),
+                ),
+              ),
             if (!widget.impresso)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
@@ -104,6 +153,10 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
               child: const Text('NOVO PEDIDO',
                   style: TextStyle(color: GogemColors.inkDim, fontSize: 18)),
             ),
+            const SizedBox(height: 4),
+            Text('voltando ao início em ${_segundos}s',
+                key: const ValueKey('contador-standby'),
+                style: t.bodyMedium?.copyWith(color: GogemColors.inkDim)),
                     ]),
               ),
             ),

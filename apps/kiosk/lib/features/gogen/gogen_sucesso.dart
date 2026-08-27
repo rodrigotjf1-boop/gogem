@@ -11,12 +11,20 @@ class GogenSucessoView extends StatelessWidget {
     required this.impresso,
     required this.entrada, // 0..1 (anima de escala/opacidade)
     required this.onNovoPedido,
+    this.dinheiro = false,
+    this.segundos = 0,
   });
 
   final String senha;
   final bool impresso;
   final double entrada;
   final VoidCallback onNovoPedido;
+
+  /// Pagamento em dinheiro: exibe a orientação de pagar no caixa.
+  final bool dinheiro;
+
+  /// Segundos restantes para voltar ao descanso (0 = não exibe o contador).
+  final int segundos;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +61,41 @@ class GogenSucessoView extends StatelessWidget {
                     const SizedBox(height: 6),
                     const Text('retire pelo número',
                         style: TextStyle(fontSize: 18, color: GogenColors.ink2)),
+                    if (dinheiro)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+                        child: Container(
+                          key: const ValueKey('aviso-caixa'),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: GogenColors.flame1.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: GogenColors.flame1, width: 2),
+                          ),
+                          child: const Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.point_of_sale_rounded,
+                                    color: GogenColors.flame1, size: 40),
+                                SizedBox(height: 8),
+                                Text('PAGUE NO CAIXA PARA RETIRAR',
+                                    style: TextStyle(
+                                        color: GogenColors.ink,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w900)),
+                                SizedBox(height: 4),
+                                Text(
+                                    'dirija-se ao caixa, informe a senha e efetue o pagamento',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        color: GogenColors.ink2,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600)),
+                              ]),
+                        ),
+                      ),
                     if (!impresso)
                       Padding(
                         padding: const EdgeInsets.only(top: 14),
@@ -94,6 +137,14 @@ class GogenSucessoView extends StatelessWidget {
                       child: const Text('Novo pedido',
                           style: TextStyle(color: GogenColors.ink2, fontSize: 18, fontWeight: FontWeight.w700)),
                     ),
+                    if (segundos > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('voltando ao início em ${segundos}s',
+                            key: const ValueKey('contador-standby'),
+                            style: const TextStyle(
+                                color: GogenColors.ink2, fontSize: 15)),
+                      ),
                   ],
                 ),
               ),
