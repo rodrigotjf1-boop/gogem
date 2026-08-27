@@ -54,6 +54,33 @@ Regra: **o cancelamento nasce no Regem** (dono de estoque/perda/caixa); o GoGeM 
 - **Proposta:** inbound no GoGeM `POST /sync/regem/pedido-cancelado` (auth `x-sync-token`, por `idempotencyKey`/`regemComandaId`) → `Pedido.status='cancelado'` (+ motivo), idempotente/best-effort. Relatórios já filtram `cancelado` (`relatorio-query.dto`) → sai da receita. Vale nuvem e edge.
 - **Decorrência:** o cancel originado no GoGeM (gerente-only) deve ser **gateado em loja Regem** (cancel nasce no Regem); loja sem Regem mantém o cancel local.
 
+## Falha de pagamento → cupom "não passou" no Regem (implementado no GoGeM)
+
+Quando o pagamento **não passa** (recusa, erro de comunicação, timeout ou **cancelamento** pelo cliente), o totem informa o Regem com o **motivo** — best-effort (o cliente vê o erro na tela do mesmo jeito). O Regem lista o **cupom "não passou" + motivo**, **sem** estoque e **sem** caixa.
+
+**Fluxo:** totem (`_falhaPagamento`) → `POST /vendas/falha` (device-token) → o backend grava o `Pedido` como `falha` + motivo (espelho) e relata ao Regem.
+
+**Contrato GoGeM → Regem** (endpoint que o Regem implementa):
+```jsonc
+POST /vendas/externa-pdv/falha      (X-Loja-Token)
+{
+  "idempotencyKey": "<uuid do totem>",
+  "itens": [ { "codigoPdv": "...", "quantidade": 1 } ],
+  "formaTentada": "credito",
+  "totalCentavos": 3390,
+  "senhaPlataforma": "123",
+  "motivo": "Pagamento não aprovado. Tente outra forma."
+}
+```
+
+**Lado GoGeM (feito):**
+- Totem `reportarFalha` (`apps/kiosk/lib/data/api/gogem_api.dart`) — best-effort; sem device-token não tenta.
+- Backend `POST /vendas/falha` (`vendas.controller.ts`) + `VendasService.registrarFalhaTotem` (grava `Pedido` `falha` + motivo) + `RegemSalesClient.relatarFalha` (relata; **404 até o Regem criar o endpoint = ignorado**, best-effort).
+
+**Lado Regem (usuário):** criar `POST /vendas/externa-pdv/falha` → cupom "não passou" + motivo, sem caixa/estoque.
+
+**Default:** reporta **erros E cancelamentos** (o `motivo` distingue). Se quiser só erros, é 1 ajuste no `_falhaPagamento`.
+
 ## Decisões de desenho
 
 - **Venda em dinheiro entra normal** (caixa registra no fechamento do totem); **"a receber"/"PAGO" = informativo** pro atendente conferir/entregar. Sem adiamento de caixa, sem `acerto`.

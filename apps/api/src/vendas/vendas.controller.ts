@@ -6,7 +6,7 @@ import {
   DeviceTokenGuard,
 } from '../auth/device-token.guard';
 import type { DeviceUser } from '../auth/device-token.guard';
-import { VendaTotemDto } from './dto/venda-totem.dto';
+import { VendaTotemDto, VendaFalhaTotemDto } from './dto/venda-totem.dto';
 import { VendasService } from './vendas.service';
 
 /**
@@ -29,6 +29,22 @@ export class VendasController {
   })
   registrar(@DeviceCtx() ctx: DeviceUser, @Body() dto: VendaTotemDto) {
     return this.vendas.registrarVendaTotem(
+      {
+        tenantId: ctx.tenantId,
+        deviceId: ctx.deviceId,
+        unidadeId: ctx.unidadeId,
+      },
+      dto,
+    );
+  }
+
+  @Post('falha')
+  @ApiOkResponse({
+    description:
+      'Reporta ao Regem um pagamento que NÃO passou (cupom "não passou" + motivo). Best-effort; não baixa estoque nem entra no caixa.',
+  })
+  reportarFalha(@DeviceCtx() ctx: DeviceUser, @Body() dto: VendaFalhaTotemDto) {
+    return this.vendas.registrarFalhaTotem(
       {
         tenantId: ctx.tenantId,
         deviceId: ctx.deviceId,

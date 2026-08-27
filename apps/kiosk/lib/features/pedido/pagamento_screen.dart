@@ -230,6 +230,11 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     // 'aguardando_pagamento' órfão (o status remoto não estará approved).
     final p = _pedidoAtual;
     if (p != null) {
+      // Reporta ao Regem (via backend) o pedido que NÃO passou + o motivo —
+      // best-effort (o backend lista o cupom "não passou"). Depois descarta local.
+      final corpo = p.toJson(senhaLocal: int.tryParse(_senhaAtual ?? ''));
+      unawaited(
+          ref.read(gogemApiProvider).reportarFalha(corpo, motivo: msg));
       unawaited(ref
           .read(orderRepositoryProvider.future)
           .then((r) => r.marcarCancelado(p.uuid)));

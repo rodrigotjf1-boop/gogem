@@ -69,6 +69,21 @@ export interface RegemVendaExternaResposta {
   idempotente?: boolean;
 }
 
+/**
+ * Corpo do reporte de FALHA/cancelamento de pagamento ao Regem
+ * (`POST /vendas/externa-pdv/falha`). NÃO é uma venda: o Regem lista o cupom
+ * "não passou" + `motivo`, sem caixa e sem estoque. `totalCentavos` em CENTAVOS
+ * (é só exibição — diferente da venda, que vai em reais).
+ */
+export interface RegemVendaFalhaBody {
+  idempotencyKey: string;
+  itens: RegemVendaItem[];
+  formaTentada: string;
+  totalCentavos: number;
+  senhaPlataforma?: string;
+  motivo: string;
+}
+
 /** Timeout padrão da requisição ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -117,5 +132,40 @@ export class RegemSalesClient {
     }
 
     return (await res.json()) as RegemVendaExternaResposta;
+  }
+
+  /**
+   * Reporta ao Regem um pagamento que NÃO passou (cupom "não passou" + motivo).
+   * BEST-EFFORT: nunca lança — sem config Regem, 404 (endpoint ainda não criado
+   * no Regem) ou erro de rede são silenciosos. Nada de venda/caixa é registrado.
+   */
+  async relatarFalha(body: RegemVendaFalhaBody): Promise<void> {
+    let cfg: { base: string; token: string };
+    try {
+      cfg = await this.resolver.resolve();
+    } catch {
+      return; // sem integração Regem → nada a reportar
+    }
+    const url = `${cfg.base.replace(/\/$/, '')}/vendas/externa-pdv/falha`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': cfg.token,
+          'X-Loja-Token': cfg.token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      // best-effort: não checamos res.ok nem lançamos.
+    } catch {
+      // rede/timeout — silencioso (o cliente já viu o erro na tela do totem).
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
