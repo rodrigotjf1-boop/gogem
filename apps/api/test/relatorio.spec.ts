@@ -13,12 +13,12 @@ function makeService() {
     dispositivo: { findMany: vi.fn() },
     produto: { findMany: vi.fn() },
   };
-  const auditoria = { registrar: vi.fn() };
+  const cancelamento = { cancelarPorId: vi.fn() };
   const service = new RelatorioService(
     prisma as unknown as PrismaService,
-    auditoria as unknown as import('../src/auditoria/auditoria.service').AuditoriaService,
+    cancelamento as unknown as import('../src/pagamentos/cancelamento.service').CancelamentoService,
   );
-  return { service, prisma, auditoria };
+  return { service, prisma, cancelamento };
 }
 
 describe('RelatorioService', () => {
@@ -111,32 +111,21 @@ describe('RelatorioService', () => {
     });
   });
 
-  it('cancelar marca cancelado com motivo e timestamp', async () => {
-    const { service, prisma } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({ id: 'p1', status: 'enviado' });
-    prisma.pedido.update.mockResolvedValue({ id: 'p1' });
-    const agora = new Date('2026-07-29T10:00:00Z');
-    await service.cancelar('p1', 'falta de saldo', agora);
-    const data = prisma.pedido.update.mock.calls[0][0].data;
-    expect(data.status).toBe('cancelado');
-    expect(data.canceladoMotivo).toBe('falta de saldo');
-    expect(data.canceladoEm).toBe(agora);
-  });
-
-  it('cancelar recusa pedido já cancelado', async () => {
-    const { service, prisma } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({
-      id: 'p1',
+  it('cancelar delega ao CancelamentoService (origem admin) e devolve o estorno', async () => {
+    const { service, cancelamento } = makeService();
+    cancelamento.cancelarPorId.mockResolvedValue({
       status: 'cancelado',
+      pedidoId: 'p1',
+      estorno: { feito: true, meio: 'credito', valorCentavos: 3000 },
     });
-    await expect(service.cancelar('p1', 'x', new Date())).rejects.toThrow();
-    expect(prisma.pedido.update).not.toHaveBeenCalled();
-  });
-
-  it('cancelar recusa pedido inexistente', async () => {
-    const { service, prisma } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue(null);
-    await expect(service.cancelar('nope', 'x', new Date())).rejects.toThrow();
+    const res = await service.cancelar('p1', 'falta de saldo');
+    expect(cancelamento.cancelarPorId).toHaveBeenCalledWith(
+      'p1',
+      'falta de saldo',
+      'admin',
+    );
+    expect(res.status).toBe('cancelado');
+    expect(res.estorno.feito).toBe(true);
   });
 
   it('porPagamento agrupa por forma·bandeira e soma os valores', async () => {

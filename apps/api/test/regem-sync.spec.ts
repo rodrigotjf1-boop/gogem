@@ -401,12 +401,14 @@ function makeInbound() {
   const prisma = { integracao: { findFirst: vi.fn() } };
   const imports = { sincronizarLinkados: vi.fn() };
   const publicacao = { publicar: vi.fn().mockResolvedValue({}) };
+  const cancelamento = { cancelarPorChave: vi.fn() };
   const service = new RegemInboundService(
     prisma as unknown as PrismaService,
     imports as unknown as RegemImportService,
     publicacao as unknown as CatalogoPublicacaoService,
+    cancelamento as unknown as import('../src/pagamentos/cancelamento.service').CancelamentoService,
   );
-  return { service, prisma, imports, publicacao };
+  return { service, prisma, imports, publicacao, cancelamento };
 }
 
 describe('RegemInboundService.publicar (botão "Publicar no GoGeM")', () => {

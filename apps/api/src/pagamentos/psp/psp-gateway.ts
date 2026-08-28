@@ -21,6 +21,14 @@ export interface CriarPixInput {
   cpfCnpj?: string;
 }
 
+/** Resultado de um estorno (refund) no PSP. */
+export interface RefundResult {
+  /** id do estorno no PSP. */
+  refundId: string;
+  /** status normalizado do estorno ('approved' | 'pending' | …). */
+  status: string;
+}
+
 /**
  * Contrato do PSP de PIX. Cada PSP (Mercado Pago, Efí, Asaas…) é um adaptador;
  * o resto do backend só fala com esta interface. Credenciais ficam no adaptador,
@@ -34,6 +42,13 @@ export interface PspGateway {
 
   /** Consulta o status atual no PSP. */
   consultar(pspRef: string): Promise<PixStatus>;
+
+  /**
+   * Estorno TOTAL de um pagamento aprovado (cartão/PIX), pelo id do pagamento no
+   * PSP (`POST /v1/payments/:id/refunds` sem amount = valor total).
+   * `idempotencyKey` evita estorno duplicado no PSP.
+   */
+  reembolsar(paymentId: string, idempotencyKey?: string): Promise<RefundResult>;
 
   /**
    * Extrai do corpo/headers do webhook a referência do pagamento a re-consultar

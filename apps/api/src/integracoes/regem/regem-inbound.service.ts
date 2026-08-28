@@ -3,6 +3,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CatalogoPublicacaoService } from '../../catalogo/catalogo-publicacao.service';
+import {
+  CancelamentoService,
+  CancelamentoResultado,
+} from '../../pagamentos/cancelamento.service';
 import { RegemImportService } from './regem-import.service';
 
 /**
@@ -18,35 +22,59 @@ export class RegemInboundService {
     private readonly prisma: PrismaService,
     private readonly imports: RegemImportService,
     private readonly publicacao: CatalogoPublicacaoService,
+    private readonly cancelamento: CancelamentoService,
   ) {}
 
   async publicar(token: string): Promise<{ alterados: number }> {
-    const t = (token ?? '').trim();
-    if (!t) throw new UnauthorizedException('X-Sync-Token ausente.');
-
-    // Acha a loja pelo token que ela já usa na integração (cross-tenant).
-    // O `await` dentro do runAsSystem mantém o contexto de sistema vivo até o
-    // Prisma rodar (callback síncrono → ForbiddenException). Ver DeviceTokenGuard.
-    const integ = await TenantContext.runAsSystem(async () => {
-      const row = await this.prisma.integracao.findFirst({
-        where: {
-          tipo: 'regem',
-          ativo: true,
-          config: {
-            path: ['token'],
-            equals: t,
-          } as Prisma.JsonFilter,
-        },
-        select: { tenantId: true },
-      });
-      return row;
-    });
-    if (!integ) throw new UnauthorizedException('Token inválido.');
-
-    return TenantContext.run({ tenantId: integ.tenantId }, async () => {
+    const tenantId = await this.tenantPorToken(token);
+    return TenantContext.run({ tenantId }, async () => {
       const { alterados } = await this.imports.sincronizarLinkados();
       if (alterados > 0) await this.publicacao.publicar(null);
       return { alterados };
     });
+  }
+
+  /**
+   * Cancelamento pedido pelo Regem (atendente cancelou o cupom) COM estorno
+   * eletrônico (cartão/PIX). Autentica pelo mesmo X-Sync-Token; acha o tenant e
+   * roda o cancelamento no contexto dele. Idempotente pela idempotencyKey.
+   */
+  async cancelarPedido(
+    token: string,
+    body: { idempotencyKey?: string; regemComandaId?: string; motivo?: string },
+  ): Promise<CancelamentoResultado> {
+    const tenantId = await this.tenantPorToken(token);
+    return TenantContext.run({ tenantId }, () =>
+      this.cancelamento.cancelarPorChave(
+        {
+          idempotencyKey: body.idempotencyKey,
+          regemComandaId: body.regemComandaId,
+        },
+        body.motivo ?? 'Cancelado no Regem',
+        'regem',
+      ),
+    );
+  }
+
+  /**
+   * Acha o tenant pela token da integração `regem` (cross-tenant via runAsSystem).
+   * O `await` dentro do runAsSystem mantém o contexto de sistema vivo até o Prisma
+   * rodar (callback síncrono → ForbiddenException). Ver DeviceTokenGuard.
+   */
+  private async tenantPorToken(token: string): Promise<string> {
+    const t = (token ?? '').trim();
+    if (!t) throw new UnauthorizedException('X-Sync-Token ausente.');
+    const integ = await TenantContext.runAsSystem(async () => {
+      return this.prisma.integracao.findFirst({
+        where: {
+          tipo: 'regem',
+          ativo: true,
+          config: { path: ['token'], equals: t } as Prisma.JsonFilter,
+        },
+        select: { tenantId: true },
+      });
+    });
+    if (!integ) throw new UnauthorizedException('Token inválido.');
+    return integ.tenantId;
   }
 }

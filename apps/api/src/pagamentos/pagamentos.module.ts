@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CancelamentoService } from './cancelamento.service';
 import { PagamentosController } from './pagamentos.controller';
 import { PagamentosService } from './pagamentos.service';
 import { PointController } from './point.controller';
@@ -13,6 +14,12 @@ import { PspResolver } from './psp/psp-resolver';
  */
 @Module({
   controllers: [PagamentosController, PointController],
-  providers: [PagamentosService, PointService, PspResolver],
+  providers: [
+    PagamentosService,
+    PointService,
+    PspResolver,
+    CancelamentoService,
+  ],
+  exports: [CancelamentoService],
 })
 export class PagamentosModule {}

@@ -1,10 +1,9 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditoriaService } from '../auditoria/auditoria.service';
+import {
+  CancelamentoService,
+  CancelamentoResultado,
+} from '../pagamentos/cancelamento.service';
 
 /** Linha do relatório de pedidos. */
 export interface PedidoRelatorio {
@@ -62,7 +61,7 @@ export interface HorarioPonto {
 export class RelatorioService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auditoria: AuditoriaService,
+    private readonly cancelamento: CancelamentoService,
   ) {}
 
   /** Pedidos do período (opcionalmente por status), mais novos primeiro. */
@@ -248,32 +247,13 @@ export class RelatorioService {
     return horas;
   }
 
-  /** Cancela um pedido (local). Propagação ao Regem = follow-up cross-repo. */
-  async cancelar(
-    id: string,
-    motivo: string,
-    agora: Date,
-  ): Promise<{ id: string }> {
-    const pedido = await this.prisma.pedido.findFirst({ where: { id } });
-    if (!pedido) throw new NotFoundException('Pedido não encontrado.');
-    if (pedido.status === 'cancelado') {
-      throw new BadRequestException('Pedido já está cancelado.');
-    }
-    await this.prisma.pedido.update({
-      where: { id },
-      data: {
-        status: 'cancelado',
-        canceladoEm: agora,
-        canceladoMotivo: motivo,
-      },
-    });
-    await this.auditoria.registrar({
-      acao: 'pedido.cancelar',
-      recurso: 'pedido',
-      recursoId: id,
-      detalhe: { motivo },
-    });
-    return { id };
+  /**
+   * Cancela um pedido pelo admin (relatórios) COM estorno eletrônico (cartão/PIX)
+   * quando houver. Delega ao CancelamentoService (fonte única, mesma lógica do
+   * cancelamento vindo do Regem). Devolve os detalhes do estorno para a UI.
+   */
+  async cancelar(id: string, motivo: string): Promise<CancelamentoResultado> {
+    return this.cancelamento.cancelarPorId(id, motivo, 'admin');
   }
 
   // ── internos ──────────────────────────────────────────────────────────────
