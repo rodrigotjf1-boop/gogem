@@ -62,7 +62,7 @@ export class RelatorioController {
 
   @Post('pedidos/:id/cancelar')
   cancelar(@Param('id') id: string, @Body() dto: CancelarPedidoDto) {
-    return this.service.cancelar(id, dto.motivo, new Date());
+    return this.service.cancelar(id, dto.motivo);
   }
 }
 

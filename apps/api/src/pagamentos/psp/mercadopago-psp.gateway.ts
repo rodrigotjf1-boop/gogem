@@ -3,6 +3,7 @@ import {
   PixChargeCreated,
   PixStatus,
   PspGateway,
+  RefundResult,
 } from './psp-gateway';
 
 const BASE = 'https://api.mercadopago.com';
@@ -73,6 +74,35 @@ export class MercadoPagoPspGateway implements PspGateway {
     if (!res.ok) return 'error';
     const b = (await res.json()) as any;
     return this._mapStatus(String(b?.status), String(b?.status_detail ?? ''));
+  }
+
+  /**
+   * Estorno TOTAL (POST /v1/payments/:id/refunds sem `amount`). Vale para cartão
+   * (Point) e PIX — o `paymentId` é sempre o id do pagamento em /v1/payments do
+   * MP. `X-Idempotency-Key` evita estorno duplicado.
+   */
+  async reembolsar(
+    paymentId: string,
+    idempotencyKey?: string,
+  ): Promise<RefundResult> {
+    const res = await fetch(`${BASE}/v1/payments/${paymentId}/refunds`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.accessToken}`,
+        'Content-Type': 'application/json',
+        ...(idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {}),
+      },
+      body: JSON.stringify({}), // sem amount = estorno TOTAL
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Mercado Pago refund ${res.status}: ${txt}`);
+    }
+    const b = (await res.json()) as { id?: string | number; status?: string };
+    return {
+      refundId: b.id != null ? String(b.id) : '',
+      status: String(b.status ?? 'approved'),
+    };
   }
 
   parseWebhook(

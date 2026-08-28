@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CardapioModule } from '../../cardapio/cardapio.module';
 import { CatalogoModule } from '../../catalogo/catalogo.module';
+import { PagamentosModule } from '../../pagamentos/pagamentos.module';
 import { RegemModule } from './regem.module';
 import { RegemImportController } from './regem-import.controller';
 import { RegemImportService } from './regem-import.service';
@@ -15,7 +16,7 @@ import { RegemSyncPoller } from './regem-sync.poller';
  * do RegemModule; a republicação vem do CatalogoModule.
  */
 @Module({
-  imports: [RegemModule, CardapioModule, CatalogoModule],
+  imports: [RegemModule, CardapioModule, CatalogoModule, PagamentosModule],
   controllers: [RegemImportController, RegemInboundController],
   providers: [RegemImportService, RegemInboundService, RegemSyncPoller],
   exports: [RegemImportService],

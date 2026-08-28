@@ -107,7 +107,17 @@ describe('Relatórios', () => {
       http.post(`${API}/relatorios/pedidos/:id/cancelar`, async ({ request, params }) => {
         const body = (await request.json()) as { motivo: string };
         cancelado = { id: String(params.id), motivo: body.motivo };
-        return HttpResponse.json({ id: String(params.id) });
+        return HttpResponse.json({
+          status: 'cancelado',
+          pedidoId: String(params.id),
+          estorno: {
+            feito: true,
+            meio: 'credito',
+            valorCentavos: 3000,
+            refundId: 'REF1',
+            mensagem: 'Cai na fatura em alguns dias.',
+          },
+        });
       }),
     );
     montar('gerente');
@@ -116,7 +126,9 @@ describe('Relatórios', () => {
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar cancelamento' }));
 
-    await screen.findByText('Totem entrada'); // re-render após invalidação
+    // Após confirmar, o dialog mostra o resultado do estorno (não fecha na hora).
+    expect(await within(dialog).findByText('Pedido cancelado.')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Estorno solicitado/)).toBeInTheDocument();
     expect(cancelado).toEqual({ id: 'p1', motivo: 'Falta de saldo' });
   });
 

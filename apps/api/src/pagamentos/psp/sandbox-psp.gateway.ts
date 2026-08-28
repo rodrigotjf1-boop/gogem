@@ -3,6 +3,7 @@ import {
   PixChargeCreated,
   PixStatus,
   PspGateway,
+  RefundResult,
 } from './psp-gateway';
 
 /** Segundos até o sandbox "aprovar" sozinho (simula o cliente pagando). */
@@ -40,6 +41,11 @@ export class SandboxPspGateway implements PspGateway {
     if (idadeSeg >= EXPIRA_APOS_SEG) return 'expired';
     if (idadeSeg >= APROVA_APOS_SEG) return 'approved';
     return 'pending';
+  }
+
+  async reembolsar(paymentId: string): Promise<RefundResult> {
+    // Bancada: estorno "aprovado" na hora, sem rede/credencial.
+    return { refundId: `sbx_refund_${paymentId}`, status: 'approved' };
   }
 
   parseWebhook(): { pspRef: string } | null {
