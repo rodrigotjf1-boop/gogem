@@ -53,7 +53,10 @@ class ItemCarrinho {
       observacao: observacao);
 }
 
-enum FormaPagamento { credito, debito, pix, vr }
+/// Formas do totem. `dinheiro` é pago no CAIXA (não cobra no totem): finaliza
+/// direto, o cupom destaca "EFETUAR PAGAMENTO NO CAIXA" e o Regem trata a
+/// pendência por `forma == 'dinheiro'` (nenhum campo novo no fio).
+enum FormaPagamento { credito, debito, pix, vr, dinheiro }
 
 /// Pedido finalizado no totem — nasce com UUID (idempotência, CLAUDE.md) e
 /// vai para a fila local `pedidos_locais` (a F6 drena para o backend).

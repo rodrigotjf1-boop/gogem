@@ -37,7 +37,11 @@ function makeService() {
     // (null) mantém a forma que o totem mandou — não altera os casos abaixo.
     pointPayment: { findFirst: vi.fn().mockResolvedValue(null) },
   };
-  const regem = { lancarVendaExterna: vi.fn() };
+  const regem = {
+    lancarVendaExterna: vi.fn(),
+    lancarTotemDinheiro: vi.fn(),
+    relatarFalha: vi.fn(),
+  };
   const service = new VendasService(
     prisma as unknown as PrismaService,
     regem as unknown as RegemSalesClient,
@@ -206,6 +210,55 @@ describe('VendasService.registrarVendaTotem — relay de falha', () => {
     expect(prisma.pedido.create).not.toHaveBeenCalled();
     expect(prisma.pedido.update.mock.calls[0][0].data.status).toBe('pendente');
     expect(res.comandaId).toBe('cmd-2');
+  });
+});
+
+describe('VendasService.registrarVendaTotem — DINHEIRO → retirada', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('dinheiro → /delivery/totem-dinheiro (NÃO chama a venda fechada)', async () => {
+    const { service, prisma, regem } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pedido.create.mockResolvedValue({ id: 'p-9' });
+    prisma.pedido.update.mockResolvedValue({});
+    regem.lancarTotemDinheiro.mockResolvedValue({
+      comandaId: 'ret-1',
+      senha: 77,
+    });
+
+    const res = await service.registrarVendaTotem(
+      CTX,
+      dto({ pagamentos: [{ forma: 'dinheiro', valor: 3390 }] }),
+    );
+
+    expect(regem.lancarTotemDinheiro).toHaveBeenCalledTimes(1);
+    expect(regem.lancarVendaExterna).not.toHaveBeenCalled();
+    const body = regem.lancarTotemDinheiro.mock.calls[0][0];
+    expect(body.idempotencyKey).toBe('idem-1');
+    expect(body.totalCentavos).toBe(3390); // centavos (não reais)
+    expect(body.senhaPlataforma).toBe('42');
+    expect(res.senha).toBe(77);
+    expect(prisma.pedido.update.mock.calls.at(-1)?.[0].data.status).toBe(
+      'enviado',
+    );
+  });
+
+  it('relay dinheiro falhando → best-effort: grava falha, devolve senha local, NÃO relança', async () => {
+    const { service, prisma, regem } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pedido.create.mockResolvedValue({ id: 'p-9' });
+    prisma.pedido.update.mockResolvedValue({});
+    regem.lancarTotemDinheiro.mockRejectedValue(new Error('Regem 500'));
+
+    const res = await service.registrarVendaTotem(
+      CTX,
+      dto({ pagamentos: [{ forma: 'dinheiro', valor: 3390 }] }),
+    );
+
+    expect(res.senha).toBe(42); // senha local (senhaLocal), sem exceção
+    expect(prisma.pedido.update.mock.calls.at(-1)?.[0].data.status).toBe(
+      'falha',
+    );
   });
 });
 

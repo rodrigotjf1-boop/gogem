@@ -162,6 +162,25 @@ class GogemApi {
     throw GogemApiException(res.statusCode, res.body);
   }
 
+  /// POST /vendas/falha — reporta um pagamento que NÃO passou (erro/recusa/
+  /// timeout/cancelamento) + o `motivo`. O backend relata ao Regem (cupom "não
+  /// passou"). BEST-EFFORT: nunca propaga — o cliente já vê o erro na tela.
+  Future<void> reportarFalha(Map<String, dynamic> corpo,
+      {required String motivo}) async {
+    if (deviceToken == null || deviceToken!.isEmpty) return;
+    try {
+      await _client
+          .post(
+            Uri.parse('$baseUrl/vendas/falha'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({...corpo, 'motivo': motivo}),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // best-effort; nunca propaga.
+    }
+  }
+
   /// GET /kiosk/latest — manifesto da release mais nova (auto-update). Devolve
   /// null quando não há release publicada. O totem compara o versionCode.
   Future<KioskRelease?> latestRelease() async {

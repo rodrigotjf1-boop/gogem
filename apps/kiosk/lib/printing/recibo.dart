@@ -23,7 +23,15 @@ Uint8List montarCupom(PedidoLocal pedido, String senha, {String loja = 'GoGeM'})
     ..linha()
     ..itemValor('TOTAL', formatCentavos(pedido.totalCentavos))
     ..texto('pagamento: ${pedido.forma.name}')
-    ..texto('consumo: ${pedido.consumo == 'viagem' ? 'para viagem' : 'comer aqui'}')
+    ..texto('consumo: ${pedido.consumo == 'viagem' ? 'para viagem' : 'comer aqui'}');
+  // Dinheiro: pago no caixa — destaque na via do cliente.
+  if (pedido.forma == FormaPagamento.dinheiro) {
+    b
+      ..linha()
+      ..texto('EFETUAR PAGAMENTO NO CAIXA',
+          negrito: true, tamanho: 2, centro: true);
+  }
+  b
     ..linha()
     ..texto('SENHA', centro: true)
     ..texto(senha, negrito: true, tamanho: 3, centro: true)

@@ -69,6 +69,35 @@ export interface RegemVendaExternaResposta {
   idempotente?: boolean;
 }
 
+/**
+ * Corpo do reporte de FALHA/cancelamento de pagamento ao Regem
+ * (`POST /vendas/externa-pdv/falha`). NÃO é uma venda: o Regem lista o cupom
+ * "não passou" + `motivo`, sem caixa e sem estoque. `totalCentavos` em CENTAVOS
+ * (é só exibição — diferente da venda, que vai em reais).
+ */
+export interface RegemVendaFalhaBody {
+  idempotencyKey: string;
+  itens: RegemVendaItem[];
+  formaTentada: string;
+  totalCentavos: number;
+  senhaPlataforma?: string;
+  motivo: string;
+}
+
+/**
+ * Corpo do pedido em DINHEIRO ao Regem (`POST /delivery/totem-dinheiro`).
+ * NÃO é venda fechada: vira uma RETIRADA "Totem GoGeM" a receber, cobrada no
+ * balcão (finalização no Regem). Idempotente por `idempotencyKey`. `totalCentavos`
+ * é opcional (o Regem recalcula pelo preço do servidor).
+ */
+export interface RegemTotemDinheiroBody {
+  idempotencyKey: string;
+  itens: RegemVendaItem[];
+  cliente?: string;
+  senhaPlataforma?: string;
+  totalCentavos?: number;
+}
+
 /** Timeout padrão da requisição ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -117,5 +146,82 @@ export class RegemSalesClient {
     }
 
     return (await res.json()) as RegemVendaExternaResposta;
+  }
+
+  /**
+   * Lança um pedido em DINHEIRO no Regem como RETIRADA a receber
+   * (`POST /delivery/totem-dinheiro`). Auth = `X-Sync-Token` (igual ao
+   * `/delivery/ingest`). Idempotente por `idempotencyKey`. Lança erro em falha —
+   * o VendasService decide o tratamento (best-effort para o totem).
+   */
+  async lancarTotemDinheiro(
+    body: RegemTotemDinheiroBody,
+  ): Promise<RegemVendaExternaResposta> {
+    const { base, token } = await this.resolver.resolve();
+    const url = `${base.replace(/\/$/, '')}/delivery/totem-dinheiro`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': token,
+          'X-Loja-Token': token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      throw new Error(`Falha no pedido dinheiro no Regem (${url}): ${motivo}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => '');
+      throw new Error(
+        `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
+      );
+    }
+    // Resposta pode vir vazia/variada — o Regem finaliza no balcão. Parse defensivo.
+    return (await res.json().catch(() => ({}))) as RegemVendaExternaResposta;
+  }
+
+  /**
+   * Reporta ao Regem um pagamento que NÃO passou (cupom "não passou" + motivo).
+   * BEST-EFFORT: nunca lança — sem config Regem, 404 (endpoint ainda não criado
+   * no Regem) ou erro de rede são silenciosos. Nada de venda/caixa é registrado.
+   */
+  async relatarFalha(body: RegemVendaFalhaBody): Promise<void> {
+    let cfg: { base: string; token: string };
+    try {
+      cfg = await this.resolver.resolve();
+    } catch {
+      return; // sem integração Regem → nada a reportar
+    }
+    const url = `${cfg.base.replace(/\/$/, '')}/vendas/externa-pdv/falha`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': cfg.token,
+          'X-Loja-Token': cfg.token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      // best-effort: não checamos res.ok nem lançamos.
+    } catch {
+      // rede/timeout — silencioso (o cliente já viu o erro na tela do totem).
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }

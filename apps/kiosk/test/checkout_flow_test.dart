@@ -77,7 +77,7 @@ void main() {
     expect(await repo.pendentes(), 1);
 
     // consome o timer de auto-retorno (evita "timer pending" no harness)
-    await tester.pump(const Duration(seconds: 9));
+    await tester.pump(const Duration(seconds: 41)); // auto-retorno (contador 40s)
     await bombear(tester);
     expect(find.text('TOQUE PARA PEDIR'), findsOneWidget);
   });
@@ -167,7 +167,7 @@ void main() {
     expect(corpo['cliente'], 'Ana');
     expect(corpo['pagamentos'][0]['forma'], 'credito');
 
-    await tester.pump(const Duration(seconds: 9));
+    await tester.pump(const Duration(seconds: 41)); // auto-retorno (contador 40s)
     await bombear(tester);
   });
 

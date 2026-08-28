@@ -5,7 +5,7 @@ import {
   RegemSalesClient,
   type RegemVendaExternaResposta,
 } from '../integracoes/regem/regem-sales.client';
-import { VendaTotemDto } from './dto/venda-totem.dto';
+import { VendaTotemDto, VendaFalhaTotemDto } from './dto/venda-totem.dto';
 
 /** Plataforma reportada ao Regem (origem da venda). */
 const PLATAFORMA = 'GoGeM Totem';
@@ -132,6 +132,18 @@ export class VendasService {
       });
     }
 
+    // 2.5 DINHEIRO: NÃO é venda fechada. Vira RETIRADA "a receber" no Regem
+    //     (/delivery/totem-dinheiro), cobrada no balcão. Relay best-effort — o
+    //     cliente já tem o cupom "EFETUAR PAGAMENTO NO CAIXA".
+    const ehDinheiro =
+      pagamentosReais.length > 0 &&
+      pagamentosReais.every(
+        (p) => (p.forma ?? '').toLowerCase() === 'dinheiro',
+      );
+    if (ehDinheiro) {
+      return this.relayDinheiro(pedido.id, dto, totalCentavos);
+    }
+
     // 3. Repassa ao Regem. Falha → grava `falha` + erro e RELANÇA (o totem
     //    re-tenta depois com a MESMA idempotencyKey; o Regem também dedupe).
     let resposta: RegemVendaExternaResposta;
@@ -185,6 +197,129 @@ export class VendasService {
       total: resposta.total,
       nfce: resposta.nfce,
     };
+  }
+
+  /**
+   * Relay do pedido em DINHEIRO → RETIRADA "a receber" no Regem
+   * (`/delivery/totem-dinheiro`), cobrada no balcão. Best-effort: em falha grava
+   * `falha` + motivo e NÃO relança (o cliente já tem o cupom "pague no caixa") —
+   * devolve a senha LOCAL ao totem.
+   */
+  private async relayDinheiro(
+    pedidoId: string,
+    dto: VendaTotemDto,
+    totalCentavos: number,
+  ): Promise<VendaTotemResultado> {
+    try {
+      const resp = await this.regem.lancarTotemDinheiro({
+        idempotencyKey: dto.idempotencyKey,
+        itens: dto.itens,
+        cliente: dto.cliente ?? undefined,
+        senhaPlataforma:
+          dto.senhaLocal != null ? String(dto.senhaLocal) : undefined,
+        totalCentavos,
+      });
+      await this.prisma.pedido.update({
+        where: { id: pedidoId },
+        data: {
+          status: 'enviado',
+          erro: null,
+          regemComandaId: resp.comandaId ?? null,
+          regemSenha: resp.senha ?? null,
+          regemResposta: resp as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        comandaId: resp.comandaId ?? '',
+        senha: resp.senha ?? dto.senhaLocal ?? null,
+        total: resp.total,
+      };
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      await this.prisma.pedido.update({
+        where: { id: pedidoId },
+        data: { status: 'falha', erro: motivo },
+      });
+      this.logger.warn(
+        `Dinheiro ${dto.idempotencyKey} — relay /delivery/totem-dinheiro falhou (best-effort): ${motivo}`,
+      );
+      // Best-effort: NÃO relança. O totem mostra a senha local (o cupom já saiu).
+      return { comandaId: '', senha: dto.senhaLocal ?? null };
+    }
+  }
+
+  /**
+   * Reporta um pagamento que NÃO passou (erro/recusa/timeout/cancelamento).
+   * Grava o `Pedido` local como `falha` + `motivo` (espelho p/ relatórios) e
+   * relata ao Regem (cupom "não passou"). NUNCA relança — é best-effort: o
+   * cliente já viu o erro na tela do totem. NÃO baixa estoque nem caixa.
+   */
+  async registrarFalhaTotem(
+    ctx: DeviceCtxInfo,
+    dto: VendaFalhaTotemDto,
+  ): Promise<{ ok: boolean }> {
+    const totalCentavos = dto.pagamentos.reduce(
+      (s, p) => s + (p.valor || 0),
+      0,
+    );
+    const formaTentada = dto.pagamentos[0]?.forma ?? 'desconhecida';
+    const itens = dto.itens as unknown as Prisma.InputJsonValue;
+    const pagamentos = dto.pagamentos as unknown as Prisma.InputJsonValue;
+
+    // 1. Espelho local: grava/atualiza o Pedido como 'falha' + motivo. Nunca
+    //    sobrescreve um pedido já 'enviado' (uma falha anterior à retentativa
+    //    bem-sucedida não deve apagar a venda). Idempotente por idempotencyKey.
+    try {
+      const existente = await this.prisma.pedido.findFirst({
+        where: { idempotencyKey: dto.idempotencyKey },
+      });
+      if (!existente || existente.status !== 'enviado') {
+        const data = {
+          status: 'falha',
+          erro: dto.motivo,
+          cpf: dto.cpf ?? null,
+          cliente: dto.cliente ?? null,
+          consumo: dto.consumo ?? 'local',
+          dispositivoId: ctx.deviceId,
+          itens,
+          pagamentos,
+          totalCentavos,
+          senhaLocal: dto.senhaLocal ?? null,
+        };
+        if (existente) {
+          await this.prisma.pedido.update({
+            where: { id: existente.id },
+            data,
+          });
+        } else {
+          await this.prisma.pedido.create({
+            data: {
+              idempotencyKey: dto.idempotencyKey,
+              ...data,
+            } as Prisma.PedidoUncheckedCreateInput,
+          });
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao gravar Pedido 'falha' ${dto.idempotencyKey}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    // 2. Relata ao Regem (best-effort — cupom "não passou" + motivo).
+    await this.regem.relatarFalha({
+      idempotencyKey: dto.idempotencyKey,
+      itens: dto.itens,
+      formaTentada,
+      totalCentavos,
+      senhaPlataforma:
+        dto.senhaLocal != null ? String(dto.senhaLocal) : undefined,
+      motivo: dto.motivo,
+    });
+
+    return { ok: true };
   }
 
   /**

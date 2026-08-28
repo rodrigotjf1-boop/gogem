@@ -144,3 +144,20 @@ export class VendaTotemDto {
   @Min(0)
   senhaLocal?: number;
 }
+
+/**
+ * Falha/cancelamento de pagamento no totem. O totem NÃO concluiu o pagamento
+ * (recusa, erro de comunicação, timeout ou cancelamento). Reusa o corpo da venda
+ * + o `motivo`. O GoGeM registra o `Pedido` como `falha` e reporta ao Regem
+ * (cupom "não passou" + motivo) — SEM baixar estoque e SEM entrar no caixa.
+ */
+export class VendaFalhaTotemDto extends VendaTotemDto {
+  @ApiProperty({
+    description: 'Motivo da falha/cancelamento (mensagem exibida ao cliente).',
+    example: 'Pagamento não aprovado. Tente outra forma.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  motivo!: string;
+}

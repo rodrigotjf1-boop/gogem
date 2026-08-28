@@ -44,7 +44,8 @@ final router = GoRouter(
         path: '/confirmacao',
         builder: (_, s) => ConfirmacaoScreen(
             senha: s.uri.queryParameters['senha'] ?? '---',
-            impresso: s.uri.queryParameters['impresso'] != '0')),
+            impresso: s.uri.queryParameters['impresso'] != '0',
+            dinheiro: s.uri.queryParameters['dinheiro'] == '1')),
     GoRoute(path: '/admin', builder: (_, __) => const AdminGateScreen()),
     GoRoute(path: '/admin/painel', builder: (_, __) => const AdminPanelScreen()),
   ],
