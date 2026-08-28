@@ -15,6 +15,7 @@ import {
   useRelatorioHorarios,
   useRelatorioPagamentos,
   useResumo,
+  type CancelamentoResultado,
   type FaturamentoCard,
   type PedidoRelatorio,
   type PedidoStatus,
@@ -601,12 +602,16 @@ function CancelarDialog({
   const [motivo, setMotivo] = React.useState<string>(MOTIVOS[0]);
   const [outro, setOutro] = React.useState('');
   const [erro, setErro] = React.useState<string | null>(null);
+  const [resultado, setResultado] = React.useState<CancelamentoResultado | null>(
+    null,
+  );
 
   React.useEffect(() => {
     if (pedido) {
       setMotivo(MOTIVOS[0]);
       setOutro('');
       setErro(null);
+      setResultado(null);
     }
   }, [pedido]);
 
@@ -618,8 +623,10 @@ function CancelarDialog({
       return;
     }
     try {
-      await cancelar.mutateAsync({ id: pedido.id, motivo: texto });
-      onFechar();
+      // Mostra o resultado do estorno (não fecha na hora) — o operador vê se o
+      // estorno eletrônico saiu ou se precisa devolver no balcão.
+      const r = await cancelar.mutateAsync({ id: pedido.id, motivo: texto });
+      setResultado(r);
     } catch {
       setErro('Não foi possível cancelar. Tente novamente.');
     }
@@ -630,11 +637,41 @@ function CancelarDialog({
       aberto={Boolean(pedido)}
       onFechar={onFechar}
       titulo="Cancelar pedido"
-      descricao="O pedido é marcado como cancelado no GoGeM. A baixa no Regem/impressão é feita à parte."
+      descricao="Marca o pedido como cancelado e estorna o pagamento eletrônico (cartão/PIX) no Mercado Pago. Dinheiro se devolve no balcão."
       larguraClasse="max-w-md"
     >
-      <div className="space-y-4">
-        <div className="space-y-1">
+      {resultado ? (
+        <div className="space-y-4">
+          <div className="rounded-md border p-3 text-sm">
+            <p className="font-medium">Pedido cancelado.</p>
+            {resultado.estorno?.feito ? (
+              <p className="mt-1 text-emerald-600">
+                Estorno solicitado:{' '}
+                {formatarBRL(resultado.estorno.valorCentavos)} no{' '}
+                {resultado.estorno.meio}
+                {resultado.estorno.refundId
+                  ? ` · ref ${resultado.estorno.refundId}`
+                  : ''}
+                .
+              </p>
+            ) : (
+              <p className="mt-1 text-amber-600">Sem estorno eletrônico.</p>
+            )}
+            {resultado.estorno?.mensagem && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {resultado.estorno.mensagem}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={onFechar}>
+              Fechar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="space-y-1">
           <Label htmlFor="cancel-motivo">Motivo</Label>
           <select
             id="cancel-motivo"
@@ -671,7 +708,8 @@ function CancelarDialog({
             Confirmar cancelamento
           </Button>
         </div>
-      </div>
+        </div>
+      )}
     </Dialog>
   );
 }

@@ -124,11 +124,26 @@ export function useRelatorioHorarios(
   });
 }
 
+/** Detalhe do estorno devolvido ao cancelar (para exibir na UI). */
+export interface EstornoResultado {
+  feito: boolean;
+  meio: string;
+  valorCentavos: number;
+  refundId?: string;
+  mensagem: string;
+}
+
+export interface CancelamentoResultado {
+  status: 'cancelado';
+  pedidoId: string;
+  estorno: EstornoResultado;
+}
+
 export function useCancelarPedido() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { id: string; motivo: string }) =>
-      apiPost<{ id: string }, { motivo: string }>(
+      apiPost<CancelamentoResultado, { motivo: string }>(
         `/relatorios/pedidos/${v.id}/cancelar`,
         { motivo: v.motivo },
       ),
