@@ -132,6 +132,16 @@ export class VendasService {
       });
     }
 
+    // 2.5 DINHEIRO: NÃO é venda fechada. Vira RETIRADA "a receber" no Regem
+    //     (/delivery/totem-dinheiro), cobrada no balcão. Relay best-effort — o
+    //     cliente já tem o cupom "EFETUAR PAGAMENTO NO CAIXA".
+    const ehDinheiro =
+      pagamentosReais.length > 0 &&
+      pagamentosReais.every((p) => (p.forma ?? '').toLowerCase() === 'dinheiro');
+    if (ehDinheiro) {
+      return this.relayDinheiro(pedido.id, dto, totalCentavos);
+    }
+
     // 3. Repassa ao Regem. Falha → grava `falha` + erro e RELANÇA (o totem
     //    re-tenta depois com a MESMA idempotencyKey; o Regem também dedupe).
     let resposta: RegemVendaExternaResposta;
@@ -185,6 +195,55 @@ export class VendasService {
       total: resposta.total,
       nfce: resposta.nfce,
     };
+  }
+
+  /**
+   * Relay do pedido em DINHEIRO → RETIRADA "a receber" no Regem
+   * (`/delivery/totem-dinheiro`), cobrada no balcão. Best-effort: em falha grava
+   * `falha` + motivo e NÃO relança (o cliente já tem o cupom "pague no caixa") —
+   * devolve a senha LOCAL ao totem.
+   */
+  private async relayDinheiro(
+    pedidoId: string,
+    dto: VendaTotemDto,
+    totalCentavos: number,
+  ): Promise<VendaTotemResultado> {
+    try {
+      const resp = await this.regem.lancarTotemDinheiro({
+        idempotencyKey: dto.idempotencyKey,
+        itens: dto.itens,
+        cliente: dto.cliente ?? undefined,
+        senhaPlataforma:
+          dto.senhaLocal != null ? String(dto.senhaLocal) : undefined,
+        totalCentavos,
+      });
+      await this.prisma.pedido.update({
+        where: { id: pedidoId },
+        data: {
+          status: 'enviado',
+          erro: null,
+          regemComandaId: resp.comandaId ?? null,
+          regemSenha: resp.senha ?? null,
+          regemResposta: resp as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        comandaId: resp.comandaId ?? '',
+        senha: resp.senha ?? dto.senhaLocal ?? null,
+        total: resp.total,
+      };
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      await this.prisma.pedido.update({
+        where: { id: pedidoId },
+        data: { status: 'falha', erro: motivo },
+      });
+      this.logger.warn(
+        `Dinheiro ${dto.idempotencyKey} — relay /delivery/totem-dinheiro falhou (best-effort): ${motivo}`,
+      );
+      // Best-effort: NÃO relança. O totem mostra a senha local (o cupom já saiu).
+      return { comandaId: '', senha: dto.senhaLocal ?? null };
+    }
   }
 
   /**

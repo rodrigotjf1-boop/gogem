@@ -84,6 +84,20 @@ export interface RegemVendaFalhaBody {
   motivo: string;
 }
 
+/**
+ * Corpo do pedido em DINHEIRO ao Regem (`POST /delivery/totem-dinheiro`).
+ * NÃO é venda fechada: vira uma RETIRADA "Totem GoGeM" a receber, cobrada no
+ * balcão (finalização no Regem). Idempotente por `idempotencyKey`. `totalCentavos`
+ * é opcional (o Regem recalcula pelo preço do servidor).
+ */
+export interface RegemTotemDinheiroBody {
+  idempotencyKey: string;
+  itens: RegemVendaItem[];
+  cliente?: string;
+  senhaPlataforma?: string;
+  totalCentavos?: number;
+}
+
 /** Timeout padrão da requisição ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -132,6 +146,48 @@ export class RegemSalesClient {
     }
 
     return (await res.json()) as RegemVendaExternaResposta;
+  }
+
+  /**
+   * Lança um pedido em DINHEIRO no Regem como RETIRADA a receber
+   * (`POST /delivery/totem-dinheiro`). Auth = `X-Sync-Token` (igual ao
+   * `/delivery/ingest`). Idempotente por `idempotencyKey`. Lança erro em falha —
+   * o VendasService decide o tratamento (best-effort para o totem).
+   */
+  async lancarTotemDinheiro(
+    body: RegemTotemDinheiroBody,
+  ): Promise<RegemVendaExternaResposta> {
+    const { base, token } = await this.resolver.resolve();
+    const url = `${base.replace(/\/$/, '')}/delivery/totem-dinheiro`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': token,
+          'X-Loja-Token': token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      throw new Error(`Falha no pedido dinheiro no Regem (${url}): ${motivo}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => '');
+      throw new Error(
+        `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
+      );
+    }
+    // Resposta pode vir vazia/variada — o Regem finaliza no balcão. Parse defensivo.
+    return (await res.json().catch(() => ({}))) as RegemVendaExternaResposta;
   }
 
   /**

@@ -1,68 +1,38 @@
-# Pagamento em dinheiro no totem — contrato GoGeM → Regem
+# Pagamento em dinheiro no totem + reporte de falha — GoGeM ↔ Regem
 
-> Feature: o cliente escolhe **Dinheiro** no totem; o pedido **finaliza e vai pra produção** com **pendência de pagamento**; paga no **caixa**; o atendente **confirma** → status **PAGO** → **reimpressão**. Comandas/KDS/confirmação = **Regem** (o usuário faz). GoGeM = opção no totem + cupom + relay sinalizando pendência. Plano — nada implementado.
+> Estado: **lado GoGeM implementado** (PR #130). O totem ganha a forma **Dinheiro**
+> (pago no caixa) e passa a informar o Regem em **dois momentos distintos**, cada um
+> num endpoint próprio. O lado Regem (endpoints receptores) é do usuário.
 
-## Descobertas (ancoradas no código)
+## Roteamento (o que o GoGeM envia)
 
-- **Já é balcão/PDV:** o `/vendas/externa-pdv` usa `origem: 'totem'` → ramo `producao_balcao` (`backend/src/modules/producao-pedido/producao-pedido.service.ts:337`). **Não** é delivery. `plataforma` = só rótulo no KDS/cupom.
-- **Endpoint é pré-pago obrigatório:** `venderTotem` valida `pagamentos[]` = total (±R$0,05) e escreve `lancamento_caixa` **entrada** na hora (`backend/src/modules/vendas/vendas.service.ts:1262-1295`). Sem estado "a receber" (`comanda.status` = aberta|fechada|cancelada, `schema.ts:1362`; `lancamento_caixa` sem coluna de status, `schema.ts:925-943`).
-- **Modelo de "confirmar recebimento" já existe:** `acerto_subpdv` (`schema.ts:2900-2924`, `status: pendente|baixado|cancelado`; operador confere `recebidoCentavos` e dá baixa) — reusar essa mecânica.
-- **KDS:** cada venda vira 1 `producaoPedido` (`status: recebido|preparo|pronto|entregue|cancelado`, `schema.ts:1803`), `destinoTipo:'kds'`, com `plataforma`/`senhaPlataforma` como metadados.
+O totem sempre fala com o **backend GoGeM** (`POST /vendas`, device-token). O backend
+decide o destino no Regem conforme o caso:
 
-## Contrato do payload (GoGeM → Regem) — venda em dinheiro pendente
+| Momento | Endpoint no Regem (X-Sync-Token) | Efeito no Regem |
+|---|---|---|
+| **Dinheiro** (cliente escolheu) | `POST /delivery/totem-dinheiro` | Retirada **"Totem GoGeM" a receber**, cobrada no balcão (finaliza lá). **Sem caixa/estoque até pagar.** |
+| **Falha** no pagamento (erro/recusa/timeout/cancelamento) | `POST /vendas/externa-pdv/falha` | Cupom **"falha no pagamento"** + motivo. Sem caixa/estoque. |
+| **Cartão/PIX aprovado** | `POST /vendas/externa-pdv` (já existia) | Venda fechada normal (caixa/estoque/KDS). |
 
-Reaproveita o `VendaExternaPdvDto` (`backend/src/modules/vendas/dto/venda-externa-pdv.dto.ts:55-101`) + **um sinal novo**:
+Ambos os novos são **idempotentes** por `idempotencyKey` e **best-effort** (404 até o
+endpoint subir = ignorado; nada quebra no totem).
 
+### Dinheiro → `POST /delivery/totem-dinheiro`
 ```jsonc
-POST /vendas/externa-pdv   (X-Loja-Token)
 {
   "idempotencyKey": "<uuid do totem>",
-  "itens": [ { "codigoPdv": "<produto.codigo>", "quantidade": 1, "observacao": "" } ],
-  "pagamentos": [ { "forma": "dinheiro", "valor": 42.00 } ],   // venda NORMAL em dinheiro (bate com o total)
-  "pagamentoPendente": true,        // ★ NOVO — INFORMATIVO: "pagar no caixa" (rótulo p/ KDS/comanda)
-  "consumo": "local",
-  "cpf": "",                        // opcional
-  "plataforma": "GoGeM Totem",      // rótulo no KDS/cupom
-  "senhaPlataforma": "123"          // nº do pedido no totem
+  "itens": [ { "codigoPdv": "...", "quantidade": 1 } ],
+  "cliente": "Fulano",         // opcional
+  "senhaPlataforma": "123",    // opcional (nº do pedido no totem)
+  "totalCentavos": 3390        // opcional (o Regem recalcula pelo preço do servidor)
 }
 ```
+Auth = `X-Sync-Token` (o mesmo do `/delivery/ingest`). Resposta: parse defensivo — se
+vier `{ comandaId, senha }`, o totem mostra a senha; senão usa a **senha local**.
 
-- É uma **venda normal em dinheiro** (`forma:'dinheiro'`, soma = total) — o Regem processa como já faz. O `pagamentoPendente` é **só informativo** pra o KDS/comanda mostrarem o destaque; **não** adia o caixa.
-- Resposta: `{ comandaId, senha, idempotente? }` (igual hoje).
-
-## O que muda no GoGeM (eu)
-
-- `FormaPagamento` enum ganha `dinheiro` (`apps/kiosk/lib/domain/order/order_models.dart:56`).
-- Botão **"Dinheiro"** na tela de pagamento (`apps/kiosk/lib/features/pedido/pagamento_screen.dart:519-531`) + template GoGen — **pula a cobrança online** e finaliza direto.
-- Cupom do cliente (`apps/kiosk/lib/printing/recibo.dart:7-33`): quando `dinheiro`, destaca **"EFETUAR PAGAMENTO NO CAIXA"**.
-- Relay envia `forma:'dinheiro'` + `pagamentoPendente:true` (`apps/api/src/integracoes/regem/regem-sales.client.ts` + `apps/api/src/vendas/*`).
-
-## O que muda no Regem (usuário) — modelo INFORMATIVO (leve)
-
-A venda entra **normal** (dinheiro): comanda `fechada` + baixa estoque + KDS + `lancamento_caixa` entrada, **como já é hoje** (`vendas.service.ts:1127+`). O "a receber / PAGO" é **status informativo**, não mexe no caixa. Então:
-
-1. **DTO:** campo opcional `pagamentoPendente: boolean` (informativo) no `VendaExternaPdvDto` — *ou* derivar de `forma === 'dinheiro'` sem novo campo.
-2. **KDS/comanda de produção:** quando informativo, destacar **"PENDÊNCIA DE PAGAMENTO — VERIFICAR"**. Um status/flag no `producaoPedido` (ex.: `pagamentoConfirmado: false`).
-3. **Ação "confirmar recebimento"** (só informativa): atendente confirma → status vira **PAGO** (`pagamentoConfirmado: true`) → **reimpressão** **"PEDIDO TOTEM PAGO — REIMPRESSÃO"**. **Não** cria novo lançamento de caixa (a venda já entrou).
-
-## Cancelamentos (Regem → GoGeM) — cross-cutting (não só dinheiro)
-
-Regra: **o cancelamento nasce no Regem** (dono de estoque/perda/caixa); o GoGeM **espelha**. O totem/GoGeM **não origina** cancel pro Regem.
-
-- **Regem já trata** (sem mudança): estorno de **estoque**, **perda**, e **não contabilizar/estornar o caixa**.
-- **Gap atual:** não existe canal de cancel Regem→GoGeM (só catálogo `/sync/regem/publicar`); o cancel do GoGeM é local-only (`apps/api/src/relatorio/relatorio.service.ts:251-277`, "Propagação ao Regem = follow-up").
-- **Proposta:** inbound no GoGeM `POST /sync/regem/pedido-cancelado` (auth `x-sync-token`, por `idempotencyKey`/`regemComandaId`) → `Pedido.status='cancelado'` (+ motivo), idempotente/best-effort. Relatórios já filtram `cancelado` (`relatorio-query.dto`) → sai da receita. Vale nuvem e edge.
-- **Decorrência:** o cancel originado no GoGeM (gerente-only) deve ser **gateado em loja Regem** (cancel nasce no Regem); loja sem Regem mantém o cancel local.
-
-## Falha de pagamento → cupom "não passou" no Regem (implementado no GoGeM)
-
-Quando o pagamento **não passa** (recusa, erro de comunicação, timeout ou **cancelamento** pelo cliente), o totem informa o Regem com o **motivo** — best-effort (o cliente vê o erro na tela do mesmo jeito). O Regem lista o **cupom "não passou" + motivo**, **sem** estoque e **sem** caixa.
-
-**Fluxo:** totem (`_falhaPagamento`) → `POST /vendas/falha` (device-token) → o backend grava o `Pedido` como `falha` + motivo (espelho) e relata ao Regem.
-
-**Contrato GoGeM → Regem** (endpoint que o Regem implementa):
+### Falha → `POST /vendas/externa-pdv/falha`
 ```jsonc
-POST /vendas/externa-pdv/falha      (X-Loja-Token)
 {
   "idempotencyKey": "<uuid do totem>",
   "itens": [ { "codigoPdv": "...", "quantidade": 1 } ],
@@ -72,19 +42,35 @@ POST /vendas/externa-pdv/falha      (X-Loja-Token)
   "motivo": "Pagamento não aprovado. Tente outra forma."
 }
 ```
+Reporta **erros E cancelamentos** (o `motivo` distingue).
 
-**Lado GoGeM (feito):**
-- Totem `reportarFalha` (`apps/kiosk/lib/data/api/gogem_api.dart`) — best-effort; sem device-token não tenta.
-- Backend `POST /vendas/falha` (`vendas.controller.ts`) + `VendasService.registrarFalhaTotem` (grava `Pedido` `falha` + motivo) + `RegemSalesClient.relatarFalha` (relata; **404 até o Regem criar o endpoint = ignorado**, best-effort).
+## Lado GoGeM (implementado — PR #130)
 
-**Lado Regem (usuário):** criar `POST /vendas/externa-pdv/falha` → cupom "não passou" + motivo, sem caixa/estoque.
+**Totem (Flutter):**
+- `FormaPagamento.dinheiro` + botão **Dinheiro** (telas padrão + GoGen) — finaliza **sem cobrar**.
+- Cupom do cliente: destaque **"EFETUAR PAGAMENTO NO CAIXA"** (`recibo.dart`).
+- Confirmação: **contador de 40s** (auto-retorno) + box **"PAGUE NO CAIXA PARA RETIRAR"** no dinheiro.
+- `reportarFalha` best-effort no `_falhaPagamento` (erro/cancelamento).
 
-**Default:** reporta **erros E cancelamentos** (o `motivo` distingue). Se quiser só erros, é 1 ajuste no `_falhaPagamento`.
+**Backend (NestJS):**
+- `VendasService.registrarVendaTotem`: se `forma == 'dinheiro'` → `relayDinheiro` → `RegemSalesClient.lancarTotemDinheiro` (`/delivery/totem-dinheiro`, best-effort). Senão, `/vendas/externa-pdv`.
+- `POST /vendas/falha` → `registrarFalhaTotem` → `RegemSalesClient.relatarFalha` (`/vendas/externa-pdv/falha`).
+- `Pedido` (espelho) fica `enviado` no sucesso / `falha` + `erro` na falha do relay.
 
-## Decisões de desenho
+## Lado Regem (usuário)
 
-- **Venda em dinheiro entra normal** (caixa registra no fechamento do totem); **"a receber"/"PAGO" = informativo** pro atendente conferir/entregar. Sem adiamento de caixa, sem `acerto`.
-- **Estoque baixa na hora** (a comida é feita).
-- **Idempotência** intacta (`(tenantId, idempotencyKey)`).
-- ⚠️ *Implicação (ciente):* se o cliente **desistir sem pagar**, a venda já entrou no caixa (a baixa/estorno seria manual, via cancelamento). Modelo aceito por simplicidade.
-- Vale nos **dois modelos** (nuvem hoje e edge amanhã) — mesmo contrato `/vendas/externa-pdv`.
+- `POST /delivery/totem-dinheiro` → cria a retirada "Totem GoGeM" a receber; cobra/finaliza no balcão.
+- `POST /vendas/externa-pdv/falha` → lista o cupom "falha no pagamento" + motivo.
+
+## Cancelamentos (Regem → GoGeM) — cross-cutting (ainda pendente)
+
+Regra: **o cancelamento de um pedido já criado nasce no Regem** (dono de estoque/perda/caixa); o GoGeM **espelha**. O totem/GoGeM **não origina** cancel de pedido pro Regem.
+- **Gap atual:** não existe canal de cancel Regem→GoGeM (só catálogo `/sync/regem/publicar`).
+- **Proposta:** inbound no GoGeM `POST /sync/regem/pedido-cancelado` (`x-sync-token`, por `idempotencyKey`/`regemComandaId`) → `Pedido.status='cancelado'`. Relatórios já filtram `cancelado`.
+
+## Decisões
+
+- **Dinheiro = retirada "a receber"** (NÃO venda fechada) → financeiro correto: só entra no caixa quando pago no balcão.
+- **Best-effort** nos dois relays novos (o cliente já tem o cupom / vê o erro na tela). ⚠️ *Tradeoff:* uma falha transitória do relay do dinheiro não tem auto-retry — nesse caso raro o pedido não aparece na Retirada do Regem. Se quiser garantia (retry via fila do totem), é trocar o best-effort por re-throw.
+- Idempotência dupla `(tenantId, idempotencyKey)` local + dedupe no Regem.
+- Vale nos **dois modelos** (nuvem hoje, edge amanhã) — mesmos contratos.
