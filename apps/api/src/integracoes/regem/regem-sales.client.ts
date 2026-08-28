@@ -186,8 +186,24 @@ export class RegemSalesClient {
         `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
       );
     }
-    // Resposta pode vir vazia/variada — o Regem finaliza no balcão. Parse defensivo.
-    return (await res.json().catch(() => ({}))) as RegemVendaExternaResposta;
+    // Resposta pode vir vazia/variada — parse defensivo. A SENHA da retirada (a
+    // que a cozinha/balcão chama) pode vir como `senha`, `numero` ou
+    // `senhaPlataforma`: normaliza para `senha`, pois o totem mostra ESSA senha
+    // (senão o cliente sai com a senha local e o balcão chama outra).
+    const b = (await res.json().catch(() => ({}))) as {
+      comandaId?: string;
+      senha?: number | string;
+      numero?: number | string;
+      senhaPlataforma?: number | string;
+      total?: number;
+    };
+    const senhaRaw = b.senha ?? b.numero ?? b.senhaPlataforma;
+    const senha = senhaRaw == null ? undefined : Number(senhaRaw);
+    return {
+      comandaId: b.comandaId,
+      senha: senha != null && Number.isFinite(senha) ? senha : undefined,
+      total: b.total,
+    } as RegemVendaExternaResposta;
   }
 
   /**
