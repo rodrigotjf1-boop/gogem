@@ -221,7 +221,10 @@ describe('VendasService.registrarVendaTotem — DINHEIRO → retirada', () => {
     prisma.pedido.findFirst.mockResolvedValue(null);
     prisma.pedido.create.mockResolvedValue({ id: 'p-9' });
     prisma.pedido.update.mockResolvedValue({});
-    regem.lancarTotemDinheiro.mockResolvedValue({ comandaId: 'ret-1', senha: 77 });
+    regem.lancarTotemDinheiro.mockResolvedValue({
+      comandaId: 'ret-1',
+      senha: 77,
+    });
 
     const res = await service.registrarVendaTotem(
       CTX,

@@ -137,7 +137,9 @@ export class VendasService {
     //     cliente já tem o cupom "EFETUAR PAGAMENTO NO CAIXA".
     const ehDinheiro =
       pagamentosReais.length > 0 &&
-      pagamentosReais.every((p) => (p.forma ?? '').toLowerCase() === 'dinheiro');
+      pagamentosReais.every(
+        (p) => (p.forma ?? '').toLowerCase() === 'dinheiro',
+      );
     if (ehDinheiro) {
       return this.relayDinheiro(pedido.id, dto, totalCentavos);
     }
@@ -256,7 +258,10 @@ export class VendasService {
     ctx: DeviceCtxInfo,
     dto: VendaFalhaTotemDto,
   ): Promise<{ ok: boolean }> {
-    const totalCentavos = dto.pagamentos.reduce((s, p) => s + (p.valor || 0), 0);
+    const totalCentavos = dto.pagamentos.reduce(
+      (s, p) => s + (p.valor || 0),
+      0,
+    );
     const formaTentada = dto.pagamentos[0]?.forma ?? 'desconhecida';
     const itens = dto.itens as unknown as Prisma.InputJsonValue;
     const pagamentos = dto.pagamentos as unknown as Prisma.InputJsonValue;
