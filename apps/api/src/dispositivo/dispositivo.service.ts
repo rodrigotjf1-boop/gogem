@@ -8,6 +8,11 @@ import { Prisma, type Dispositivo } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CreateDispositivoDto } from './dto/create-dispositivo.dto';
+import {
+  EnderecoInvalido,
+  normalizarCaPem,
+  normalizarEnderecoServidor,
+} from './endereco-servidor';
 import { HeartbeatDto } from './dto/heartbeat.dto';
 
 /** Validade do código de pareamento (uso único). */
@@ -29,6 +34,8 @@ const DISPOSITIVO_SELECT = {
   ultimoHeartbeat: true,
   ultimoStatus: true,
   pointDeviceId: true,
+  apiBase: true,
+  caPem: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.DispositivoSelect;
@@ -115,6 +122,52 @@ export class DispositivoService {
     });
   }
 
+  /**
+   * G1 — define (ou limpa, com vazio/nulo) o endereço do servidor da loja para ESTE
+   * totem. Vale a partir do PRÓXIMO pareamento: o aparelho já pareado guardou o destino
+   * que recebeu, então trocar de destino é repareamento, não edição silenciosa — assim
+   * não se muda o caminho de um totem que está no meio de uma venda.
+   */
+  async definirServidor(
+    id: string,
+    apiBase: string | null,
+    caPem?: string | null,
+  ) {
+    await this.getOne(id);
+    // A validação lança uma exceção PRÓPRIA (o normalizador é puro, não conhece HTTP).
+    // Sem traduzir aqui, o Nest não reconhece e devolve 500 "Internal server error" —
+    // erro de digitação do gestor viraria "problema no servidor", sem dizer o que houve.
+    let valor: string | null = null;
+    try {
+      valor = (apiBase ?? '').trim()
+        ? normalizarEnderecoServidor(apiBase as string)
+        : null;
+    } catch (e) {
+      if (e instanceof EnderecoInvalido)
+        throw new BadRequestException(e.message);
+      throw e;
+    }
+    // K2 — certificado da autoridade do servidor. Sem endereço não há o que confiar,
+    // então limpar o endereço limpa o certificado junto (não sobra credencial órfã).
+    let certificado: string | null = null;
+    if (valor) {
+      try {
+        certificado = (caPem ?? '').trim()
+          ? normalizarCaPem(caPem as string)
+          : null;
+      } catch (e) {
+        if (e instanceof EnderecoInvalido)
+          throw new BadRequestException(e.message);
+        throw e;
+      }
+    }
+    return this.prisma.dispositivo.update({
+      where: { id },
+      data: { apiBase: valor, caPem: certificado },
+      select: DISPOSITIVO_SELECT,
+    });
+  }
+
   /** Garante existência + escopo de tenant (404 caso contrário). */
   private async getOne(id: string): Promise<Dispositivo> {
     const dispositivo = await this.prisma.dispositivo.findFirst({
@@ -173,7 +226,21 @@ export class DispositivoService {
    * Segurança: o endpoint público tem rate-limit apertado (10/min por IP, ver
    * DispositivoPublicoController) contra brute-force do código de 6 dígitos.
    */
-  async parear(codigo: string): Promise<{ token: string; nome: string }> {
+  /**
+   * G1 — o pareamento entrega o DESTINO junto com a credencial.
+   *
+   * Antes o host vivia dentro do APK (`--dart-define=GOGEM_API_URL`), então apontar um
+   * totem para o servidor da loja exigia gerar e instalar um APK novo, por loja. Agora o
+   * aparelho pergunta ao parear: `apiBase` preenchido = fala com o servidor da loja;
+   * vazio = nuvem, que é o comportamento de sempre para quem não tem servidor local.
+   */
+  async parear(codigo: string): Promise<{
+    token: string;
+    nome: string;
+    apiBase: string | null;
+    caPem: string | null;
+    modo: 'servidor' | 'nuvem';
+  }> {
     const falha = new BadRequestException('Código inválido ou expirado.');
 
     return TenantContext.runAsSystem(async () => {
@@ -205,7 +272,13 @@ export class DispositivoService {
         },
       });
 
-      return { token, nome: dispositivo.nome };
+      return {
+        token,
+        nome: dispositivo.nome,
+        apiBase: dispositivo.apiBase ?? null,
+        caPem: dispositivo.caPem ?? null,
+        modo: dispositivo.apiBase ? 'servidor' : 'nuvem',
+      };
     });
   }
 

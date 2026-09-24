@@ -17,12 +17,18 @@ class ConfirmacaoScreen extends ConsumerStatefulWidget {
       {super.key,
       required this.senha,
       this.impresso = true,
-      this.dinheiro = false});
+      this.dinheiro = false,
+      this.fiscal = true});
   final String senha;
   final bool impresso;
 
   /// Pagamento em dinheiro: exibe a orientação de pagar no caixa.
   final bool dinheiro;
+
+  /// K6 — `false` quando a loja emitiu NFC-e e o DANFE NÃO saiu no papel. É diferente
+  /// de "cupom não impresso": o cupom é lembrete, a nota é documento fiscal, e o cliente
+  /// tem direito a ela. O aviso manda ele ao balcão com a senha para receber a via.
+  final bool fiscal;
   @override
   ConsumerState<ConfirmacaoScreen> createState() => _ConfirmacaoScreenState();
 }
@@ -139,6 +145,22 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
                   ),
                   child: const Text(
                       'cupom nao impresso — ANOTE A SENHA e informe o balcao',
+                      style: TextStyle(color: GogemColors.heat, fontSize: 16)),
+                ),
+              ),
+            if (!widget.fiscal)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Container(
+                  key: const ValueKey('aviso-sem-nota'),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: GogemColors.heat),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text(
+                      'cupom fiscal nao impresso — retire no balcao com a senha',
                       style: TextStyle(color: GogemColors.heat, fontSize: 16)),
                 ),
               ),

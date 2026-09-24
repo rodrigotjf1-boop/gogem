@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../data/catalog/catalog_sync.dart' show databaseProvider;
+import '../../core/tempo/relogio_servidor.dart';
 import 'order_models.dart';
 
 /// Fila local de pedidos (offline-first): todo pedido finalizado entra como
@@ -114,5 +115,9 @@ class OrderRepository {
 
 final orderRepositoryProvider = FutureProvider<OrderRepository>((ref) async {
   final db = await ref.watch(databaseProvider.future);
-  return OrderRepository(db);
+  // K3 — a senha zera no DIA DA LOJA, medido pelo relógio do servidor. Com o relógio do
+  // aparelho, um Android que voltou de queda de energia com data errada reiniciava o
+  // contador fora de hora e dois clientes saíam com o mesmo número.
+  final relogio = ref.watch(relogioServidorProvider.notifier);
+  return OrderRepository(db, clock: relogio.agora);
 });

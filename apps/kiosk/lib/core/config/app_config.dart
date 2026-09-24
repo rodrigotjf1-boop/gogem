@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'host_servidor.dart';
 
 /// Configuração injetada em build-time (dart-define) — nada de segredo no repo.
 /// O PADRÃO já aponta para produção, então um `flutter build apk --release` sem
@@ -17,9 +18,24 @@ class AppConfig {
   bool get temAuth => devJwt.isNotEmpty;
 }
 
+/// Host decidido no BUILD. Continua sendo o destino padrão — e é SEMPRE ele que atende
+/// o pareamento: é a nuvem que sabe a qual servidor este aparelho pertence.
+const String hostDoBuild = String.fromEnvironment(
+  'GOGEM_API_URL',
+  defaultValue: 'https://api.gogem.com.br/api/v1',
+);
+
+const String _devJwtDoBuild =
+    String.fromEnvironment('GOGEM_DEV_JWT', defaultValue: '');
+
+/// Config efetiva. O endereço vem do pareamento quando existe (servidor da loja) e cai
+/// no host do build quando não existe (nuvem). Quem observa este provider — o cliente
+/// HTTP, e portanto catálogo, venda e pagamento — se refaz sozinho quando o totem é
+/// pareado com um destino diferente.
 final appConfigProvider = Provider<AppConfig>((ref) {
-  return const AppConfig(
-    apiUrl: String.fromEnvironment('GOGEM_API_URL', defaultValue: 'https://api.gogem.com.br/api/v1'),
-    devJwt: String.fromEnvironment('GOGEM_DEV_JWT', defaultValue: ''),
+  final destino = ref.watch(hostServidorProvider);
+  return AppConfig(
+    apiUrl: destino.temServidor ? destino.apiBase! : hostDoBuild,
+    devJwt: _devJwtDoBuild,
   );
 });

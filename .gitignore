@@ -13,6 +13,9 @@ out/
 .env.*
 !.env.example
 *.pem
+# Exceção pontual: certificado PÚBLICO de teste (sem chave privada) usado pelo
+# cliente_https_test. Sem ele o teste passa na máquina do dev e quebra no CI.
+!apps/kiosk/test/fixtures/ca_exemplo.pem
 *.key
 
 # Flutter / kiosk
@@ -43,3 +46,6 @@ coverage/
 # Assets binários grandes (usar MinIO/CDN — ver CLAUDE.md)
 *.mp4
 *.psd
+
+# Registro interno de erros (skill errei) — fora do git
+ERROS-CONHECIDOS.md

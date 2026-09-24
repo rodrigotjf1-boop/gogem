@@ -35,28 +35,28 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  unidades           Unidade[]
-  usuarios           Usuario[]
-  categorias         Categoria[]
-  produtos           Produto[]
-  menuVersions       MenuVersion[]
-  complementoGrupos  ComplementoGrupo[]
-  complementoOpcoes  ComplementoOpcao[]
+  unidades            Unidade[]
+  usuarios            Usuario[]
+  categorias          Categoria[]
+  produtos            Produto[]
+  menuVersions        MenuVersion[]
+  complementoGrupos   ComplementoGrupo[]
+  complementoOpcoes   ComplementoOpcao[]
   produtoComplementos ProdutoComplemento[]
-  produtoUpsells     ProdutoUpsell[]
-  openDeliveryApps   OpenDeliveryApp[]
-  openDeliveryOrders OpenDeliveryOrder[]
-  openDeliveryEvents OpenDeliveryEvent[]
-  dispositivos       Dispositivo[]
-  pedidos            Pedido[]
-  integracoes        Integracao[]
-  cardapios          Cardapio[]
-  aparencia          Aparencia?
-  pixCharges         PixCharge[]
-  pointPayments      PointPayment[]
-  pointJournal       PointJournal[]
-  catalogoConflitos  CatalogoConflito[]
-  auditorias         Auditoria[]
+  produtoUpsells      ProdutoUpsell[]
+  openDeliveryApps    OpenDeliveryApp[]
+  openDeliveryOrders  OpenDeliveryOrder[]
+  openDeliveryEvents  OpenDeliveryEvent[]
+  dispositivos        Dispositivo[]
+  pedidos             Pedido[]
+  integracoes         Integracao[]
+  cardapios           Cardapio[]
+  aparencia           Aparencia?
+  pixCharges          PixCharge[]
+  pointPayments       PointPayment[]
+  pointJournal        PointJournal[]
+  catalogoConflitos   CatalogoConflito[]
+  auditorias          Auditoria[]
 
   @@map("tenants")
 }
@@ -241,14 +241,14 @@ model OrgUsuario {
 // pra acompanhar bugs da frota. Tenant-scoped: a escrita do device injeta o
 // tenantId pelo contexto; a leitura org bypassa via runAsSystem.
 model TelemetriaEvento {
-  id           String   @id @default(uuid())
-  tenantId     String
+  id            String   @id @default(uuid())
+  tenantId      String
   dispositivoId String
-  nivel        String   @default("erro") // erro | aviso | info
-  mensagem     String
-  detalhe      String? // stack/contexto (texto)
-  appVersao    String?
-  createdAt    DateTime @default(now())
+  nivel         String   @default("erro") // erro | aviso | info
+  mensagem      String
+  detalhe       String? // stack/contexto (texto)
+  appVersao     String?
+  createdAt     DateTime @default(now())
 
   @@index([tenantId])
   @@index([createdAt])
@@ -442,33 +442,33 @@ model Categoria {
 }
 
 model Produto {
-  id           String   @id @default(uuid())
-  tenantId     String
+  id            String   @id @default(uuid())
+  tenantId      String
   // Cardápio ao qual o produto pertence (Fase 3B). Nulo só em legado.
-  cardapioId   String?
-  categoriaId  String?
-  nome         String
-  descricao    String?
-  precoCentavos Int     @default(0)
-  disponivel   Boolean  @default(true)
+  cardapioId    String?
+  categoriaId   String?
+  nome          String
+  descricao     String?
+  precoCentavos Int      @default(0)
+  disponivel    Boolean  @default(true)
   // Selo de destaque no card do totem (F4): ex. "Mais vendido", "Novidade".
   // Texto livre curto; nulo = sem selo.
-  selo         String?
+  selo          String?
   // URL pública da foto do produto (Supabase Storage). Nulo = sem foto.
-  imagemUrl    String?
+  imagemUrl     String?
   // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
-  externalRefs Json     @default("[]")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  externalRefs  Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
-  cardapio    Cardapio?  @relation(fields: [cardapioId], references: [id])
-  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+  tenant       Tenant               @relation(fields: [tenantId], references: [id])
+  cardapio     Cardapio?            @relation(fields: [cardapioId], references: [id])
+  categoria    Categoria?           @relation(fields: [categoriaId], references: [id])
   complementos ProdutoComplemento[]
   // Upsell "Peça também" (F2): sugestões configuradas neste produto (dono) e
   // ocorrências deste produto como sugerido de outros.
-  upsells      ProdutoUpsell[] @relation("UpsellDono")
-  sugeridoEm   ProdutoUpsell[] @relation("UpsellSugerido")
+  upsells      ProdutoUpsell[]      @relation("UpsellDono")
+  sugeridoEm   ProdutoUpsell[]      @relation("UpsellSugerido")
 
   @@index([tenantId])
   @@index([cardapioId])
@@ -620,6 +620,13 @@ model Dispositivo {
   // Maquininha Point vinculada a ESTE totem (modo PDV). Cada totem cobra na sua
   // própria maquininha; nulo = usa o device_id padrão da loja (integração MP).
   pointDeviceId    String?
+  // Endereço do SERVIDOR da loja para este totem (G1). Entregue no pareamento, então o
+  // mesmo APK atende loja com e sem servidor local. NULL = nuvem (padrão de hoje).
+  apiBase          String?
+  // Certificado PÚBLICO da autoridade do servidor da loja (K2). O servidor local serve
+  // HTTPS com certificado próprio, gerado por instalação; sem esta CA o Android recusa
+  // a conexão. Entregue no pareamento. Nunca a chave privada.
+  caPem            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -639,39 +646,39 @@ model Dispositivo {
 // centavos; `taxaServicoPct` é um percentual inteiro. Tenant-scoped (§2) — o
 // middleware injeta o `tenantId`; o endpoint é device-authed (DeviceTokenGuard).
 model Pedido {
-  id             String   @id @default(uuid())
-  tenantId       String
-  dispositivoId  String?
-  idempotencyKey String
-  cpf            String?
+  id              String    @id @default(uuid())
+  tenantId        String
+  dispositivoId   String?
+  idempotencyKey  String
+  cpf             String?
   // Nome informado na hora do pedido (opcional) — para o relatório.
-  cliente        String?
+  cliente         String?
   // Tipo de consumo: 'local' (comer aqui) | 'viagem' (para viagem). Segue ao
   // Regem e afeta cozinha/embalagem. Default 'local' (retrocompat).
-  consumo        String   @default("local")
+  consumo         String    @default("local")
   // Itens do pedido: [{ codigoPdv, quantidade, observacao? }] (de-para §4).
-  itens          Json
+  itens           Json
   // Split de pagamento: [{ forma, valor(centavos), nsu?, autorizacao?, formaPagamentoId? }].
-  pagamentos     Json
+  pagamentos      Json
   // Total do pedido em centavos (soma dos pagamentos) — para faturamento.
-  totalCentavos  Int      @default(0)
+  totalCentavos   Int       @default(0)
   // Percentual de taxa de serviço (inteiro), ex.: 10 = 10%.
-  taxaServicoPct Int?
+  taxaServicoPct  Int?
   // Senha local exibida no totem (repassada ao Regem como senhaPlataforma).
-  senhaLocal     Int?
+  senhaLocal      Int?
   // pendente | enviado | falha | cancelado — ciclo de vida.
-  status         String   @default("pendente")
+  status          String    @default("pendente")
   // Cancelamento (relatório de cancelados).
-  canceladoEm    DateTime?
+  canceladoEm     DateTime?
   canceladoMotivo String?
   // Resultado do Regem (preenchido no sucesso).
-  regemComandaId String?
-  regemSenha     Int?
-  regemResposta  Json?
+  regemComandaId  String?
+  regemSenha      Int?
+  regemResposta   Json?
   // Mensagem de erro do último repasse com falha.
-  erro           String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  erro            String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

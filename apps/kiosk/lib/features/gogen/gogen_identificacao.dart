@@ -18,7 +18,12 @@ class GogenIdentificacaoView extends StatelessWidget {
     required this.onPular,
     required this.onConfirmar,
     required this.onVoltar,
+    this.avisoCpfObrigatorio,
   });
+
+  /// Texto do aviso quando a compra passa do limite de identificação da UF. Presente =
+  /// CPF obrigatório: o "Pular" some de ação (a nota seria recusada depois de cobrar).
+  final String? avisoCpfObrigatorio;
 
   final TextEditingController nomeController;
   final String cpf;
@@ -74,8 +79,17 @@ class GogenIdentificacaoView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          const Text('CPF na nota?',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: GogenColors.ink2)),
+          Text(avisoCpfObrigatorio == null ? 'CPF na nota?' : 'CPF na nota (obrigatório)',
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: GogenColors.ink2)),
+          if (avisoCpfObrigatorio != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 6, 24, 0),
+              child: Text(avisoCpfObrigatorio!,
+                  key: const ValueKey('aviso-cpf-obrigatorio'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: GogenColors.flame1, fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
           const SizedBox(height: 10),
           Text(cpf.isEmpty ? '___.___.___-__' : formatCpf(cpf),
               key: const ValueKey('cpf-display'),
@@ -107,7 +121,7 @@ class GogenIdentificacaoView extends StatelessWidget {
                 Expanded(
                   child: OutlinedButton(
                     key: const ValueKey('pular'),
-                    onPressed: onPular,
+                    onPressed: avisoCpfObrigatorio == null ? onPular : null,
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size(0, 64),
                       foregroundColor: GogenColors.ink,

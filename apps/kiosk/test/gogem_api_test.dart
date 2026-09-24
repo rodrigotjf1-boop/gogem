@@ -48,17 +48,42 @@ void main() {
     expect(_h(headers!, 'X-Device-Token'), isNull);
   });
 
-  test('parear troca o código de 6 dígitos por um token', () async {
+  test('parear troca o código de 6 dígitos por token + destino', () async {
     final api = GogemApi(
       baseUrl: 'http://t/api/v1',
       bearer: '',
       client: MockClient((req) async {
         expect(req.url.path, endsWith('/publico/dispositivos/parear'));
         expect(jsonDecode(req.body)['codigo'], '123456');
-        return _json({'token': 'abc123def', 'nome': 'Totem entrada'});
+        return _json({
+          'token': 'abc123def',
+          'nome': 'Totem entrada',
+          'apiBase': 'https://192.168.0.50:3002/api/v1',
+        });
       }),
     );
-    expect(await api.parear('123456'), 'abc123def');
+    final r = await api.parear('123456');
+    expect(r.token, 'abc123def');
+    expect(r.apiBase, 'https://192.168.0.50:3002/api/v1');
+  });
+
+  // Loja SEM servidor local: a nuvem não manda destino e o totem segue no host do
+  // build. É o comportamento de hoje, e ele não pode quebrar com o campo novo.
+  test('parear sem apiBase mantém o totem na nuvem', () async {
+    for (final corpo in [
+      {'token': 'tok', 'nome': 'Totem'},
+      {'token': 'tok', 'nome': 'Totem', 'apiBase': null},
+      {'token': 'tok', 'nome': 'Totem', 'apiBase': '   '},
+    ]) {
+      final api = GogemApi(
+        baseUrl: 'http://t/api/v1',
+        bearer: '',
+        client: MockClient((_) async => _json(corpo)),
+      );
+      final r = await api.parear('123456');
+      expect(r.token, 'tok');
+      expect(r.apiBase, isNull);
+    }
   });
 
   test('parear com código inválido lança GogemApiException', () async {

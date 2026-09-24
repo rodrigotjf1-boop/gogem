@@ -48,6 +48,24 @@ export class DispositivoController {
     return this.dispositivos.reparear(id);
   }
 
+  // G1 — endereço do servidor da loja para ESTE totem. Vazio/nulo devolve o aparelho
+  // para a nuvem. Vale a partir do próximo pareamento (o totem guarda o que recebeu).
+  @Post(':id/servidor')
+  @ApiOkResponse({
+    description:
+      'Define (ou limpa, com apiBase vazio/nulo) o endereço do servidor da loja deste totem.',
+  })
+  definirServidor(
+    @Param('id') id: string,
+    @Body() dto: { apiBase?: string | null; caPem?: string | null },
+  ) {
+    return this.dispositivos.definirServidor(
+      id,
+      dto?.apiBase ?? null,
+      dto?.caPem ?? null,
+    );
+  }
+
   @Post(':id/maquininha')
   @ApiOkResponse({
     description:
