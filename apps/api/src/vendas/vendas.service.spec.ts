@@ -29,7 +29,7 @@ function montar(
       return Promise.resolve({ comandaId: 'c1', senha: 7, total: 7.5 });
     }),
   };
-  const service = new VendasService(prisma as any, regem as any);
+  const service = new VendasService(prisma as any, regem as any, {} as any);
   return {
     service,
     prisma,

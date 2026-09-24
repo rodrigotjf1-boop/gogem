@@ -106,9 +106,44 @@ class OrderRepository {
       'UPDATE pedidos_locais SET tentativas = tentativas + 1 WHERE uuid = ?',
       [uuid]);
 
+  /// Servidor da loja: guarda o id do pedido RETIDO. Se a liberação não concluir agora,
+  /// a fila reenvia por ela (mesma senha, mesma nota), não como venda nova.
+  Future<void> marcarRetido(String uuid, String retidoId) => _db.update(
+      'pedidos_locais', {'retido_id': retidoId},
+      where: 'uuid = ?', whereArgs: [uuid]);
+
+  /// A venda NÃO se concluiu (nota não emitida, venda recusada, cupom fiscal que não
+  /// imprimiu) e o estorno já foi resolvido — feito, ou impossível pelo totem. Sai da fila
+  /// de vez; `detalheJson` guarda o motivo e o resultado do estorno.
+  Future<void> marcarNaoConcluido(String uuid, String detalheJson) => _db.update(
+      'pedidos_locais',
+      {
+        'status': 'nao_concluido',
+        'enviado_em': DateTime.now().toIso8601String(),
+        'resposta_json': detalheJson,
+      },
+      where: 'uuid = ?',
+      whereArgs: [uuid]);
+
+  /// A venda não se concluiu e o ESTORNO ainda não saiu (sem rede agora). A fila tenta de
+  /// novo a cada ciclo — dinheiro do cliente não pode ficar esquecido numa tela.
+  Future<void> marcarEstornoPendente(String uuid, String detalheJson) =>
+      _db.update(
+          'pedidos_locais',
+          {'status': 'estorno_pendente', 'resposta_json': detalheJson},
+          where: 'uuid = ?',
+          whereArgs: [uuid]);
+
+  /// Estornos que ainda não saíram (a fila os reenvia).
+  Future<List<Map<String, Object?>>> listarEstornosPendentes() => _db.query(
+      'pedidos_locais',
+      where: "status = 'estorno_pendente'",
+      orderBy: 'criado_em');
+
+  /// O que ainda depende da fila: venda a enviar OU estorno a fazer.
   Future<int> pendentes() async {
-    final r = await _db.rawQuery(
-        "SELECT COUNT(*) c FROM pedidos_locais WHERE status = 'pendente_envio'");
+    final r = await _db.rawQuery("SELECT COUNT(*) c FROM pedidos_locais "
+        "WHERE status IN ('pendente_envio', 'estorno_pendente')");
     return (r.first['c'] as int?) ?? 0;
   }
 }

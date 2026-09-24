@@ -203,7 +203,12 @@ Cadeia: **`produto.fichaId` (`schema.ts:1148`) → `ficha_tecnica` (`1033`: `ren
 
 ## 6. Fiscal
 
-### 6.1 Estado real — PARTIAL ✅/LACUNA
+> **Atualização (24/09/2026):** a emissão é REAL — primeira NFC-e autorizada em homologação em
+> 22/09/2026, contingência off-line (tpEmis 9) e cancelamento (110111) entregues. O estado abaixo
+> (6.1–6.3) é o levantamento original, mantido como histórico; o contrato vigente com o totem é
+> o **6.5**.
+
+### 6.1 Estado real — PARTIAL ✅/LACUNA (levantamento original)
 NFC-e (modelo 65) **totalmente modelada**, pipeline roda ponta a ponta, mas **a transmissão real à SEFAZ é stub**:
 - Seleção do transmissor (`fiscal.service.ts:48`): `config.certRef ? SefazDireto : SefazMock`.
   - **`SefazMockTransmitter`** (`transmitter.ts:32`) — retorna `status:'autorizada'` com protocolo falso, **não toca a SEFAZ** (caminho ativo hoje).
@@ -225,7 +230,49 @@ NFC-e (modelo 65) **totalmente modelada**, pipeline roda ponta a ponta, mas **a 
 - **SAT-CF-e: AUSENTE** — só NFC-e modelo 65.
 - **TEF: PARTIAL** — o backend é **camada de registro/orquestração**, não driver. PDV cria `pagamento_tef` (`schema.ts:2053`) `status:'pendente'`; o **agente de edge** (auth `X-Sync-Token`) faz `GET /api/v1/tef/pendentes` e `POST /api/v1/tef/:id/resultado` com `{status, nsu, autorizacao, bandeira, mensagem}` (`tef.controller.ts:86`). `tef_config.provedor` ∈ `mock|sitef|paygo|stone`, mas **nenhum SDK de adquirente está integrado no backend** — tudo delegado ao edge. `pagamento_tef` é **separado** de `lancamento_caixa`; liga à comanda por `vincularComanda`.
 
+### 6.5 Resultado fiscal da venda do totem (Regem #574) — o contrato que o GoGeM implementa
+
+No totem **a compra só termina com o cupom fiscal na mão do cliente**. A venda
+(`POST /vendas/externa-pdv`, nuvem) e a liberação do pedido retido
+(`POST /vendas/:pedidoId/liberar`, servidor da loja) respondem com o campo `nfce`:
+
+| `nfce` | significado | o que o GoGeM faz |
+|---|---|---|
+| `null` | loja sem fiscal, ou ESTE totem desmarcado no Regem (mig 288) | segue sem DANFE |
+| `status:'autorizada'` + `danfe` | nota autorizada (100/120/150) | imprime o DANFE **antes** do cupom da senha |
+| `status:'contingencia'` + `danfe` (`protocolo:null`) | emitida off-line | imprime; 2ª via só com `viaEstabelecimento:true` (mig 287) |
+| `status:'nao_emitida'`, `danfe:null`, `erro:{etapa,codigo,motivo,repete}` | a nota NÃO saiu e o Regem **desfez a venda** (estoque, caixa, cozinha) | estorna, avisa o cliente, registra o motivo |
+
+- `etapa` ∈ `configuracao | rejeitada | denegada | sem_contingencia | interno`; `repete` = a próxima
+  venda vai falhar igual (configuração, certificado, emitente) → o totem trava cartão/PIX por
+  10 min depois de **duas** seguidas e alerta (telemetria `erro`). Uma só não trava: `repete`
+  também vale para o NCM de um produto.
+- **Prazos:** autorização com prazo TOTAL de 10 s no Regem; liberação em ~12 s no pior caso; a
+  repetição espera uma emissão em andamento por até 25 s (depois, 503). O totem espera **45 s**
+  (tentativa de 30 s + 2 s + repetição de 13 s); a nuvem do GoGeM espera o Regem por 30 s.
+- **Repetição = reimpressão:** a mesma chamada, de novo, devolve a MESMA venda e a MESMA nota,
+  com o DANFE remontado. A nuvem do GoGeM também guarda a resposta completa (`regemResposta`) e
+  a devolve no reenvio.
+- **Motivo no relatório:** o texto é o mesmo nos dois lados —
+  `NFC-e não emitida (<etapa>[ <cStat>]): <motivo>`.
+- **Onde se estorna:** nuvem → a própria nuvem do GoGeM estorna ao receber `nao_emitida` (e
+  devolve `cancelado:true` + `estorno`); servidor da loja → o totem chama
+  `POST /pagamentos/estorno` (X-Device-Token), que o Regem **repassa** à nuvem do GoGeM (só ela
+  tem as credenciais do Mercado Pago). Corpo: `{orderId, motivo, etapa?, senha?, itens?}`;
+  idempotente; prazo de 72 h desde o pagamento (depois, só pelo painel). No servidor da loja a
+  nuvem cria o pedido já `cancelado`, para o relatório do GoGeM mostrar o motivo.
+- **DANFE que não imprimiu:** servidor da loja → `POST /vendas/:pedidoId/falha-impressao
+  {motivo}` → `{ok, notaCancelada, cancelamentoPendente}` (autorizada: 110111 na hora;
+  contingência: cancelamento agendado para depois da autorização) → só com `ok:true` o totem
+  estorna. Nuvem → **não há rota** para desfazer a venda externa (lacuna — ver L-FIS-3): a venda
+  vale, o DANFE vai para a fila de reimpressão e a tela manda o cliente ao balcão.
+- **Recusa definitiva** (400/422: código PDV que não existe, soma que não fecha) → o totem
+  estorna e tira a venda da fila; **falha passageira** (rede, 5xx, 503) → reenvia.
+
 ### LACUNAS fiscais
+- **L-FIS-3:** no modo nuvem não existe rota (X-Sync-Token) para o GoGeM desfazer uma venda
+  externa já lançada — cancelar pelo painel do GoGeM estorna o pagamento mas não avisa o Regem,
+  e o DANFE que não imprimiu não tem como cancelar a nota. *(pedido ao Regem por prompt)*
 - **L-FIS-1:** transmissão real SEFAZ (`SefazDireto`) — cert A1, assinatura, SOAP, por UF. *(G — fora do escopo do piloto se o totem operar em "modo sem fiscal" ou "fiscal no integrado/Regem")*
 - **L-FIS-2:** para o GoGeM emitir a partir de venda externa, `emitirSeAtivo` já cobre (dispara no `venderExterno`); falta só o CPF na nota (ligado à L-VEN-CPF).
 

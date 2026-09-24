@@ -11,6 +11,8 @@ import '../features/pedido/peca_tambem_screen.dart';
 import '../features/pedido/identificacao_screen.dart';
 import '../features/pedido/pagamento_screen.dart';
 import '../features/pedido/confirmacao_screen.dart';
+import '../features/pedido/venda_nao_concluida_screen.dart';
+import '../domain/order/conclusao_venda.dart';
 
 /// Rotas do totem. Sem deep links externos: navegação 100% interna (kiosk).
 ///
@@ -47,6 +49,17 @@ final router = GoRouter(
             impresso: s.uri.queryParameters['impresso'] != '0',
             dinheiro: s.uri.queryParameters['dinheiro'] == '1',
             fiscal: s.uri.queryParameters['fiscal'] != '0')),
+    // A compra não se concluiu depois do pagamento (nota não emitida, venda recusada,
+    // cupom fiscal que não imprimiu): o que houve e o que aconteceu com o dinheiro.
+    GoRoute(
+        path: '/nao-concluida',
+        builder: (_, s) => VendaNaoConcluidaScreen(
+            etapa: s.uri.queryParameters['etapa'] ?? '',
+            estorno: SituacaoEstorno.values.firstWhere(
+                (e) => e.name == s.uri.queryParameters['estorno'],
+                orElse: () => SituacaoEstorno.manual),
+            motivo: s.uri.queryParameters['motivo'] ?? '',
+            senha: s.uri.queryParameters['senha'] ?? '')),
     GoRoute(path: '/admin', builder: (_, __) => const AdminGateScreen()),
     GoRoute(path: '/admin/painel', builder: (_, __) => const AdminPanelScreen()),
   ],

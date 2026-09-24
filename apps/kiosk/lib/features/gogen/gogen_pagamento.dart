@@ -26,6 +26,7 @@ class GogenPagamentoView extends StatelessWidget {
     required this.onPagarDinheiro,
     required this.onCancelarPix,
     required this.onCancelarPoint,
+    this.mensagemProcessando,
   });
 
   final int totalCentavos;
@@ -44,6 +45,10 @@ class GogenPagamentoView extends StatelessWidget {
   final VoidCallback onPagarDinheiro;
   final VoidCallback onCancelarPix;
   final VoidCallback onCancelarPoint;
+
+  /// Pagamento aprovado, venda sendo confirmada: o texto da espera ("Emitindo o cupom
+  /// fiscal…"). Nulo = ainda cobrando.
+  final String? mensagemProcessando;
 
   @override
   Widget build(BuildContext context) {
@@ -88,15 +93,25 @@ class GogenPagamentoView extends StatelessWidget {
         ),
       );
 
-  // ---- processando genérico ----
-  Widget _processandoView() => const Center(
+  // ---- processando genérico (e a confirmação da venda: "Emitindo o cupom fiscal…") ----
+  Widget _processandoView() => Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          CircularProgressIndicator(color: GogenColors.flame1),
-          SizedBox(height: 24),
-          Text('Processando pagamento…',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: GogenColors.ink)),
+          const CircularProgressIndicator(color: GogenColors.flame1),
+          const SizedBox(height: 24),
+          Text(_textoEspera(mensagemProcessando),
+              key: const ValueKey('pagamento-espera'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: GogenColors.ink)),
         ]),
       );
+
+  /// O modelo GoGen escreve em caixa de frase: "EMITINDO O CUPOM FISCAL…" vira
+  /// "Emitindo o cupom fiscal…".
+  static String _textoEspera(String? m) {
+    if (m == null || m.isEmpty) return 'Processando pagamento…';
+    final baixo = m.toLowerCase();
+    return baixo[0].toUpperCase() + baixo.substring(1);
+  }
 
   // ---- PIX (QR + contador) ----
   Widget _pixView() => SingleChildScrollView(

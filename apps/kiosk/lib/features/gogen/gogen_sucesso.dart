@@ -13,6 +13,7 @@ class GogenSucessoView extends StatelessWidget {
     required this.onNovoPedido,
     this.dinheiro = false,
     this.segundos = 0,
+    this.fiscal = true,
   });
 
   final String senha;
@@ -25,6 +26,10 @@ class GogenSucessoView extends StatelessWidget {
 
   /// Segundos restantes para voltar ao descanso (0 = não exibe o contador).
   final int segundos;
+
+  /// `false` quando a loja emite NFC-e e o DANFE não saiu no papel: o cliente tem direito à
+  /// nota e é mandado ao balcão. Antes este modelo não mostrava o aviso.
+  final bool fiscal;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +114,24 @@ class GogenSucessoView extends StatelessWidget {
                           ),
                           child: const Text(
                             'cupom não impresso — ANOTE A SENHA e informe o balcão',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: GogenColors.flame1, fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ),
+                    if (!fiscal)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 14),
+                        child: Container(
+                          key: const ValueKey('aviso-sem-nota'),
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: GogenColors.flame1.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: GogenColors.flame1),
+                          ),
+                          child: const Text(
+                            'cupom fiscal não impresso — retire no balcão com a senha',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: GogenColors.flame1, fontSize: 15, fontWeight: FontWeight.w700),
                           ),

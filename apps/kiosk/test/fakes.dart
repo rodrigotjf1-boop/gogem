@@ -104,15 +104,62 @@ class FakeOrderRepository implements OrderRepository {
   }
 
   @override
-  Future<int> pendentes() async =>
-      pedidos.where((p) => p['status'] == 'pendente_envio').length;
+  Future<void> marcarRetido(String uuid, String retidoId) async {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid) p['retido_id'] = retidoId;
+    }
+  }
+
+  @override
+  Future<void> marcarNaoConcluido(String uuid, String detalheJson) async {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid) {
+        p['status'] = 'nao_concluido';
+        p['resposta_json'] = detalheJson;
+      }
+    }
+  }
+
+  @override
+  Future<void> marcarEstornoPendente(String uuid, String detalheJson) async {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid) {
+        p['status'] = 'estorno_pendente';
+        p['resposta_json'] = detalheJson;
+      }
+    }
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> listarEstornosPendentes() async => [
+        for (final p in pedidos)
+          if (p['status'] == 'estorno_pendente') Map.of(p),
+      ];
+
+  @override
+  Future<int> pendentes() async => pedidos
+      .where((p) =>
+          p['status'] == 'pendente_envio' || p['status'] == 'estorno_pendente')
+      .length;
+
+  /// Status atual de um pedido (atalho dos testes).
+  String? statusDe(String uuid) {
+    for (final p in pedidos) {
+      if (p['uuid'] == uuid) return p['status'] as String?;
+    }
+    return null;
+  }
 }
 
 class FakeFilaImpressao implements FilaImpressao {
   final List<Map<String, Object?>> rows = [];
 
+  /// Igual à fila real: a chave é PRIMARY KEY e o repetido é IGNORADO. Um fake que
+  /// aceitava duplicata escondeu que o DANFE, enfileirado com a mesma chave do cupom,
+  /// sumia na fila real (ERR-020).
   @override
   Future<void> enfileirar(String uuid, String senha, List<int> cupom) async {
+    if (rows.any((r) => r['uuid'] == uuid)) return;
     rows.add({'uuid': uuid, 'senha': senha, 'cupom': cupom, 'tentativas': 0});
   }
 

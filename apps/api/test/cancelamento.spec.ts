@@ -1,12 +1,20 @@
+import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CancelamentoService } from '../src/pagamentos/cancelamento.service';
+import {
+  CancelamentoService,
+  PRAZO_ESTORNO_TOTEM_MS,
+} from '../src/pagamentos/cancelamento.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { PspResolver } from '../src/pagamentos/psp/psp-resolver';
 import type { AuditoriaService } from '../src/auditoria/auditoria.service';
 
 function makeService() {
   const prisma = {
-    pedido: { findFirst: vi.fn(), update: vi.fn().mockResolvedValue({}) },
+    pedido: {
+      findFirst: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
+      create: vi.fn().mockResolvedValue({ id: 'novo' }),
+    },
     pointPayment: {
       findFirst: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({}),
@@ -152,5 +160,183 @@ describe('CancelamentoService', () => {
   it('cancelarPorChave sem idempotencyKey nem regemComandaId → 400', async () => {
     const { service } = makeService();
     await expect(service.cancelarPorChave({}, 'x', 'regem')).rejects.toThrow();
+  });
+});
+
+describe('CancelamentoService.estornarPorOrder — resultado fiscal do totem', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const agora = () => new Date();
+  const POINT_APROVADO = {
+    id: 'pp1',
+    status: 'approved',
+    paymentId: 'MP1',
+    tipo: 'debito',
+    amountCents: 4500,
+  };
+
+  it('NUVEM (pedido existe) → cancela com o motivo fiscal e estorna', async () => {
+    const { service, prisma, gw, auditoria } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue({
+      ...PEDIDO,
+      totalCentavos: 4500,
+    });
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      createdAt: agora(),
+    });
+    gw.reembolsar.mockResolvedValue({ refundId: 'R9', status: 'approved' });
+
+    const r = await service.estornarPorOrder(
+      'idem1',
+      'NFC-e não emitida (rejeitada 778): NCM',
+      'totem',
+      { etapa: 'rejeitada', prazoMs: PRAZO_ESTORNO_TOTEM_MS },
+    );
+
+    expect(gw.reembolsar).toHaveBeenCalledWith('MP1', 'refund_idem1');
+    expect(r).toMatchObject({ pedidoId: 'ped1', estorno: { feito: true } });
+    const upd = prisma.pedido.update.mock.calls.at(-1)?.[0].data;
+    expect(upd).toMatchObject({
+      status: 'cancelado',
+      canceladoMotivo: 'NFC-e não emitida (rejeitada 778): NCM',
+    });
+    expect(prisma.pedido.create).not.toHaveBeenCalled();
+    expect(auditoria.registrar.mock.calls.at(-1)?.[0].detalhe).toMatchObject({
+      origem: 'totem',
+      etapa: 'rejeitada',
+    });
+  });
+
+  it('SERVIDOR DA LOJA (nuvem só tem o pagamento) → estorna e CRIA o pedido cancelado para o relatório', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      createdAt: agora(),
+    });
+    gw.reembolsar.mockResolvedValue({ refundId: 'R1', status: 'approved' });
+
+    const r = await service.estornarPorOrder(
+      'uuid-1',
+      'Cupom fiscal não impresso no totem: sem papel',
+      'totem',
+      {
+        etapa: 'impressao',
+        registro: {
+          dispositivoId: 'dev-7',
+          senha: 12,
+          itens: [{ codigoPdv: 'X1', quantidade: 2 }],
+        },
+      },
+    );
+
+    expect(r.estorno).toMatchObject({ feito: true, refundId: 'R1' });
+    const criado = prisma.pedido.create.mock.calls[0][0].data;
+    expect(criado).toMatchObject({
+      idempotencyKey: 'uuid-1',
+      status: 'cancelado',
+      canceladoMotivo: 'Cupom fiscal não impresso no totem: sem papel',
+      dispositivoId: 'dev-7',
+      senhaLocal: 12,
+      totalCentavos: 4500,
+      pagamentos: [{ forma: 'debito', valor: 4500 }],
+      itens: [{ codigoPdv: 'X1', quantidade: 2 }],
+    });
+    // Nunca tenantId à mão: o middleware injeta.
+    expect(JSON.stringify(criado)).not.toContain('tenantId');
+    expect(r.pedidoId).toBe('novo');
+  });
+
+  it('pedir de novo depois de estornado → feito=true SEM chamar o Mercado Pago', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue({
+      ...PEDIDO,
+      status: 'cancelado',
+    });
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      status: 'refunded',
+      createdAt: agora(),
+    });
+
+    const r = await service.estornarPorOrder('idem1', 'x', 'totem');
+
+    expect(gw.reembolsar).not.toHaveBeenCalled();
+    expect(r.estorno).toMatchObject({ feito: true, meio: 'debito' });
+  });
+
+  it('cancelado cujo estorno FALHOU antes → tenta de novo e registra na trilha', async () => {
+    const { service, prisma, gw, auditoria } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue({
+      ...PEDIDO,
+      status: 'cancelado',
+    });
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      createdAt: agora(),
+    });
+    gw.reembolsar.mockResolvedValue({ refundId: 'R2', status: 'approved' });
+
+    const r = await service.estornarPorOrder('idem1', 'x', 'totem');
+
+    expect(gw.reembolsar).toHaveBeenCalledWith('MP1', 'refund_idem1');
+    expect(r.estorno).toMatchObject({ feito: true, refundId: 'R2' });
+    expect(prisma.pedido.update).not.toHaveBeenCalled(); // já estava cancelado
+    expect(auditoria.registrar.mock.calls.at(-1)?.[0].acao).toBe(
+      'pedido.estornar',
+    );
+  });
+
+  it('nenhum pagamento na nuvem (ex.: TEF no pinpad) → não estorna nem inventa registro', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+
+    const r = await service.estornarPorOrder('uuid-2', 'x', 'totem');
+
+    expect(gw.reembolsar).not.toHaveBeenCalled();
+    expect(prisma.pedido.create).not.toHaveBeenCalled();
+    expect(r).toMatchObject({
+      pedidoId: null,
+      estorno: { feito: false, meio: 'desconhecido' },
+    });
+  });
+
+  it('pagamento mais velho que o prazo do totem → 422 e NADA é estornado', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      createdAt: new Date(Date.now() - PRAZO_ESTORNO_TOTEM_MS - 60_000),
+    });
+
+    await expect(
+      service.estornarPorOrder('uuid-3', 'x', 'totem', {
+        prazoMs: PRAZO_ESTORNO_TOTEM_MS,
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(gw.reembolsar).not.toHaveBeenCalled();
+    expect(prisma.pedido.create).not.toHaveBeenCalled();
+  });
+
+  it('dois estornos ao mesmo tempo (servidor da loja) → o 2º devolve o registro do 1º', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst
+      .mockResolvedValueOnce(null) // ainda não existe…
+      .mockResolvedValueOnce({ id: 'do-primeiro' }); // …o outro criou antes
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      ...POINT_APROVADO,
+      createdAt: agora(),
+    });
+    gw.reembolsar.mockResolvedValue({ refundId: 'R1', status: 'approved' });
+    prisma.pedido.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('unique', {
+        code: 'P2002',
+        clientVersion: 'x',
+      }),
+    );
+
+    const r = await service.estornarPorOrder('uuid-4', 'x', 'totem');
+
+    expect(r.pedidoId).toBe('do-primeiro');
   });
 });

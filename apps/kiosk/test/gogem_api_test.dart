@@ -94,4 +94,75 @@ void main() {
     );
     expect(() => api.parear('000000'), throwsA(isA<GogemApiException>()));
   });
+
+  group('resultado fiscal (Regem #574)', () {
+    test('estornarPagamento: POST /pagamentos/estorno e devolve o `estorno`',
+        () async {
+      http.Request? pedido;
+      final api = GogemApi(
+        baseUrl: 'http://t/api/v1',
+        bearer: '',
+        deviceToken: 'tok',
+        client: MockClient((req) async {
+          pedido = req;
+          return _json({
+            'pedidoId': 'p1',
+            'estorno': {'feito': true, 'meio': 'pix', 'valorCentavos': 700}
+          });
+        }),
+      );
+      final e = await api.estornarPagamento(
+          orderId: 'u1', motivo: 'NFC-e não emitida', etapa: 'rejeitada', senha: 42);
+      expect(pedido!.url.path, '/api/v1/pagamentos/estorno');
+      expect(jsonDecode(pedido!.body),
+          {'orderId': 'u1', 'motivo': 'NFC-e não emitida', 'etapa': 'rejeitada', 'senha': 42});
+      expect(e['feito'], isTrue);
+    });
+
+    test('estornarPagamento: erro do servidor LANÇA (quem chama decide se fica pendente)',
+        () async {
+      final api = GogemApi(
+        baseUrl: 'http://t/api/v1',
+        bearer: '',
+        deviceToken: 'tok',
+        client: MockClient((_) async => http.Response('bad gateway', 502)),
+      );
+      expect(api.estornarPagamento(orderId: 'u1', motivo: 'x'),
+          throwsA(isA<GogemApiException>().having((e) => e.status, 'status', 502)));
+    });
+
+    test('falhaImpressao: POST /vendas/:id/falha-impressao com o motivo', () async {
+      http.Request? pedido;
+      final api = GogemApi(
+        baseUrl: 'http://t/api/v1',
+        bearer: '',
+        deviceToken: 'tok',
+        client: MockClient((req) async {
+          pedido = req;
+          return _json({'ok': true, 'notaCancelada': true, 'cancelamentoPendente': false}, 201);
+        }),
+      );
+      final r = await api.falhaImpressao('ped-1', 'sem papel');
+      expect(pedido!.url.path, '/api/v1/vendas/ped-1/falha-impressao');
+      expect(jsonDecode(pedido!.body), {'motivo': 'sem papel'});
+      expect(r['ok'], isTrue);
+    });
+
+    test('GogemApiException.motivo limpa a mensagem do Nest', () {
+      expect(
+          GogemApiException(422, jsonEncode({'message': 'O sistema da loja recusou a venda: X9'}))
+              .motivo,
+          'O sistema da loja recusou a venda: X9');
+      expect(GogemApiException(400, jsonEncode({'message': ['a', 'b']})).motivo, 'a; b');
+      expect(GogemApiException(502, 'bad gateway').motivo, 'bad gateway');
+    });
+
+    test('recusa definitiva = 400/422; o resto se reenvia', () {
+      expect(recusaDefinitiva(400), isTrue);
+      expect(recusaDefinitiva(422), isTrue);
+      for (final s in [401, 403, 404, 408, 409, 429, 500, 502, 503]) {
+        expect(recusaDefinitiva(s), isFalse, reason: '$s');
+      }
+    });
+  });
 }

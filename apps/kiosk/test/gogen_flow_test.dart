@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gogem_kiosk/data/catalog/aparencia.dart';
 import 'package:gogem_kiosk/data/catalog/catalog_models.dart';
+import 'package:gogem_kiosk/data/catalog/catalog_sync.dart' show aparenciaProvider;
+import 'package:gogem_kiosk/features/pedido/confirmacao_screen.dart';
 import 'package:gogem_kiosk/features/gogen/gogen_pagamento.dart';
 import 'package:gogem_kiosk/features/gogen/gogen_produto.dart';
 import 'package:gogem_kiosk/features/gogen/gogen_sucesso.dart';
@@ -49,6 +53,38 @@ void main() {
     expect(find.byKey(const ValueKey('senha')), findsOneWidget);
     expect(find.text('A12'), findsOneWidget);
     expect(find.byKey(const ValueKey('aviso-sem-cupom')), findsOneWidget);
+  });
+
+  // ERR-022 — o modelo GoGen não tinha o aviso do cupom fiscal: a nota emitida que não
+  // saía no papel passava calada nas lojas com este tema.
+  testWidgets('sucesso GoGen avisa quando o CUPOM FISCAL não saiu', (t) async {
+    await t.pumpWidget(MaterialApp(
+      home: GogenSucessoView(
+        senha: 'A12',
+        impresso: true,
+        fiscal: false,
+        entrada: 1,
+        onNovoPedido: () {},
+      ),
+    ));
+    await t.pump();
+    expect(find.byKey(const ValueKey('aviso-sem-nota')), findsOneWidget);
+  });
+
+  testWidgets('confirmação no tema GoGen repassa o aviso fiscal da rota', (t) async {
+    await t.pumpWidget(ProviderScope(
+      overrides: [
+        aparenciaProvider.overrideWith(
+            (ref) async => Aparencia.fromJson({'temaPreset': 'gogen'})),
+      ],
+      child: const MaterialApp(
+          home: ConfirmacaoScreen(senha: 'A12', fiscal: false)),
+    ));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 100));
+    expect(find.byType(GogenSucessoView), findsOneWidget);
+    expect(find.byKey(const ValueKey('aviso-sem-nota')), findsOneWidget);
+    await t.pumpWidget(const SizedBox()); // desmonta: cancela o auto-retorno
   });
 
   testWidgets('sucesso GoGen sem aviso quando imprimiu', (t) async {

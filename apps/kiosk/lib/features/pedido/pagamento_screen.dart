@@ -10,10 +10,15 @@ import '../../core/theme/gogem_theme.dart';
 import '../../core/util/moeda.dart';
 import '../../data/api/gogem_api.dart';
 import '../../data/catalog/aparencia.dart';
-import '../../data/catalog/catalog_sync.dart' show gogemApiProvider, aparenciaProvider;
+import '../../data/catalog/catalog_sync.dart'
+    show gogemApiProvider, aparenciaProvider, fiscalProvider;
 import '../gogen/gogen_pagamento.dart';
+import '../../core/kiosk/inatividade_guard.dart';
+import '../../domain/fiscal/bloqueio_fiscal.dart';
+import '../../domain/fiscal/resultado_fiscal.dart';
 import '../../domain/order/cart.dart';
 import '../../core/config/host_servidor.dart';
+import '../../domain/order/conclusao_venda.dart';
 import '../../domain/order/order_models.dart';
 import '../../domain/order/order_repository.dart';
 import '../../domain/order/venda_sync.dart';
@@ -28,6 +33,11 @@ import '../../printing/recibo.dart';
 /// antes de cobrar — NUNCA cobrar sem poder concluir. Se o papel acabar na
 /// janela residual pós-pagamento, o pedido não se perde: senha na tela +
 /// fila de reimpressão.
+///
+/// Resultado fiscal (Regem #574): depois de aprovar, o totem espera a venda até 45 s
+/// ("Emitindo o cupom fiscal…"). A compra só termina com o cupom fiscal na mão do
+/// cliente — nota não emitida, venda recusada ou DANFE que não imprimiu (servidor da
+/// loja) desfazem a venda e ESTORNAM o pagamento, com o motivo no relatório.
 class PagamentoScreen extends ConsumerStatefulWidget {
   const PagamentoScreen({super.key});
   @override
@@ -54,6 +64,18 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   int _pixSegundos = 300; // contagem regressiva do PIX (5 min)
   PedidoLocal? _pedidoAtual; // pedido em cobrança (write-ahead F10)
   String? _senhaAtual; // senha local do pedido em cobrança
+
+  /// Pagamento aprovado, venda sendo confirmada: o texto da espera ("EMITINDO O CUPOM
+  /// FISCAL…"). Nulo = ainda cobrando.
+  String? _confirmando;
+
+  /// Plano da confirmação: a 1ª tentativa com folga para a nota (o Regem responde em até
+  /// ~12 s; 25 s quando a repetição espera uma emissão em andamento); a 2ª é a REPETIÇÃO,
+  /// idempotente — devolve a mesma venda e a mesma nota. 30 + 2 + 13 = 45 s, o combinado
+  /// com o Regem. Plano fixo (e não relógio de parede) para caber no prazo mesmo quando a
+  /// primeira falha no último segundo.
+  static const _tentativas = [Duration(seconds: 30), Duration(seconds: 13)];
+  static const _pausaEntreTentativas = Duration(seconds: 2);
 
   @override
   void initState() {
@@ -97,6 +119,16 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   Future<void> _pagar(FormaPagamento forma) async {
     final cart = ref.read(cartProvider);
     if (cart.vazio || _processando) return;
+    // A nota fiscal está falhando em SÉRIE (o Regem avisou que a próxima falha igual):
+    // cartão e PIX ficam travados por alguns minutos — cobrar e estornar cliente após
+    // cliente é pior do que mandar ao caixa. O dinheiro segue: a nota dele sai no caixa.
+    if (forma != FormaPagamento.dinheiro &&
+        ref.read(bloqueioFiscalProvider.notifier).travado) {
+      setState(() => _erroPagamento =
+          'Cartão e PIX indisponíveis agora: o cupom fiscal não está sendo emitido. '
+          'Pague em dinheiro no caixa ou chame um atendente.');
+      return;
+    }
     // reconfere na hora de cobrar (o papel pode ter acabado AGORA)
     final h = await ref.read(printerHealthProvider.notifier).checarAgora();
     if (!h.prontaParaVenda) {
@@ -121,7 +153,11 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
       _erroPagamento = null;
       _pixDesafio = null;
       _pointAtivo = false;
+      _confirmando = null;
     });
+    // Venda em andamento: o retorno por inatividade espera (o cliente paga no celular ou
+    // na maquininha e não toca na tela) — ERR-021.
+    ref.read(vendaEmAndamentoDesdeProvider.notifier).state = DateTime.now();
 
     // WRITE-AHEAD (F10): grava o pedido ANTES de cobrar. Se o totem cair entre a
     // aprovação e o salvamento, o pedido não se perde — o boot reconcilia por
@@ -275,13 +311,20 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
           .then((r) => r.marcarCancelado(p.uuid)));
       _pedidoAtual = null;
     }
+    _encerrarVenda();
     setState(() {
       _processando = false;
       _pixDesafio = null;
       _pointAtivo = false;
+      _confirmando = null;
       _erroPagamento = msg;
     });
   }
+
+  /// A venda saiu de cena (concluída, recusada ou desistida): o retorno por inatividade
+  /// volta a valer.
+  void _encerrarVenda() =>
+      ref.read(vendaEmAndamentoDesdeProvider.notifier).state = null;
 
   /// K4 — o cliente desistiu depois de uma recusa. Encerra o pedido retido no servidor
   /// COM MOTIVO (fica registrado no Regem e no admin do GoGeM), descarta o local e sai.
@@ -304,11 +347,19 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     if (mounted) context.go('/');
   }
 
-  /// Pós-aprovação (comum a todas as formas): marca o pedido (já gravado no
-  /// write-ahead) como PAGO, imprime (com fila na janela residual), envia ao
-  /// Regem e confirma.
+  /// Pós-aprovação (comum a todas as formas): confirma a venda com o servidor (até 45 s),
+  /// trata o resultado fiscal e imprime.
+  ///
+  /// Os desfechos:
+  ///  • nota emitida (ou loja sem nota) → DANFE primeiro, depois o cupom da senha;
+  ///  • nota NÃO emitida, ou venda recusada → estorna, avisa o cliente, registra o motivo;
+  ///  • DANFE que não saiu no papel, no servidor da loja → o Regem cancela a nota e desfaz
+  ///    a venda, e o totem estorna — sem cupom fiscal na mão do cliente não há compra;
+  ///  • sem resposta no prazo → a fila reenvia (pela liberação: mesma senha, mesma nota) e
+  ///    o cliente leva a senha com o aviso de buscar o cupom fiscal no balcão.
   Future<void> _finalizar(PedidoLocal pedido) async {
     final repo = await ref.read(orderRepositoryProvider.future);
+    final api = ref.read(gogemApiProvider);
     // Pago: 'aguardando_pagamento' → 'pendente_envio' (libera pro Regem).
     await repo.marcarPago(pedido.uuid);
     _pedidoAtual = null; // concluído: não é mais candidato a cancelamento
@@ -317,58 +368,106 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     // pendurado e a venda lançada duas vezes).
     final retidoId = _pedidoRetidoId;
     _pedidoRetidoId = null;
+    // Se a liberação não concluir agora, a fila reenvia POR ELA (mesma senha, mesma nota).
+    if (retidoId != null) await repo.marcarRetido(pedido.uuid, retidoId);
     final senhaLocal = _senhaAtual ?? '000';
 
     // Mostra a senha do REGEM (a que a cozinha/KDS chama), não a local do totem
     // — senão o cliente sai com um número (001) e a cozinha chama outro (107).
-    // Envia AGORA (o totem está online no pós-pagamento); offline/erro → mantém
-    // a senha local e o agendador reenvia depois. A senha entra no cupom TAMBÉM.
     var senha = senhaLocal;
-    // K6 — resumo da NFC-e devolvido pelo Regem. Fica fora do `try` porque o DANFE é
-    // impresso DEPOIS do cupom, e nulo aqui significa apenas "a loja não emite nota"
-    // (ou a venda não chegou a ser confirmada) — nunca "imprimiu".
-    Map<String, dynamic>? nfce;
-    try {
-      final corpo = pedido.toJson(senhaLocal: int.tryParse(senhaLocal));
-      // K4 — com pedido retido, o pagamento LIBERA o que já está lá (mesma senha, mesma
-      // chave). Sem retido, o fluxo de sempre: lança a venda agora.
-      final resp = retidoId == null
-          ? await ref.read(gogemApiProvider).enviarVenda(corpo)
-          : await ref
-              .read(gogemApiProvider)
-              .liberarPedidoRetido(retidoId, corpo['pagamentos'] as List<dynamic>);
-      await repo.marcarEnviado(pedido.uuid, jsonEncode(resp));
-      final regemSenha = resp['senha'];
-      if (regemSenha != null) senha = '$regemSenha';
-      if (resp['nfce'] is Map) nfce = Map<String, dynamic>.from(resp['nfce'] as Map);
-    } on GogemApiException catch (e) {
-      if (e.status == 409) {
-        await repo.marcarEnviado(pedido.uuid, '{"idempotente":true}');
-      } else {
-        unawaited(ref.read(vendaSyncProvider.notifier).drenar());
-      }
-    } catch (_) {
-      unawaited(ref.read(vendaSyncProvider.notifier).drenar());
+    _pixTimer?.cancel();
+    // A loja emite nota? (Vem do servidor da loja com o cardápio; na nuvem não se sabe, e
+    // a espera diz só "confirmando".) Espera o carregamento — o valor em cache pode ainda
+    // não ter sido lido nesta tela.
+    final fiscalAtivo = await ref
+        .read(fiscalProvider.future)
+        .then((f) => f.ativo)
+        .timeout(const Duration(seconds: 1), onTimeout: () => false)
+        .catchError((_) => false);
+    if (mounted) {
+      setState(() {
+        _pixDesafio = null;
+        _pointAtivo = false;
+        _confirmando =
+            fiscalAtivo ? 'EMITINDO O CUPOM FISCAL…' : 'CONFIRMANDO O PEDIDO…';
+      });
     }
 
-    var impresso = true;
+    final corpo = pedido.toJson(senhaLocal: int.tryParse(senhaLocal));
+    final envio = await _confirmarVenda(api, corpo, retidoId);
+    NotaEmitida? nota;
+    switch (envio) {
+      case _Recusada(:final erro):
+        await _naoConcluida(pedido, corpo, senha,
+            motivo: 'Venda recusada pelo sistema da loja: ${erro.motivo}',
+            etapa: 'recusada');
+        return;
+      case _JaProcessada():
+        await repo.marcarEnviado(pedido.uuid, '{"idempotente":true}');
+      case _SemResposta():
+        unawaited(ref.read(vendaSyncProvider.notifier).drenar());
+      case _Respondida(:final resposta):
+        final regemSenha = resposta['senha'];
+        if (regemSenha != null) senha = '$regemSenha';
+        final fiscal = ResultadoFiscal.de(resposta['nfce']);
+        if (fiscal is NotaNaoEmitida) {
+          ref.read(bloqueioFiscalProvider.notifier).registrarNaoEmitida(
+              repete: fiscal.repete, motivo: fiscal.motivoRelatorio);
+          final e = resposta['estorno'];
+          await _naoConcluida(pedido, corpo, senha,
+              motivo: fiscal.motivoRelatorio,
+              etapa: fiscal.etapa,
+              repete: fiscal.repete,
+              estornoFeito: e is Map ? e.cast<String, dynamic>() : null);
+          return;
+        }
+        if (resposta['cancelado'] == true) {
+          await _naoConcluida(pedido, corpo, senha,
+              motivo: 'Pedido cancelado no sistema da loja', etapa: 'recusada');
+          return;
+        }
+        await repo.marcarEnviado(pedido.uuid, jsonEncode(resposta));
+        ref.read(bloqueioFiscalProvider.notifier).registrarEmitida();
+        if (fiscal is NotaEmitida) nota = fiscal;
+    }
+
+    // O DANFE sai PRIMEIRO: se ele não sair (e a venda for desfeita), o cliente não fica com
+    // um cupom de senha de um pedido que não existe mais.
+    var fiscalOk = true;
+    if (nota != null) {
+      final danfe = await _imprimirDanfe(pedido.uuid, nota);
+      if (!danfe.clienteRecebeu) {
+        if (retidoId != null && mounted) {
+          setState(() => _confirmando = 'O CUPOM FISCAL NÃO SAIU — CANCELANDO A NOTA…');
+        }
+        if (retidoId != null &&
+            await _desfazerSemCupom(api, retidoId, danfe.motivo)) {
+          await _naoConcluida(pedido, corpo, senha,
+              motivo: 'Cupom fiscal não impresso no totem: ${danfe.motivo}',
+              etapa: 'impressao');
+          return;
+        }
+        // A venda vale (nuvem, onde não há como desfazê-la daqui; ou o servidor não
+        // confirmou): o DANFE vai para a fila de reimpressão e a tela manda o cliente
+        // buscá-lo no balcão com a senha.
+        fiscalOk = false;
+      }
+      await _enfileirar(danfe.naoImpressas, senha);
+    } else if (envio is _SemResposta &&
+        fiscalAtivo &&
+        pedido.forma != FormaPagamento.dinheiro) {
+      // Sem resposta a tempo numa loja que emite nota: o DANFE vem quando a fila concluir
+      // a venda, e fica na reimpressão. (No dinheiro a nota sai no caixa, na cobrança.)
+      fiscalOk = false;
+    }
+
     final cupom = montarCupom(pedido, senha);
-    try {
-      final s = await ref.read(printerDriverProvider).imprimir(cupom);
-      impresso = !s.semPapel && s.online && !s.tampaAberta;
-    } catch (_) {
-      impresso = false;
-    }
-    if (!impresso) {
-      try {
-        final fila = await ref.read(filaImpressaoProvider.future);
-        await fila.enfileirar(pedido.uuid, senha, cupom);
-      } catch (_) {}
-    }
-    final fiscalOk = await _imprimirDanfe(pedido, senha, nfce);
+    final impresso = await _imprimir(cupom) == null;
+    if (!impresso) await _enfileirar([(pedido.uuid, cupom)], senha);
 
     ref.read(cartProvider.notifier).limpar();
     ref.read(checkoutProvider.notifier).limpar();
+    _encerrarVenda();
     if (mounted) {
       final dinheiro = pedido.forma == FormaPagamento.dinheiro ? 1 : 0;
       context.go('/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}'
@@ -376,46 +475,140 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     }
   }
 
-  /// K6 — imprime o DANFE NFC-e devolvido pelo Regem.
-  ///
-  /// Devolve `true` quando NÃO havia nota a imprimir (loja sem fiscal ligado, ou nota
-  /// que não autorizou) ou quando o documento saiu; `false` só quando havia documento e
-  /// ele NÃO saiu no papel. Essa distinção é o gancho do cancelamento + estorno (F4):
-  /// venda cobrada com nota emitida e sem cupom na mão do cliente não pode ser concluída
-  /// calada. Enquanto o F4 não entra, o DANFE não impresso vai para a fila de impressão
-  /// e a tela de confirmação avisa — nunca some.
-  Future<bool> _imprimirDanfe(
-      PedidoLocal pedido, String senha, Map<String, dynamic>? nfce) async {
-    final texto = nfce?['danfe'];
-    if (texto is! String || texto.isEmpty) return true;
-    // Contingência off-line: a mensagem obrigatória já vem no texto do Regem (é ele o
-    // emitente). A SEGUNDA via ("VIA DO ESTABELECIMENTO") é OPT-IN e **desligada por
-    // padrão** — o Regem decidiu assim na mig 287, porque o MOC 7.0 (Anexo IV, §4) aceita
-    // a guarda eletrônica do XML no lugar do papel. O totem obedece à configuração da
-    // loja: `viaEstabelecimento` só vem true quando ela ligou o interruptor. Campo
-    // ausente = não imprime, que é o padrão do Regem.
-    final contingencia = nfce?['contingencia'] == true;
-    final segundaVia = contingencia && nfce?['viaEstabelecimento'] == true;
-    final vias = <Uint8List>[
-      montarDanfe(texto),
-      if (segundaVia) montarDanfe(texto, viaEstabelecimento: true),
-    ];
-    var ok = true;
-    for (final via in vias) {
+  /// Confirma a venda (ou libera o retido) no plano de tentativas de [_tentativas].
+  Future<_Confirmacao> _confirmarVenda(
+      GogemApi api, Map<String, dynamic> corpo, String? retidoId) async {
+    for (var i = 0; i < _tentativas.length; i++) {
+      if (i > 0) await Future<void>.delayed(_pausaEntreTentativas);
       try {
-        final s = await ref.read(printerDriverProvider).imprimir(via);
-        if (s.semPapel || !s.online || s.tampaAberta) ok = false;
+        final r = retidoId == null
+            ? await api.enviarVenda(corpo, timeout: _tentativas[i])
+            : await api.liberarPedidoRetido(
+                retidoId, corpo['pagamentos'] as List<dynamic>,
+                timeout: _tentativas[i]);
+        return _Respondida(r);
+      } on GogemApiException catch (e) {
+        if (e.status == 409) return const _JaProcessada();
+        if (recusaDefinitiva(e.status)) return _Recusada(e);
+        // Passageiro (5xx, 503 com a nota ainda em emissão…): a repetição resolve.
       } catch (_) {
-        ok = false;
-      }
-      if (!ok) {
-        try {
-          final fila = await ref.read(filaImpressaoProvider.future);
-          await fila.enfileirar(pedido.uuid, senha, via);
-        } catch (_) {}
+        // Rede/tempo esgotado: se a venda chegou lá, a repetição devolve o resultado.
       }
     }
-    return ok;
+    return const _SemResposta();
+  }
+
+  /// A compra não se concluiu: estorna (se houve cobrança), registra e mostra ao cliente.
+  Future<void> _naoConcluida(
+    PedidoLocal pedido,
+    Map<String, dynamic> corpo,
+    String senha, {
+    required String motivo,
+    required String etapa,
+    bool repete = false,
+    Map<String, dynamic>? estornoFeito,
+  }) async {
+    if (mounted) {
+      setState(() => _confirmando = pedido.forma == FormaPagamento.dinheiro
+          ? 'CANCELANDO O PEDIDO…'
+          : 'ESTORNANDO O PAGAMENTO…');
+    }
+    final repo = await ref.read(orderRepositoryProvider.future);
+    final situacao =
+        await ConclusaoVenda(api: ref.read(gogemApiProvider), repo: repo)
+            .naoConcluida(
+      uuid: pedido.uuid,
+      corpo: corpo,
+      motivo: motivo,
+      etapa: etapa,
+      senha: int.tryParse(senha),
+      repete: repete,
+      estornoFeito: estornoFeito,
+    );
+    ref.read(cartProvider.notifier).limpar();
+    ref.read(checkoutProvider.notifier).limpar();
+    _encerrarVenda();
+    if (!mounted) return;
+    final q = Uri(queryParameters: {
+      'etapa': etapa,
+      'estorno': situacao.name,
+      'motivo': motivo,
+      'senha': senha,
+    }).query;
+    context.go('/nao-concluida?$q');
+  }
+
+  /// Servidor da loja (Regem #574): o DANFE não saiu no papel — o Regem cancela a nota (ou
+  /// agenda o cancelamento, se está em contingência) e desfaz a venda. `true` só com a
+  /// confirmação: sem ela a venda continua valendo, e estornar seria devolver o dinheiro de
+  /// uma venda com nota válida.
+  Future<bool> _desfazerSemCupom(
+      GogemApi api, String retidoId, String motivo) async {
+    try {
+      final r = await api.falhaImpressao(retidoId, motivo);
+      return r['ok'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Imprime o DANFE devolvido pelo Regem (e a 2ª via, se a contingência pede e a loja
+  /// ligou — mig 287). O que decide a compra é a VIA DO CLIENTE (`clienteRecebeu`); a via
+  /// do estabelecimento que falhar só vai para a fila de reimpressão.
+  Future<
+      ({
+        bool clienteRecebeu,
+        String motivo,
+        List<(String, Uint8List)> naoImpressas
+      })> _imprimirDanfe(String uuid, NotaEmitida nota) async {
+    // A mensagem da contingência já vem no texto do EMITENTE; o totem não a inventa.
+    final vias = <(String, Uint8List)>[
+      (chaveDanfe(uuid), montarDanfe(nota.danfe)),
+      if (nota.viaEstabelecimento)
+        (
+          chaveDanfe(uuid, viaEstabelecimento: true),
+          montarDanfe(nota.danfe, viaEstabelecimento: true)
+        ),
+    ];
+    final falhas = <(String, Uint8List)>[];
+    var motivo = '';
+    for (final (chave, bytes) in vias) {
+      final m = await _imprimir(bytes);
+      if (m != null) {
+        falhas.add((chave, bytes));
+        if (motivo.isEmpty) motivo = m;
+      }
+    }
+    return (
+      clienteRecebeu: falhas.every((f) => f.$1 != chaveDanfe(uuid)),
+      motivo: motivo,
+      naoImpressas: falhas,
+    );
+  }
+
+  /// Imprime e devolve o MOTIVO da falha (`null` = saiu no papel).
+  Future<String?> _imprimir(Uint8List bytes) async {
+    try {
+      final s = await ref.read(printerDriverProvider).imprimir(bytes);
+      if (s.semPapel) return 'sem papel';
+      if (s.tampaAberta) return 'tampa aberta';
+      if (!s.online) return 'impressora desconectada';
+      return null;
+    } catch (_) {
+      return 'falha na impressora';
+    }
+  }
+
+  /// Documentos que não saíram vão para a fila de reimpressão — cada um com a sua chave
+  /// (ERR-020: com a mesma, o segundo sumia).
+  Future<void> _enfileirar(List<(String, Uint8List)> docs, String senha) async {
+    if (docs.isEmpty) return;
+    try {
+      final fila = await ref.read(filaImpressaoProvider.future);
+      for (final (chave, bytes) in docs) {
+        await fila.enfileirar(chave, senha, bytes);
+      }
+    } catch (_) {}
   }
 
   /// Passo numerado (bolinha + texto) da instrução da maquininha.
@@ -549,6 +742,7 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         pointAtivo: _pointAtivo,
         pixCopiaECola: _pixDesafio?.copiaECola,
         pixContador: _mmss(_pixSegundos),
+        mensagemProcessando: _confirmando,
         onVoltar: () => context.go('/identificacao'),
         onVoltarCarrinho: () => context.go('/carrinho'),
         onTentarNovamente: _portao,
@@ -613,7 +807,9 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                         const CircularProgressIndicator(
                             color: GogemColors.cheese),
                         const SizedBox(height: 24),
-                        Text('PROCESSANDO PAGAMENTO…', style: t.titleLarge),
+                        Text(_confirmando ?? 'PROCESSANDO PAGAMENTO…',
+                            key: const ValueKey('pagamento-espera'),
+                            style: t.titleLarge),
                       ])))
             : Column(children: [
                 Padding(
@@ -714,4 +910,30 @@ class _FormaBtn extends StatelessWidget {
               style: const TextStyle(fontFamily: 'Tektur', fontSize: 24)),
         ),
       );
+}
+
+/// Como terminou a confirmação da venda com o servidor.
+sealed class _Confirmacao {
+  const _Confirmacao();
+}
+
+class _Respondida extends _Confirmacao {
+  const _Respondida(this.resposta);
+  final Map<String, dynamic> resposta;
+}
+
+/// 409: o servidor já tinha esta venda.
+class _JaProcessada extends _Confirmacao {
+  const _JaProcessada();
+}
+
+/// 400/422: o sistema da loja recusou a venda de forma definitiva.
+class _Recusada extends _Confirmacao {
+  const _Recusada(this.erro);
+  final GogemApiException erro;
+}
+
+/// Sem resposta no prazo (rede, servidor fora): a fila reenvia.
+class _SemResposta extends _Confirmacao {
+  const _SemResposta();
 }

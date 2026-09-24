@@ -80,6 +80,7 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
           entrada: _print.value,
           dinheiro: widget.dinheiro,
           segundos: _segundos,
+          fiscal: widget.fiscal,
           onNovoPedido: () => context.go('/descanso'),
         ),
       );

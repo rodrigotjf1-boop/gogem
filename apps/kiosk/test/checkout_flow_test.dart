@@ -69,6 +69,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('forma-cartao')));
     await tester.pump(const Duration(milliseconds: 200)); // spinner
     await tester.pump(const Duration(seconds: 1)); // processamento mock
+    // API offline: a confirmação tenta a REPETIÇÃO (2 s depois) antes de desistir e
+    // deixar a venda para a fila.
+    await tester.pump(const Duration(seconds: 3));
     await bombear(tester);
 
     expect(find.text('PEDIDO CONFIRMADO!'), findsOneWidget);
