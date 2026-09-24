@@ -49,6 +49,29 @@ class EscPosBuilder {
     return texto(espaco > 0 ? '$nome${' ' * espaco}$valor' : '$nome $valor');
   }
 
+  /// QR Code DESENHADO, centralizado (GS ( k, modelo 2, correcao M).
+  ///
+  /// Os dados vao em ASCII puro, NAO em CP850: o conteudo e uma URL (a da consulta da
+  /// NFC-e). Passar pelo mapa de acentos trocaria qualquer byte >= 0x80 por '?' e o QR
+  /// apontaria para um endereco que nao existe - um erro que so aparece quando alguem
+  /// tenta consultar a nota, longe do caixa.
+  EscPosBuilder qr(String dados, {int modulo = 6}) {
+    final d = <int>[];
+    for (final c in dados.codeUnits) {
+      if (c < 0x80) d.add(c);
+    }
+    if (d.isEmpty) return this;
+    _b.add(Cmd.alignCenter);
+    _b.add(Cmd.qrModelo);
+    _b.add(Cmd.qrTamanho(modulo));
+    _b.add(Cmd.qrCorrecaoM);
+    _b.add(Cmd.qrDados(d));
+    _b.add(Cmd.qrImprimir);
+    _b.add(Uint8List.fromList([0x0A]));
+    _b.add(Cmd.alignLeft);
+    return this;
+  }
+
   EscPosBuilder corte() {
     _b.add(Cmd.feed3);
     _b.add(Cmd.cut);

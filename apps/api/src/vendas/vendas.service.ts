@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  RegemNfce,
   RegemSalesClient,
   type RegemVendaExternaResposta,
 } from '../integracoes/regem/regem-sales.client';
@@ -33,7 +34,8 @@ export interface VendaTotemResultado {
   comandaId: string;
   senha?: number | null;
   total?: number | null;
-  nfce?: unknown;
+  /** Resumo da NFC-e (quando a loja emite cupom fiscal) — o totem imprime o DANFE com isto. */
+  nfce?: RegemNfce | null;
   idempotente?: boolean;
 }
 
@@ -195,7 +197,7 @@ export class VendasService {
       comandaId: resposta.comandaId,
       senha: resposta.senha,
       total: resposta.total,
-      nfce: resposta.nfce,
+      nfce: resposta.nfce ?? null,
     };
   }
 

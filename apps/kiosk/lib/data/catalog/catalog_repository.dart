@@ -30,6 +30,24 @@ class CatalogRepository {
     return jsonDecode(r.first['valor'] as String);
   }
 
+  /// Fiscal da loja (limite de identificação) — persistido no kv como a aparência: o
+  /// totem que reinicia sem rede continua exigindo o CPF acima do limite. Resposta sem o
+  /// campo (nuvem, servidor antigo) mantém o último conhecido.
+  Future<void> salvarFiscal(Object? fiscal) async {
+    if (fiscal == null) return;
+    await _db.insert(
+      'kv',
+      {'chave': 'fiscal', 'valor': jsonEncode(fiscal)},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Object?> carregarFiscal() async {
+    final r = await _db.query('kv', where: 'chave = ?', whereArgs: ['fiscal']);
+    if (r.isEmpty) return null;
+    return jsonDecode(r.first['valor'] as String);
+  }
+
   Future<void> salvarSnapshot(Map<String, dynamic> corpo) async {
     final versao = (corpo['versao'] as num).toInt();
     await _db.transaction((tx) async {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/kiosk/kiosk_service.dart';
 import 'core/pareamento/device_token.dart';
+import 'core/tempo/relogio_servidor.dart';
 import 'core/router.dart';
 import 'core/telemetria/heartbeat.dart';
 import 'core/telemetria/telemetria_reporter.dart';
@@ -33,6 +34,9 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Resolve o pareamento (token salvo ou JWT de dev) → destrava o portão
         // do router; sem isso o app fica no descanso (carregando) até parear.
+        // K3 — o desvio de relógio guardado volta antes de tudo: um totem que reinicia
+        // sem rede continua com a última hora boa, em vez do relógio torto do aparelho.
+        ref.read(relogioServidorProvider.notifier).carregar();
         ref.read(deviceTokenProvider.notifier).carregar();
         ref.read(catalogSyncProvider.notifier).iniciarAgendador();
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();

@@ -54,7 +54,7 @@ class ItemCarrinho {
 }
 
 /// Formas do totem. `dinheiro` é pago no CAIXA (não cobra no totem): finaliza
-/// direto, o cupom destaca "EFETUAR PAGAMENTO NO CAIXA" e o Regem trata a
+/// direto, o cupom destaca "PAGUE NO CAIXA PARA SER PRODUZIDO" e o Regem trata a
 /// pendência por `forma == 'dinheiro'` (nenhum campo novo no fio).
 enum FormaPagamento { credito, debito, pix, vr, dinheiro }
 

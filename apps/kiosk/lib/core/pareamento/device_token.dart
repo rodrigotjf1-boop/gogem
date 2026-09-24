@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
-import '../../data/catalog/catalog_sync.dart'
-    show databaseProvider, gogemApiProvider;
+import '../../data/api/gogem_api.dart';
+import '../../data/catalog/catalog_sync.dart' show databaseProvider;
 import '../config/app_config.dart';
+import '../config/host_servidor.dart';
 
 /// Pareamento do totem: o dispositivo troca um código de 6 dígitos por um
 /// token próprio (NÃO expira), guardado localmente. Substitui a dependência do
@@ -33,6 +34,10 @@ class DeviceTokenNotifier extends Notifier<DeviceTokenState> {
   /// pareamento (build de dev). Só força a tela de pareamento quando não há
   /// nem token nem JWT (build de produção).
   Future<void> carregar() async {
+    // O DESTINO deste totem (servidor da loja ou nuvem) vem antes: o cliente HTTP é
+    // montado a partir dele, e carregá-lo depois faria a primeira chamada sair pelo
+    // endereço errado.
+    await ref.read(hostServidorProvider.notifier).carregar();
     final db = await ref.read(databaseProvider.future);
     final r =
         await db.query('kv', where: 'chave = ?', whereArgs: [_kvChaveToken]);
@@ -47,12 +52,18 @@ class DeviceTokenNotifier extends Notifier<DeviceTokenState> {
   /// Troca o código pelo token de dispositivo e persiste. Lança em falha
   /// (código inválido/expirado → GogemApiException).
   Future<void> parear(String codigo) async {
-    final api = ref.read(gogemApiProvider);
-    final token = await api.parear(codigo);
+    // O pareamento vai SEMPRE ao host do build (a nuvem): é ela que valida o código e
+    // que sabe a qual servidor este aparelho pertence. Perguntar ao servidor da loja
+    // qual é o servidor da loja seria circular — e impediria repareamento quando o
+    // endereço guardado estiver errado ou o servidor estiver fora.
+    final api = ref.read(apiDePareamentoProvider);
+    final r = await api.parear(codigo);
     final db = await ref.read(databaseProvider.future);
-    await db.insert('kv', {'chave': _kvChaveToken, 'valor': token},
+    await db.insert('kv', {'chave': _kvChaveToken, 'valor': r.token},
         conflictAlgorithm: ConflictAlgorithm.replace);
-    _aplicar(token);
+    // O destino vem do pareamento; ausente = nuvem.
+    await ref.read(hostServidorProvider.notifier).definir(r.apiBase, caPem: r.caPem);
+    _aplicar(r.token);
   }
 
   /// O servidor revogou/invalidou o dispositivo (a chamada volta 401): apaga o
@@ -62,6 +73,9 @@ class DeviceTokenNotifier extends Notifier<DeviceTokenState> {
   Future<void> desparear() async {
     final db = await ref.read(databaseProvider.future);
     await db.delete('kv', where: 'chave = ?', whereArgs: [_kvChaveToken]);
+    // Some também com o destino: sem credencial o aparelho não é de ninguém, e o
+    // próximo pareamento é quem diz para onde ele volta a apontar.
+    await ref.read(hostServidorProvider.notifier).definir(null);
     _aplicar(null);
   }
 
@@ -75,3 +89,10 @@ class DeviceTokenNotifier extends Notifier<DeviceTokenState> {
 final deviceTokenProvider =
     NotifierProvider<DeviceTokenNotifier, DeviceTokenState>(
         DeviceTokenNotifier.new);
+
+/// Cliente usado APENAS no pareamento: fixo no host do build (a nuvem), independente do
+/// destino guardado. Separado do `gogemApiProvider` de propósito — e overridável em teste.
+final apiDePareamentoProvider = Provider<GogemApi>((ref) {
+  final cfg = ref.read(appConfigProvider);
+  return GogemApi(baseUrl: hostDoBuild, bearer: cfg.devJwt);
+});

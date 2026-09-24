@@ -2,8 +2,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../core/config/app_config.dart';
+import '../../core/config/cliente_https.dart';
+import '../../core/config/host_servidor.dart';
+import '../../core/tempo/relogio_servidor.dart';
 import '../../core/pareamento/device_token.dart';
 import '../api/gogem_api.dart';
+import '../../domain/fiscal/fiscal_loja.dart';
 import '../db/kiosk_database.dart';
 import 'aparencia.dart';
 import 'catalog_models.dart';
@@ -44,8 +48,19 @@ final gogemApiProvider = Provider<GogemApi>((ref) {
   final cfg = ref.watch(appConfigProvider);
   // Prefere o token de dispositivo (pareado) sobre o JWT de dev.
   final deviceToken = ref.watch(deviceTokenProvider).token;
+  // K2 — quando o destino é o servidor da loja, o cliente precisa confiar na autoridade
+  // dele (certificado próprio, gerado na instalação). Sem isso o handshake falha.
+  final destino = ref.watch(hostServidorProvider);
   return GogemApi(
-      baseUrl: cfg.apiUrl, bearer: cfg.devJwt, deviceToken: deviceToken);
+    baseUrl: cfg.apiUrl,
+    bearer: cfg.devJwt,
+    deviceToken: deviceToken,
+    client: clienteParaServidor(
+      destino.caPem,
+      // K3 — cada resposta acerta a hora do totem (cabeçalho `Date`).
+      aoResponder: (date) => ref.read(relogioServidorProvider.notifier).sincronizar(date),
+    ),
+  );
 });
 
 /// Cardápio corrente (recarrega quando a versão do sync muda).
@@ -62,6 +77,14 @@ final aparenciaProvider = FutureProvider<Aparencia>((ref) async {
   final repo = await ref.watch(catalogRepositoryProvider.future);
   final j = await repo.carregarAparencia();
   return j == null ? Aparencia.padrao : Aparencia.fromJson(j);
+});
+
+/// Fiscal da loja (limite de identificação do CPF). Recarrega a cada sync, como a
+/// aparência. Sem dado (nuvem, servidor antigo, primeiro boot) = sem exigência.
+final fiscalProvider = FutureProvider<FiscalLoja>((ref) async {
+  ref.watch(catalogSyncProvider.select((s) => s.ultimaSync)); // recarga por sync
+  final repo = await ref.watch(catalogRepositoryProvider.future);
+  return FiscalLoja.fromJson(await repo.carregarFiscal());
 });
 
 /// Orquestra o sync: checagem barata por `desde=<versao>`, offline-first
@@ -104,15 +127,22 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       final api = ref.read(gogemApiProvider);
       final res = await api.getCatalogoPublicado(desde: atual);
       switch (res) {
-        case MenuJaAtualizado(:final aparenciaJson):
-          // Aparência é LIVE: persiste mesmo sem catálogo novo.
+        case MenuJaAtualizado(:final aparenciaJson, :final fiscalJson):
+          // Aparência e fiscal são LIVE: persistem mesmo sem catálogo novo.
           await repo.salvarAparencia(aparenciaJson);
+          await repo.salvarFiscal(fiscalJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
               status: SyncStatus.atualizado, versao: atual, ultimaSync: DateTime.now());
-        case MenuAtualizado(:final body, :final snapshot, :final aparenciaJson):
+        case MenuAtualizado(
+            :final body,
+            :final snapshot,
+            :final aparenciaJson,
+            :final fiscalJson
+          ):
           await repo.salvarSnapshot(body);
           await repo.salvarAparencia(aparenciaJson);
+          await repo.salvarFiscal(fiscalJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
               status: SyncStatus.atualizado,

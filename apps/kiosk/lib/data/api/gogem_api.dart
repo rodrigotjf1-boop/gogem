@@ -6,14 +6,17 @@ import '../catalog/catalog_models.dart';
 sealed class PublicadoResult {}
 
 class MenuJaAtualizado extends PublicadoResult {
-  MenuJaAtualizado(this.aparenciaJson);
+  MenuJaAtualizado(this.aparenciaJson, {this.fiscalJson});
 
   /// Aparência (por loja) — vem LIVE em toda resposta, mesmo sem catálogo novo.
   final Object? aparenciaJson;
+
+  /// Fiscal da loja (servidor local) — também LIVE: ligar a NFC-e não muda o cardápio.
+  final Object? fiscalJson;
 }
 
 class MenuAtualizado extends PublicadoResult {
-  MenuAtualizado(this.body, this.snapshot, this.aparenciaJson);
+  MenuAtualizado(this.body, this.snapshot, this.aparenciaJson, {this.fiscalJson});
 
   /// Corpo bruto (persistido como fonte da verdade local).
   final Map<String, dynamic> body;
@@ -21,6 +24,9 @@ class MenuAtualizado extends PublicadoResult {
 
   /// Aparência (por loja).
   final Object? aparenciaJson;
+
+  /// Fiscal da loja (servidor local).
+  final Object? fiscalJson;
 }
 
 class GogemApiException implements Exception {
@@ -36,6 +42,19 @@ class GogemApiException implements Exception {
 /// Auth: quando o totem está pareado, envia `X-Device-Token` (token de
 /// dispositivo, NÃO expira). Sem pareamento, cai no `Bearer <devJwt>` do
 /// AppConfig (ponte de dev/staging). O backend aceita os dois (JwtOrDeviceGuard).
+/// Resposta do pareamento: a credencial e o DESTINO deste totem.
+class PareamentoResultado {
+  const PareamentoResultado({required this.token, this.apiBase, this.caPem});
+  final String token;
+
+  /// Endereço do servidor da loja. `null` = nuvem (padrão de quem não tem servidor).
+  final String? apiBase;
+
+  /// Certificado PÚBLICO da autoridade do servidor da loja (K2). Sem ele o Android
+  /// recusa o HTTPS do servidor local, que usa certificado próprio.
+  final String? caPem;
+}
+
 class GogemApi {
   GogemApi({
     required this.baseUrl,
@@ -59,8 +78,12 @@ class GogemApi {
       };
 
   /// POST /publico/dispositivos/parear — troca o código de 6 dígitos por um
-  /// token de dispositivo (endpoint público, sem auth). Retorna o token.
-  Future<String> parear(String codigo) async {
+  /// token de dispositivo (endpoint público, sem auth).
+  ///
+  /// Devolve também o DESTINO deste totem (`apiBase`): preenchido = fala com o servidor
+  /// da loja; nulo/ausente = nuvem. Assim o mesmo APK atende loja com e sem servidor
+  /// local — antes o destino vivia no build e trocá-lo exigia reinstalar o aplicativo.
+  Future<PareamentoResultado> parear(String codigo) async {
     final uri = Uri.parse('$baseUrl/publico/dispositivos/parear');
     final res = await _client
         .post(uri,
@@ -70,7 +93,15 @@ class GogemApi {
     if (res.statusCode == 200 || res.statusCode == 201) {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
       final token = (b is Map ? b['token'] : null) as String?;
-      if (token != null && token.isNotEmpty) return token;
+      if (token != null && token.isNotEmpty) {
+        final base = (b is Map ? b['apiBase'] : null)?.toString().trim();
+        final ca = (b is Map ? b['caPem'] : null)?.toString().trim();
+        return PareamentoResultado(
+          token: token,
+          apiBase: (base == null || base.isEmpty) ? null : base,
+          caPem: (ca == null || ca.isEmpty) ? null : ca,
+        );
+      }
       throw GogemApiException(200, 'resposta de pareamento sem token');
     }
     throw GogemApiException(res.statusCode, res.body);
@@ -90,11 +121,13 @@ class GogemApi {
     }
     final body = jsonDecode(utf8.decode(res.bodyBytes));
     final aparencia = body is Map ? body['aparencia'] : null;
+    final fiscal = body is Map ? body['fiscal'] : null;
     if (body is Map && body['atualizado'] == false) {
-      return MenuJaAtualizado(aparencia);
+      return MenuJaAtualizado(aparencia, fiscalJson: fiscal);
     }
     if (body is Map<String, dynamic>) {
-      return MenuAtualizado(body, MenuSnapshot.fromPublicadoJson(body), aparencia);
+      return MenuAtualizado(body, MenuSnapshot.fromPublicadoJson(body), aparencia,
+          fiscalJson: fiscal);
     }
     throw GogemApiException(200, 'corpo inesperado');
   }
@@ -160,6 +193,55 @@ class GogemApi {
       return b is Map<String, dynamic> ? b : <String, dynamic>{};
     }
     throw GogemApiException(res.statusCode, res.body);
+  }
+
+  /// K4 — POST /vendas/retido: registra o pedido no servidor da loja ANTES de cobrar.
+  /// Devolve `{pedidoId, senha, total}`. A senha é a do BALCÃO e é ela que vai no cupom
+  /// — o cliente sai com o mesmo número que a cozinha vai chamar.
+  ///
+  /// Só existe no modo servidor. Na nuvem o fluxo segue como sempre (paga e então lança).
+  Future<Map<String, dynamic>> abrirPedidoRetido(Map<String, dynamic> corpo) async {
+    final res = await _client
+        .post(Uri.parse('$baseUrl/vendas/retido'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode(corpo))
+        .timeout(const Duration(seconds: 15));
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final b = jsonDecode(utf8.decode(res.bodyBytes));
+      return b is Map<String, dynamic> ? b : <String, dynamic>{};
+    }
+    throw GogemApiException(res.statusCode, res.body);
+  }
+
+  /// K4 — POST /vendas/:id/liberar: pagamento aprovado, o retido vira venda (comanda,
+  /// caixa, produção). Reenvio não duplica: o servidor é idempotente pela chave do totem.
+  Future<Map<String, dynamic>> liberarPedidoRetido(
+      String pedidoId, List<dynamic> pagamentos) async {
+    final res = await _client
+        .post(Uri.parse('$baseUrl/vendas/$pedidoId/liberar'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'pagamentos': pagamentos}))
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final b = jsonDecode(utf8.decode(res.bodyBytes));
+      return b is Map<String, dynamic> ? b : <String, dynamic>{};
+    }
+    throw GogemApiException(res.statusCode, res.body);
+  }
+
+  /// K4 — POST /vendas/:id/cancelar: o cliente desistiu (ou recusou tentar de novo).
+  /// Fica registrado com o MOTIVO, nos dois lados. Best-effort: nunca propaga — a tela
+  /// já está encerrando o pedido, e o servidor expira o retido sozinho em 5 min.
+  Future<void> cancelarPedidoRetido(String pedidoId, String motivo) async {
+    try {
+      await _client
+          .post(Uri.parse('$baseUrl/vendas/$pedidoId/cancelar'),
+              headers: {..._headers, 'Content-Type': 'application/json'},
+              body: jsonEncode({'motivo': motivo}))
+          .timeout(const Duration(seconds: 10));
+    } catch (_) {
+      /* o servidor expira o retido sozinho */
+    }
   }
 
   /// POST /vendas/falha — reporta um pagamento que NÃO passou (erro/recusa/

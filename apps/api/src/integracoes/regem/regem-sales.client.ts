@@ -60,12 +60,44 @@ export interface RegemVendaExternaBody {
  * `total` (e `nfce?` se fiscal ativo). Em replay idempotente, o Regem devolve
  * `{ comandaId, idempotente: true }` — os demais campos podem faltar.
  */
+/**
+ * Resumo da NFC-e que o Regem devolve quando a loja emite cupom fiscal (F1/F2).
+ *
+ * É o que o TOTEM precisa para imprimir o DANFE: o QR já montado (com o CSC), o
+ * protocolo de autorização, número E série, e a data. `simulada` e `contingencia` não
+ * são enfeite — a primeira avisa que aquilo NÃO é documento fiscal, e a segunda exige a
+ * mensagem "EMITIDA EM CONTINGÊNCIA" no papel, conforme o manual do DANFE NFC-e.
+ *
+ * `unknown` aqui fazia o dado chegar e morrer: o GoGeM recebia a nota e não repassava.
+ */
+export interface RegemNfce {
+  status: string;
+  chave?: string | null;
+  numero?: number | null;
+  serie?: number | null;
+  protocolo?: string | null;
+  /** URL completa do QR Code fiscal — o totem só renderiza. */
+  qrcode?: string | null;
+  /** '1' produção · '2' homologação. */
+  ambiente?: string;
+  simulada?: boolean;
+  contingencia?: boolean;
+  emitidaEm?: string | null;
+  /**
+   * K6 — o DANFE já montado pelo EMITENTE, pronto para a impressora térmica do totem
+   * (marcador `@QR:` na linha do QR Code). Vem montado de lá porque o totem não tem —
+   * nem deve ter — os dados do emitente, os tributos nem a URL de consulta. Repassado
+   * sem reescrever: reescrever o documento aqui seria uma segunda versão do DANFE.
+   */
+  danfe?: string | null;
+}
+
 export interface RegemVendaExternaResposta {
   comandaId: string;
   senha?: number;
   subtotal?: number;
   total?: number;
-  nfce?: unknown;
+  nfce?: RegemNfce | null;
   idempotente?: boolean;
 }
 

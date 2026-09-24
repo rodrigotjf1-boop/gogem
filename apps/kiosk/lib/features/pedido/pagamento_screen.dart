@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart' show gogemApiProvider, aparenciaProvider;
 import '../gogen/gogen_pagamento.dart';
 import '../../domain/order/cart.dart';
+import '../../core/config/host_servidor.dart';
 import '../../domain/order/order_models.dart';
 import '../../domain/order/order_repository.dart';
 import '../../domain/order/venda_sync.dart';
@@ -37,6 +39,15 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
   bool _bloqueado = false;
   String _motivo = '';
   String? _erroPagamento;
+
+  /// K4 — esta loja tem servidor local? Só nele existe pedido retido; na nuvem o fluxo
+  /// segue como sempre (paga e então lança a venda).
+  bool get _modoServidor => ref.read(hostServidorProvider).temServidor;
+
+  /// K4 — id do pedido RETIDO no servidor da loja (modo servidor). O pedido entra lá
+  /// ANTES de cobrar, sem ir para a cozinha; vira venda no `liberar` e é encerrado com
+  /// motivo no `cancelar`. Nulo = modo nuvem (fluxo de sempre: paga e então lança).
+  String? _pedidoRetidoId;
   PixChallenge? _pixDesafio;
   bool _pointAtivo = false;
   Timer? _pixTimer;
@@ -119,8 +130,29 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     _pedidoAtual = pedido;
     _senhaAtual = await repo.salvarPreCobranca(pedido);
 
+    // K4 — modo servidor: o pedido entra RETIDO no Regem antes de cobrar, e a senha
+    // que vem de lá é a que vai no cupom. Dinheiro fica fora: ele já nasce retido pelo
+    // caminho de sempre (`/vendas` → hub de Retirada, "a pagar no balcão").
+    // Reaproveita o retido em nova tentativa: o cliente não pode trocar de número só
+    // porque o cartão foi recusado uma vez.
+    if (_modoServidor && forma != FormaPagamento.dinheiro && _pedidoRetidoId == null) {
+      try {
+        final r = await ref
+            .read(gogemApiProvider)
+            .abrirPedidoRetido(pedido.toJson(senhaLocal: int.tryParse(_senhaAtual ?? '')));
+        _pedidoRetidoId = r['pedidoId']?.toString();
+        final senhaServidor = r['senha'];
+        if (senhaServidor != null) _senhaAtual = '$senhaServidor';
+      } catch (_) {
+        // Servidor fora: não cobra. Cobrar sem conseguir registrar deixaria o cliente
+        // pago e a cozinha sem pedido — o pior dos dois mundos.
+        _falhaPagamento('Sem conexão com o servidor da loja. Tente de novo.');
+        return;
+      }
+    }
+
     // DINHEIRO: pago no CAIXA. Não cobra aqui — finaliza direto. O cupom destaca
-    // "EFETUAR PAGAMENTO NO CAIXA" e o Regem trata a pendência por forma=='dinheiro'.
+    // "PAGUE NO CAIXA PARA SER PRODUZIDO" e o Regem trata a pendência por forma=='dinheiro'.
     if (forma == FormaPagamento.dinheiro) {
       await _finalizar(pedido);
       return;
@@ -229,7 +261,10 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     // descarta (best-effort). Se esta marcação não rodar, o boot reconcilia o
     // 'aguardando_pagamento' órfão (o status remoto não estará approved).
     final p = _pedidoAtual;
-    if (p != null) {
+    // K4 — com pedido RETIDO, a falha NÃO encerra nada: o pedido continua lá, com a
+    // senha que o cliente já viu, e ele escolhe tentar de novo ou cancelar. Quem
+    // encerra é o botão de cancelar (ou os 5 minutos do servidor).
+    if (p != null && _pedidoRetidoId == null) {
       // Reporta ao Regem (via backend) o pedido que NÃO passou + o motivo —
       // best-effort (o backend lista o cupom "não passou"). Depois descarta local.
       final corpo = p.toJson(senhaLocal: int.tryParse(_senhaAtual ?? ''));
@@ -248,6 +283,27 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     });
   }
 
+  /// K4 — o cliente desistiu depois de uma recusa. Encerra o pedido retido no servidor
+  /// COM MOTIVO (fica registrado no Regem e no admin do GoGeM), descarta o local e sai.
+  Future<void> _cancelarCompra() async {
+    final retidoId = _pedidoRetidoId;
+    final p = _pedidoAtual;
+    _pedidoRetidoId = null;
+    _pedidoAtual = null;
+    if (retidoId != null) {
+      unawaited(ref
+          .read(gogemApiProvider)
+          .cancelarPedidoRetido(retidoId, 'cliente cancelou a compra no totem'));
+    }
+    if (p != null) {
+      unawaited(ref
+          .read(orderRepositoryProvider.future)
+          .then((r) => r.marcarCancelado(p.uuid)));
+    }
+    ref.read(cartProvider.notifier).limpar();
+    if (mounted) context.go('/');
+  }
+
   /// Pós-aprovação (comum a todas as formas): marca o pedido (já gravado no
   /// write-ahead) como PAGO, imprime (com fila na janela residual), envia ao
   /// Regem e confirma.
@@ -256,6 +312,11 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     // Pago: 'aguardando_pagamento' → 'pendente_envio' (libera pro Regem).
     await repo.marcarPago(pedido.uuid);
     _pedidoAtual = null; // concluído: não é mais candidato a cancelamento
+    // Guarda ANTES de limpar: é com ele que se libera o retido logo abaixo. Limpar
+    // primeiro fazia a liberação virar venda direta (o servidor ficava com o retido
+    // pendurado e a venda lançada duas vezes).
+    final retidoId = _pedidoRetidoId;
+    _pedidoRetidoId = null;
     final senhaLocal = _senhaAtual ?? '000';
 
     // Mostra a senha do REGEM (a que a cozinha/KDS chama), não a local do totem
@@ -263,13 +324,23 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
     // Envia AGORA (o totem está online no pós-pagamento); offline/erro → mantém
     // a senha local e o agendador reenvia depois. A senha entra no cupom TAMBÉM.
     var senha = senhaLocal;
+    // K6 — resumo da NFC-e devolvido pelo Regem. Fica fora do `try` porque o DANFE é
+    // impresso DEPOIS do cupom, e nulo aqui significa apenas "a loja não emite nota"
+    // (ou a venda não chegou a ser confirmada) — nunca "imprimiu".
+    Map<String, dynamic>? nfce;
     try {
-      final resp = await ref
-          .read(gogemApiProvider)
-          .enviarVenda(pedido.toJson(senhaLocal: int.tryParse(senhaLocal)));
+      final corpo = pedido.toJson(senhaLocal: int.tryParse(senhaLocal));
+      // K4 — com pedido retido, o pagamento LIBERA o que já está lá (mesma senha, mesma
+      // chave). Sem retido, o fluxo de sempre: lança a venda agora.
+      final resp = retidoId == null
+          ? await ref.read(gogemApiProvider).enviarVenda(corpo)
+          : await ref
+              .read(gogemApiProvider)
+              .liberarPedidoRetido(retidoId, corpo['pagamentos'] as List<dynamic>);
       await repo.marcarEnviado(pedido.uuid, jsonEncode(resp));
       final regemSenha = resp['senha'];
       if (regemSenha != null) senha = '$regemSenha';
+      if (resp['nfce'] is Map) nfce = Map<String, dynamic>.from(resp['nfce'] as Map);
     } on GogemApiException catch (e) {
       if (e.status == 409) {
         await repo.marcarEnviado(pedido.uuid, '{"idempotente":true}');
@@ -294,14 +365,57 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         await fila.enfileirar(pedido.uuid, senha, cupom);
       } catch (_) {}
     }
+    final fiscalOk = await _imprimirDanfe(pedido, senha, nfce);
 
     ref.read(cartProvider.notifier).limpar();
     ref.read(checkoutProvider.notifier).limpar();
     if (mounted) {
       final dinheiro = pedido.forma == FormaPagamento.dinheiro ? 1 : 0;
-      context.go(
-          '/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}&dinheiro=$dinheiro');
+      context.go('/confirmacao?senha=$senha&impresso=${impresso ? 1 : 0}'
+          '&dinheiro=$dinheiro&fiscal=${fiscalOk ? 1 : 0}');
     }
+  }
+
+  /// K6 — imprime o DANFE NFC-e devolvido pelo Regem.
+  ///
+  /// Devolve `true` quando NÃO havia nota a imprimir (loja sem fiscal ligado, ou nota
+  /// que não autorizou) ou quando o documento saiu; `false` só quando havia documento e
+  /// ele NÃO saiu no papel. Essa distinção é o gancho do cancelamento + estorno (F4):
+  /// venda cobrada com nota emitida e sem cupom na mão do cliente não pode ser concluída
+  /// calada. Enquanto o F4 não entra, o DANFE não impresso vai para a fila de impressão
+  /// e a tela de confirmação avisa — nunca some.
+  Future<bool> _imprimirDanfe(
+      PedidoLocal pedido, String senha, Map<String, dynamic>? nfce) async {
+    final texto = nfce?['danfe'];
+    if (texto is! String || texto.isEmpty) return true;
+    // Contingência off-line: a mensagem obrigatória já vem no texto do Regem (é ele o
+    // emitente). A SEGUNDA via ("VIA DO ESTABELECIMENTO") é OPT-IN e **desligada por
+    // padrão** — o Regem decidiu assim na mig 287, porque o MOC 7.0 (Anexo IV, §4) aceita
+    // a guarda eletrônica do XML no lugar do papel. O totem obedece à configuração da
+    // loja: `viaEstabelecimento` só vem true quando ela ligou o interruptor. Campo
+    // ausente = não imprime, que é o padrão do Regem.
+    final contingencia = nfce?['contingencia'] == true;
+    final segundaVia = contingencia && nfce?['viaEstabelecimento'] == true;
+    final vias = <Uint8List>[
+      montarDanfe(texto),
+      if (segundaVia) montarDanfe(texto, viaEstabelecimento: true),
+    ];
+    var ok = true;
+    for (final via in vias) {
+      try {
+        final s = await ref.read(printerDriverProvider).imprimir(via);
+        if (s.semPapel || !s.online || s.tampaAberta) ok = false;
+      } catch (_) {
+        ok = false;
+      }
+      if (!ok) {
+        try {
+          final fila = await ref.read(filaImpressaoProvider.future);
+          await fila.enfileirar(pedido.uuid, senha, via);
+        } catch (_) {}
+      }
+    }
+    return ok;
   }
 
   /// Passo numerado (bolinha + texto) da instrução da maquininha.
@@ -525,6 +639,19 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
                     child: Text('$_erroPagamento',
                         textAlign: TextAlign.center,
                         style: t.bodyLarge?.copyWith(color: GogemColors.heat)),
+                  ),
+                // K4 — recusou: o pedido segue RETIDO com a senha que o cliente já viu.
+                // Ele escolhe. Tentar de novo é tocar numa forma de pagamento (os botões
+                // continuam abaixo); desistir é este botão, que encerra com motivo.
+                if (_erroPagamento != null && _pedidoRetidoId != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(40, 12, 40, 0),
+                    child: TextButton(
+                      key: const ValueKey('cancelar-compra'),
+                      onPressed: _processando ? null : _cancelarCompra,
+                      child: Text('CANCELAR A COMPRA',
+                          style: t.titleMedium?.copyWith(color: GogemColors.heat)),
+                    ),
                   ),
                 const SizedBox(height: 32),
                 Expanded(
