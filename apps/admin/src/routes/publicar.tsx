@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import {
   mensagemDeErro,
   usePublicar,
   useVersoes,
+  type PublicarAvisos,
   type PublicarResultado,
 } from '@/lib/publicacao';
 
@@ -109,6 +110,8 @@ export default function PublicarPage() {
             </div>
           )}
 
+          {resultado?.avisos && <AvisosPublicacao avisos={resultado.avisos} />}
+
           {erro && (
             <p
               role="alert"
@@ -186,5 +189,41 @@ export default function PublicarPage() {
         )}
       </section>
     </section>
+  );
+}
+
+/**
+ * O que ficou fora da versão por falta de código PDV (loja integrada ao Regem). Sem o
+ * código a venda não chega ao Regem — o produto seria recusado depois do pagamento.
+ */
+function AvisosPublicacao({ avisos }: { avisos: PublicarAvisos }) {
+  const { produtosSemCodigo, opcoesPagasSemCodigo } = avisos;
+  if (!produtosSemCodigo.length && !opcoesPagasSemCodigo.length) return null;
+  return (
+    <div
+      role="status"
+      aria-label="Itens fora do totem"
+      className="w-full space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+    >
+      <p className="flex items-center gap-2 font-medium text-amber-700">
+        <AlertTriangle className="size-4 shrink-0" aria-hidden />
+        Ficaram fora do totem por não terem código PDV do Regem:
+      </p>
+      {produtosSemCodigo.length > 0 && (
+        <p>
+          <strong>Produtos:</strong>{' '}
+          {produtosSemCodigo.map((p) => p.nome).join(', ')}
+        </p>
+      )}
+      {opcoesPagasSemCodigo.length > 0 && (
+        <p>
+          <strong>Opções pagas:</strong>{' '}
+          {opcoesPagasSemCodigo.map((o) => o.nome).join(', ')}
+        </p>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Informe o código PDV no cadastro (Catálogo) e publique de novo.
+      </p>
+    </div>
   );
 }

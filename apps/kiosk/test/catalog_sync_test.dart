@@ -81,4 +81,66 @@ void main() {
     await c.read(catalogSyncProvider.notifier).sincronizar();
     expect(c.read(catalogSyncProvider).status, SyncStatus.erro);
   });
+
+  // ERR-017 — pausar no painel não chegava ao totem sem publicar.
+  test('pausa ao vivo chega no sync sem versão nova; despausar volta; ausente limpa',
+      () async {
+    var resposta = <String, dynamic>{};
+    final c = containerCom(MockClient((req) async => http.Response(
+        jsonEncode(resposta), 200,
+        headers: {'content-type': 'application/json; charset=utf-8'})));
+    final n = c.read(catalogSyncProvider.notifier);
+    const p0 = publicadoFixture;
+    final produtos = (p0['snapshot'] as Map)['produtos'] as List;
+    final primeiro = produtos.first as Map;
+    final idProduto = '${primeiro['id']}';
+    final idOutro = '${(produtos.last as Map)['id']}';
+    final idCategoria = '${primeiro['categoriaId']}';
+
+    resposta = {...p0, 'disponibilidade': {'produtosIndisponiveis': []}};
+    await n.sincronizar();
+    expect((await c.read(menuProvider.future))!.porId(idProduto)!.disponivel,
+        isTrue);
+
+    // Gerente pausou: resposta SEM catálogo novo, só a disponibilidade.
+    resposta = {
+      'versao': p0['versao'],
+      'atualizado': false,
+      'disponibilidade': {
+        'produtosIndisponiveis': [idProduto, idOutro],
+      },
+    };
+    await n.sincronizar();
+    final pausado = (await c.read(menuProvider.future))!;
+    expect(pausado.porId(idProduto)!.disponivel, isFalse);
+    expect(pausado.produtosDa(idCategoria).map((p) => p.id),
+        isNot(contains(idProduto)));
+
+    // Mesmo conjunto em outra ordem: não recarrega à toa.
+    final antes = c.read(catalogSyncProvider).disponibilidade;
+    resposta = {
+      'versao': p0['versao'],
+      'atualizado': false,
+      'disponibilidade': {
+        'produtosIndisponiveis': [idOutro, idProduto],
+      },
+    };
+    await n.sincronizar();
+    expect(c.read(catalogSyncProvider).disponibilidade, antes);
+
+    // Despausou.
+    resposta = {
+      'versao': p0['versao'],
+      'atualizado': false,
+      'disponibilidade': {'produtosIndisponiveis': []},
+    };
+    await n.sincronizar();
+    expect((await c.read(menuProvider.future))!.porId(idProduto)!.disponivel,
+        isTrue);
+
+    // Servidor sem o campo: a disponibilidade guardada é apagada (vale o retrato).
+    resposta = {'versao': p0['versao'], 'atualizado': false};
+    await n.sincronizar();
+    expect(c.read(catalogSyncProvider).disponibilidade, greaterThan(antes));
+  });
 }

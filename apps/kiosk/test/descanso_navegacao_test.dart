@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gogem_kiosk/app.dart';
+import 'package:gogem_kiosk/core/hardware/hardware_profile.dart';
 import 'package:gogem_kiosk/core/router.dart';
+import 'package:gogem_kiosk/data/catalog/aparencia.dart';
+import 'package:gogem_kiosk/data/catalog/catalog_sync.dart' show aparenciaProvider;
+import 'package:gogem_kiosk/features/gogen/gogen_standby.dart';
 
 /// NOTA DE HARNESS: a tela de descanso tem animações em loop
 /// (AnimationController.repeat) — NUNCA usar pumpAndSettle com ela na árvore;
@@ -43,5 +47,22 @@ void main() {
     for (var n = 0; n < 10; n++) {
       expect(find.byKey(ValueKey('k$n')), findsOneWidget);
     }
+  });
+
+  testWidgets('"Animações: reduzido" do painel desliga as brasas do descanso GoGen',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        aparenciaProvider.overrideWith((ref) async => Aparencia.fromJson(
+            {'temaPreset': 'gogen', 'animacoes': 'reduzido'})),
+        hardwareCapsProvider.overrideWithValue(HardwareCaps.high),
+      ],
+      child: const GogemKioskApp(iniciarSync: false),
+    ));
+    await tester.pump(const Duration(milliseconds: 300));
+    final standby = tester.widget<GogenStandby>(find.byType(GogenStandby));
+    expect(standby.anima, isTrue); // reduzido não é desligado
+    expect(standby.particulas, isFalse);
+    await tester.pumpWidget(const SizedBox());
   });
 }

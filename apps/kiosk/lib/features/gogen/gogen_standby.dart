@@ -16,6 +16,7 @@ class GogenStandby extends StatefulWidget {
     required this.chamada,
     this.precoIsca,
     this.anima = true,
+    this.particulas = true,
   });
 
   final String? nomeLoja;
@@ -23,6 +24,9 @@ class GogenStandby extends StatefulWidget {
   final String chamada;
   final String? precoIsca;
   final bool anima;
+
+  /// Brasas subindo (partículas). Desligadas em "animações: reduzido" e no hardware fraco.
+  final bool particulas;
 
   @override
   State<GogenStandby> createState() => _GogenStandbyState();
@@ -75,7 +79,7 @@ class _GogenStandbyState extends State<GogenStandby>
           ),
         ),
         // Brasas subindo (CustomPainter animado).
-        if (widget.anima)
+        if (widget.anima && widget.particulas)
           Positioned.fill(
             child: AnimatedBuilder(
               animation: _c,

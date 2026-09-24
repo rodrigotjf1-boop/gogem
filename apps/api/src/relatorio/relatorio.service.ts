@@ -120,12 +120,15 @@ export class RelatorioService {
     );
     const fimMesAnterior = new Date(inicioMes.getTime() - 1);
 
-    return {
-      hoje: await this.faturamento(inicioHoje, agora),
-      semana: await this.faturamento(inicioSemana, agora),
-      mesAtual: await this.faturamento(inicioMes, agora),
-      mesAnterior: await this.faturamento(inicioMesAnterior, fimMesAnterior),
-    };
+    // As quatro somas são independentes: em paralelo, o resumo custa uma ida ao banco,
+    // não quatro em fila.
+    const [hoje, semana, mesAtual, mesAnterior] = await Promise.all([
+      this.faturamento(inicioHoje, agora),
+      this.faturamento(inicioSemana, agora),
+      this.faturamento(inicioMes, agora),
+      this.faturamento(inicioMesAnterior, fimMesAnterior),
+    ]);
+    return { hoje, semana, mesAtual, mesAnterior };
   }
 
   /** Faturamento (só pedidos `enviado`) num intervalo. */
@@ -252,8 +255,9 @@ export class RelatorioService {
    * quando houver. Delega ao CancelamentoService (fonte única, mesma lógica do
    * cancelamento vindo do Regem). Devolve os detalhes do estorno para a UI.
    */
+  /** Cancelamento pelo painel: o Regem desfaz a venda antes do estorno (ERR-016). */
   async cancelar(id: string, motivo: string): Promise<CancelamentoResultado> {
-    return this.cancelamento.cancelarPorId(id, motivo, 'admin');
+    return this.cancelamento.cancelarPeloPainel(id, motivo);
   }
 
   // ── internos ──────────────────────────────────────────────────────────────

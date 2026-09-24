@@ -19,6 +19,17 @@ class HardwareCaps {
   final double animationScale; // 1.0 normal, 0.6 reduzido
   final int imageCacheMb;
 
+  /// "Animações: reduzido" do painel: sem partículas e com movimento a 60% — o mesmo que o
+  /// perfil de hardware fraco já faz. A opção existia no painel e o totem a ignorava
+  /// (ERR-018).
+  HardwareCaps get reduzidas => HardwareCaps(
+        profile: profile,
+        enableBlur: enableBlur,
+        enableParticles: false,
+        animationScale: animationScale < 0.6 ? animationScale : 0.6,
+        imageCacheMb: imageCacheMb,
+      );
+
   static const low = HardwareCaps(
     profile: HardwareProfile.low,
     enableBlur: false,

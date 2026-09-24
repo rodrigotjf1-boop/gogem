@@ -2,8 +2,7 @@ import 'dart:math';
 import '../../data/catalog/catalog_models.dart';
 
 /// Mínimo efetivo do grupo: `obrigatorio` com `min = 0` conta como 1.
-int minEfetivo(GrupoComplemento g) =>
-    g.obrigatorio && g.min == 0 ? 1 : g.min;
+int minEfetivo(GrupoComplemento g) => g.minimo;
 
 /// Seleção válida? (respeita min/max/obrigatorio do snapshot)
 bool selecaoValida(GrupoComplemento g, List<OpcaoComplemento> sel) =>
@@ -86,12 +85,36 @@ class PedidoLocal {
 
   int get totalCentavos => itens.fold<int>(0, (s, i) => s + i.totalCentavos);
 
+  /// Observação da linha: a digitada + as escolhas GRÁTIS sem código PDV ("Retirar: cebola").
+  /// Sem código a opção não vira linha vendável — e sumia do pedido: a cozinha nunca sabia
+  /// do "sem cebola" (ERR-011). Opção PAGA sem código não entra: a publicação a deixa fora
+  /// na loja integrada (o Regem recusaria a venda pela soma).
+  static String? _observacao(ItemCarrinho i) {
+    final porGrupo = <String>[];
+    for (final g in i.produto.grupos) {
+      final nomes = [
+        for (final o in i.selecoes[g.id] ?? const <OpcaoComplemento>[])
+          if (o.precoCentavosDelta == 0 &&
+              (ExternalRef.codigoRegem(o.externalRefs) ?? '').isEmpty)
+            o.nome
+      ];
+      if (nomes.isNotEmpty) porGrupo.add('${g.nome}: ${nomes.join(', ')}');
+    }
+    final partes = [
+      if (i.observacao.trim().isNotEmpty) i.observacao.trim(),
+      ...porGrupo,
+    ];
+    if (partes.isEmpty) return null;
+    final texto = partes.join(' · ');
+    return texto.length > 500 ? texto.substring(0, 500) : texto;
+  }
+
   /// Corpo canônico do `VendaTotemDto` do backend (`POST /vendas`):
   /// - idempotência via `idempotencyKey` (= uuid do pedido);
   /// - pagamento único no split `pagamentos[]`, `valor` em CENTAVOS;
   /// - itens SEMPRE por `codigoPdv` (de-para §4). Opção COM código PDV vira uma
-  ///   linha vendável (qtd = qtd do item); opção SEM código é **informativa** e
-  ///   não é enviada. `senhaLocal` (senha de retirada) segue ao Regem.
+  ///   linha vendável (qtd = qtd do item); opção grátis SEM código vai na
+  ///   observação da linha. `senhaLocal` (senha de retirada) segue ao Regem.
   Map<String, dynamic> toJson({int? senhaLocal}) => {
         'idempotencyKey': uuid,
         if (cpf != null && cpf!.isNotEmpty) 'cpf': cpf,
@@ -106,7 +129,7 @@ class PedidoLocal {
             {
               'codigoPdv': i.produto.codigoPdvRegem,
               'quantidade': i.quantidade,
-              if (i.observacao.isNotEmpty) 'observacao': i.observacao,
+              if (_observacao(i) != null) 'observacao': _observacao(i),
             },
             for (final o in i.todasOpcoes)
               if ((ExternalRef.codigoRegem(o.externalRefs) ?? '').isNotEmpty)

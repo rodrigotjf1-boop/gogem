@@ -133,10 +133,20 @@ export interface EstornoResultado {
   mensagem: string;
 }
 
+/** O que o Regem fez com a venda cancelada pelo painel (loja integrada). */
+export interface AvisoRegem {
+  avisado: boolean;
+  notaCancelada?: boolean;
+  cancelamentoPendente?: boolean;
+  mensagem: string;
+}
+
 export interface CancelamentoResultado {
   status: 'cancelado';
   pedidoId: string;
   estorno: EstornoResultado;
+  /** Ausente em loja sem Regem (e em API antiga). */
+  regem?: AvisoRegem;
 }
 
 export function useCancelarPedido() {

@@ -97,14 +97,16 @@ export function ProdutoDialog({
       ? [{ sistema: 'regem', codigo_pdv: cod }]
       : [];
 
+    // Campo vazio vai como `null`: é o que APAGA na edição. Com `undefined` o campo sumia
+    // do JSON, a API mantinha o valor antigo e o gerente via "salvo" sem ter salvo (ERR-013).
     const input: ProdutoInput = {
       nome: parsed.data.nome,
-      descricao: descricao.trim() || undefined,
+      descricao: descricao.trim() || null,
       precoCentavos: parsed.data.precoCentavos,
       disponivel,
       imagemUrl,
-      selo: selo.trim() || undefined,
-      categoriaId: categoriaId || undefined,
+      selo: selo.trim() || null,
+      categoriaId: categoriaId || null,
       externalRefs,
     };
 

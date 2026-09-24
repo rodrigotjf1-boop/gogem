@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, type Produto } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { codigoPdvRegem } from '../common/codigo-pdv';
 import { CardapioService } from '../cardapio/cardapio.service';
 import { RegemPauseClient } from '../integracoes/regem/regem-pause.client';
 import { CreateProdutoDto } from './dto/create-produto.dto';
@@ -210,20 +211,6 @@ export class ProdutoService {
       throw new BadRequestException('categoriaId inexistente neste tenant.');
     }
   }
-}
-
-/** Extrai o código PDV do Regem do de-para (Json) do produto, ou null. */
-function codigoPdvRegem(externalRefs: Prisma.JsonValue): string | null {
-  if (!Array.isArray(externalRefs)) return null;
-  for (const r of externalRefs) {
-    if (r && typeof r === 'object' && !Array.isArray(r)) {
-      const ref = r as Record<string, unknown>;
-      if (ref.sistema === 'regem' && typeof ref.codigo_pdv === 'string') {
-        return ref.codigo_pdv;
-      }
-    }
-  }
-  return null;
 }
 
 /**

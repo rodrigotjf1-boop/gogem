@@ -64,4 +64,64 @@ void main() {
     expect(cpfValido('123'), isFalse);
     expect(formatCpf('52998224725'), '529.982.247-25');
   });
+
+  // ERR-011 — opção sem código PDV sumia do pedido: o "sem cebola" nunca chegava à cozinha.
+  test('opção GRÁTIS sem código vai na observação da linha, com o nome da etapa', () {
+    final p = Produto.fromJson({
+      'id': 'p1',
+      'categoriaId': 'c1',
+      'nome': 'X-Burger',
+      'precoCentavos': 2990,
+      'disponivel': true,
+      'externalRefs': [
+        {'sistema': 'regem', 'codigo_pdv': 'P1'}
+      ],
+      'grupos': [
+        {
+          'id': 'g-ret',
+          'nome': 'Retirar',
+          'min': 0,
+          'max': 3,
+          'opcoes': [
+            {'id': 'o1', 'nome': 'cebola', 'precoCentavosDelta': 0, 'externalRefs': []},
+            {'id': 'o2', 'nome': 'tomate', 'precoCentavosDelta': 0, 'externalRefs': []},
+          ],
+        },
+        {
+          'id': 'g-add',
+          'nome': 'Adicionais',
+          'min': 0,
+          'max': 3,
+          'opcoes': [
+            {
+              'id': 'o3',
+              'nome': 'Bacon',
+              'precoCentavosDelta': 400,
+              'externalRefs': [
+                {'sistema': 'regem', 'codigo_pdv': 'BAC'}
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    final item = ItemCarrinho(
+      produto: p,
+      selecoes: {
+        'g-ret': p.grupos[0].opcoes,
+        'g-add': p.grupos[1].opcoes,
+      },
+      observacao: 'bem passado',
+    );
+    final corpo = PedidoLocal(itens: [item], forma: FormaPagamento.pix).toJson();
+    final itens = corpo['itens'] as List;
+    expect(itens[0], {
+      'codigoPdv': 'P1',
+      'quantidade': 1,
+      'observacao': 'bem passado · Retirar: cebola, tomate',
+    });
+    // A opção COM código continua sendo linha vendável.
+    expect(itens[1], {'codigoPdv': 'BAC', 'quantidade': 1});
+    expect(itens, hasLength(2));
+  });
 }

@@ -21,6 +21,15 @@ export interface ImportResumo {
   opcoes: { criados: number; atualizados: number };
 }
 
+/**
+ * O que ficou FORA da versão (loja integrada ao Regem): sem código PDV não há como a venda
+ * chegar ao Regem. Opção grátis sem código fica (vai como observação do item).
+ */
+export interface PublicarAvisos {
+  produtosSemCodigo: Array<{ id: string; nome: string }>;
+  opcoesPagasSemCodigo: Array<{ id: string; nome: string }>;
+}
+
 /** Resultado de publicar (`POST /catalogo/publicar`). */
 export interface PublicarResultado {
   versao: number;
@@ -31,6 +40,8 @@ export interface PublicarResultado {
     grupos: number;
     opcoes: number;
   };
+  /** Ausente em API antiga. */
+  avisos?: PublicarAvisos;
 }
 
 /** Metadados de uma versão publicada (`GET /catalogo/versoes`). */

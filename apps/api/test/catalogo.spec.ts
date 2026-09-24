@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogoPublicacaoService } from '../src/catalogo/catalogo-publicacao.service';
 import type { CardapioService } from '../src/cardapio/cardapio.service';
 import type { AparenciaService } from '../src/aparencia/aparencia.service';
+import type { RegemConfigResolver } from '../src/integracoes/regem/regem-config.resolver';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
-function makeService() {
+function makeService(opts: { integrado?: boolean } = {}) {
   const prisma = {
-    categoria: { findMany: vi.fn() },
-    produto: { findMany: vi.fn() },
+    categoria: { findMany: vi.fn().mockResolvedValue([]) },
+    produto: { findMany: vi.fn().mockResolvedValue([]) },
+    complementoOpcao: { findMany: vi.fn().mockResolvedValue([]) },
     produtoUpsell: { findMany: vi.fn().mockResolvedValue([]) },
     menuVersion: {
       aggregate: vi.fn(),
@@ -24,13 +26,28 @@ function makeService() {
   const aparencia = {
     obter: vi.fn().mockResolvedValue({ id: 'ap-1', corPrimaria: '#FFC24B' }),
   };
+  // Loja integrada ao Regem? (o resolver acha a configuração ou lança.)
+  const regem = {
+    resolve: opts.integrado
+      ? vi.fn().mockResolvedValue({ base: 'https://regem', token: 't' })
+      : vi
+          .fn()
+          .mockRejectedValue(new Error('Integração Regem não configurada')),
+  };
   const service = new CatalogoPublicacaoService(
     prisma as unknown as PrismaService,
     cardapios as unknown as CardapioService,
     aparencia as unknown as AparenciaService,
+    regem as unknown as RegemConfigResolver,
   );
-  return { service, prisma, cardapios, aparencia };
+  return { service, prisma, cardapios, aparencia, regem };
 }
+
+const SEM_PAUSA = {
+  produtosIndisponiveis: [],
+  categoriasPausadas: [],
+  opcoesIndisponiveis: [],
+};
 
 /** Rascunho de exemplo: 2 categorias, 1 produto com 1 grupo de 2 opções. */
 function seedDraft(prisma: ReturnType<typeof makeService>['prisma']) {
@@ -305,6 +322,7 @@ describe('CatalogoPublicacaoService — publicado / versoes', () => {
       snapshot: { geradoEm: 'x', categorias: [], produtos: [] },
       atualizado: true,
       aparencia: { id: 'ap-1', corPrimaria: '#FFC24B' },
+      disponibilidade: SEM_PAUSA,
     });
     expect(prisma.menuVersion.findFirst).toHaveBeenCalledWith({
       orderBy: { versao: 'desc' },
@@ -324,6 +342,7 @@ describe('CatalogoPublicacaoService — publicado / versoes', () => {
       versao: 7,
       atualizado: false,
       aparencia: { id: 'ap-1', corPrimaria: '#FFC24B' },
+      disponibilidade: SEM_PAUSA,
     });
     expect('snapshot' in res).toBe(false);
   });
@@ -370,5 +389,184 @@ describe('CatalogoPublicacaoService — publicado / versoes', () => {
     // O select não pede snapshot.
     const select = prisma.menuVersion.findMany.mock.calls[0][0].select;
     expect('snapshot' in select).toBe(false);
+  });
+});
+
+/** Produto com um grupo de opções configurável (para os casos de código PDV e limite). */
+function produtoCom(
+  id: string,
+  refs: unknown[],
+  grupo: {
+    max: number | null;
+    opcoes: Array<{ id: string; preco: number; refs: unknown[] }>;
+  },
+) {
+  return {
+    id,
+    nome: `Produto ${id}`,
+    descricao: null,
+    precoCentavos: 1000,
+    disponivel: true,
+    imagemUrl: null,
+    selo: null,
+    categoriaId: 'c-1',
+    externalRefs: refs,
+    complementos: [
+      {
+        ordem: 0,
+        grupo: {
+          id: `g-${id}`,
+          nome: 'Adicionais',
+          min: 0,
+          max: grupo.max,
+          obrigatorio: false,
+          opcoes: grupo.opcoes.map((o, i) => ({
+            id: o.id,
+            nome: `Opção ${o.id}`,
+            precoCentavosDelta: o.preco,
+            disponivel: true,
+            imagemUrl: null,
+            ordem: i,
+            externalRefs: o.refs,
+          })),
+        },
+      },
+    ],
+  };
+}
+
+const COD = (c: string) => [{ sistema: 'regem', codigo_pdv: c }];
+
+// ERR-010/011 — na loja integrada, o que não tem código PDV não tem como ser vendido: o
+// produto era recusado DEPOIS do pagamento e a opção paga derrubava a venda no Regem.
+describe('CatalogoPublicacaoService — código PDV na loja integrada', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function publicarCom(integrado: boolean) {
+    const h = makeService({ integrado });
+    h.prisma.categoria.findMany.mockResolvedValue([
+      { id: 'c-1', nome: 'Lanches', ordem: 0 },
+    ]);
+    h.prisma.produto.findMany.mockResolvedValue([
+      produtoCom('p-ok', COD('P1'), {
+        max: 3,
+        opcoes: [
+          { id: 'o-cod', preco: 300, refs: COD('O1') },
+          { id: 'o-paga', preco: 500, refs: [] }, // paga sem código
+          { id: 'o-gratis', preco: 0, refs: [] }, // grátis sem código ("sem cebola")
+        ],
+      }),
+      produtoCom('p-sem', [], { max: 1, opcoes: [] }), // produto sem código
+      produtoCom('p-vazio', [{ sistema: 'regem', codigo_pdv: '  ' }], {
+        max: 1,
+        opcoes: [],
+      }), // código em branco
+    ]);
+    h.prisma.menuVersion.aggregate.mockResolvedValue({ _max: { versao: 1 } });
+    h.prisma.menuVersion.create.mockImplementation(({ data }) =>
+      Promise.resolve({ versao: data.versao, publishedAt: new Date() }),
+    );
+    return h;
+  }
+
+  it('integrada: produto e opção PAGA sem código ficam fora, com aviso; opção grátis fica', async () => {
+    const h = publicarCom(true);
+    const res = await h.service.publicar('u-1');
+
+    const snap = h.prisma.menuVersion.create.mock.calls[0][0].data.snapshot;
+    expect(snap.produtos.map((p: { id: string }) => p.id)).toEqual(['p-ok']);
+    const opcoes = snap.produtos[0].grupos[0].opcoes.map(
+      (o: { id: string }) => o.id,
+    );
+    expect(opcoes).toEqual(['o-cod', 'o-gratis']);
+    expect(res.avisos).toEqual({
+      produtosSemCodigo: [
+        { id: 'p-sem', nome: 'Produto p-sem' },
+        { id: 'p-vazio', nome: 'Produto p-vazio' },
+      ],
+      opcoesPagasSemCodigo: [{ id: 'o-paga', nome: 'Opção o-paga' }],
+    });
+    // Totais contam o que FOI publicado.
+    expect(res.totais).toMatchObject({ produtos: 1, grupos: 1, opcoes: 2 });
+  });
+
+  it('sem integração: nada fica de fora (a venda não vai ao Regem)', async () => {
+    const h = publicarCom(false);
+    const res = await h.service.publicar('u-1');
+
+    const snap = h.prisma.menuVersion.create.mock.calls[0][0].data.snapshot;
+    expect(snap.produtos).toHaveLength(3);
+    expect(snap.produtos[0].grupos[0].opcoes).toHaveLength(3);
+    expect(res.avisos).toEqual({
+      produtosSemCodigo: [],
+      opcoesPagasSemCodigo: [],
+    });
+  });
+});
+
+// ERR-025 — `max` nulo é "sem limite"; o totem lia nulo como 1 e o grupo virava escolha única.
+describe('CatalogoPublicacaoService — grupo sem limite', () => {
+  it('max nulo sai como o número de opções publicadas', async () => {
+    const { service, prisma } = makeService();
+    prisma.categoria.findMany.mockResolvedValue([
+      { id: 'c-1', nome: 'Lanches', ordem: 0 },
+    ]);
+    prisma.produto.findMany.mockResolvedValue([
+      produtoCom('p-1', COD('P1'), {
+        max: null,
+        opcoes: [
+          { id: 'a', preco: 0, refs: [] },
+          { id: 'b', preco: 0, refs: [] },
+          { id: 'c', preco: 0, refs: [] },
+        ],
+      }),
+      produtoCom('p-2', COD('P2'), { max: null, opcoes: [] }),
+    ]);
+    prisma.menuVersion.aggregate.mockResolvedValue({ _max: { versao: 1 } });
+    prisma.menuVersion.create.mockResolvedValue({
+      versao: 2,
+      publishedAt: new Date(),
+    });
+
+    await service.publicar('u-1');
+
+    const snap = prisma.menuVersion.create.mock.calls[0][0].data.snapshot;
+    expect(snap.produtos[0].grupos[0].max).toBe(3);
+    expect(snap.produtos[1].grupos[0].max).toBe(1); // nunca 0
+  });
+});
+
+// ERR-017 — pausar no painel não chegava ao totem sem publicar.
+describe('CatalogoPublicacaoService — disponibilidade ao vivo', () => {
+  it('toda resposta leva o que está pausado AGORA no cardápio ativo', async () => {
+    const { service, prisma } = makeService();
+    prisma.menuVersion.findFirst.mockResolvedValue({
+      versao: 7,
+      publishedAt: new Date(),
+      snapshot: {},
+    });
+    prisma.produto.findMany.mockResolvedValue([{ id: 'p-9' }]);
+    prisma.categoria.findMany.mockResolvedValue([{ id: 'c-3' }]);
+    prisma.complementoOpcao.findMany.mockResolvedValue([{ id: 'o-4' }]);
+
+    const semNovidade = await service.getPublicado(7);
+    expect(semNovidade.disponibilidade).toEqual({
+      produtosIndisponiveis: ['p-9'],
+      categoriasPausadas: ['c-3'],
+      opcoesIndisponiveis: ['o-4'],
+    });
+    // Só o cardápio ativo, e só o que está pausado.
+    expect(prisma.produto.findMany).toHaveBeenCalledWith({
+      where: { cardapioId: 'card-1', disponivel: false },
+      select: { id: true },
+    });
+    expect(prisma.categoria.findMany).toHaveBeenCalledWith({
+      where: { cardapioId: 'card-1', pausada: true },
+      select: { id: true },
+    });
+    // Nunca tenantId à mão: o middleware injeta.
+    expect(JSON.stringify(prisma.produto.findMany.mock.calls)).not.toContain(
+      'tenantId',
+    );
   });
 });
