@@ -102,3 +102,55 @@ describe('mensagemDoRegem', () => {
     expect(mensagemDoRegem('')).toBe('sem detalhe');
   });
 });
+
+describe('RegemSalesClient.cancelarVendaExterna (L-FIS-3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('200 → cancelada, com o que o Regem fez', async () => {
+    responde(200, {
+      ok: true,
+      notaCancelada: true,
+      cancelamentoPendente: false,
+    });
+    const r = await cliente().cancelarVendaExterna({
+      idempotencyKey: 'k1',
+      motivo: 'x',
+    });
+    expect(r).toEqual({
+      status: 'cancelada',
+      encontrada: true,
+      jaCancelada: false,
+      notaCancelada: true,
+      cancelamentoPendente: false,
+    });
+  });
+
+  it('404 → rota ausente (Regem de versão antiga), sem lançar', async () => {
+    responde(404, {
+      message: 'Cannot POST /api/v1/vendas/externa-pdv/cancelar',
+    });
+    const r = await cliente().cancelarVendaExterna({
+      idempotencyKey: 'k1',
+      motivo: 'x',
+    });
+    expect(r).toEqual({ status: 'rota_ausente' });
+  });
+
+  it('422 → recusa definitiva com o motivo', async () => {
+    responde(422, { message: 'Pedido já cobrado no caixa' });
+    const err = await cliente()
+      .cancelarVendaExterna({ idempotencyKey: 'k1', motivo: 'x' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(RegemRecusouError);
+  });
+
+  it('empresa sem integração → sem_integracao (nada a avisar)', async () => {
+    const resolver = {
+      resolve: vi.fn().mockRejectedValue(new Error('sem config')),
+    };
+    const r = await new RegemSalesClient(
+      resolver as unknown as RegemConfigResolver,
+    ).cancelarVendaExterna({ idempotencyKey: 'k1', motivo: 'x' });
+    expect(r).toEqual({ status: 'sem_integracao' });
+  });
+});

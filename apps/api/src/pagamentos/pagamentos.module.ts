@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { RegemModule } from '../integracoes/regem/regem.module';
 import { CancelamentoService } from './cancelamento.service';
 import { PagamentosController } from './pagamentos.controller';
 import { PagamentosService } from './pagamentos.service';
@@ -13,6 +14,8 @@ import { PspResolver } from './psp/psp-resolver';
  * e, na ausência de tudo, no sandbox (QR de teste que aprova sozinho).
  */
 @Module({
+  // RegemModule: o cancelamento pelo painel desfaz a venda no Regem antes de estornar.
+  imports: [RegemModule],
   controllers: [PagamentosController, PointController],
   providers: [
     PagamentosService,

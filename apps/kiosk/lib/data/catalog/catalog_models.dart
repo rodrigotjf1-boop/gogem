@@ -40,6 +40,7 @@ class OpcaoComplemento {
     required this.precoCentavosDelta,
     required this.imagemUrl,
     required this.externalRefs,
+    this.disponivel = true,
   });
   final String id;
   final String nome;
@@ -49,13 +50,26 @@ class OpcaoComplemento {
   final String? imagemUrl;
   final List<ExternalRef> externalRefs;
 
+  /// Opção pausada no painel ("acabou o bacon") não é oferecida. O app ignorava o campo e
+  /// seguia vendendo a opção indisponível (ERR-024).
+  final bool disponivel;
+
   factory OpcaoComplemento.fromJson(Map j) => OpcaoComplemento(
         id: _id(j['id']),
         nome: '${j['nome'] ?? ''}',
         precoCentavosDelta: _int(j['precoCentavosDelta']),
         imagemUrl: _urlOuNull(j['imagemUrl'] ?? j['imagem_url']),
         externalRefs: ExternalRef.listFrom(j['externalRefs']),
+        disponivel: _bool(j['disponivel']),
       );
+
+  OpcaoComplemento comDisponivel(bool d) => OpcaoComplemento(
+      id: id,
+      nome: nome,
+      precoCentavosDelta: precoCentavosDelta,
+      imagemUrl: imagemUrl,
+      externalRefs: externalRefs,
+      disponivel: d);
 }
 
 class GrupoComplemento {
@@ -74,17 +88,35 @@ class GrupoComplemento {
   final bool obrigatorio;
   final List<OpcaoComplemento> opcoes;
 
-  factory GrupoComplemento.fromJson(Map j) => GrupoComplemento(
-        id: _id(j['id']),
-        nome: '${j['nome'] ?? ''}',
-        min: _int(j['min']),
-        max: _int(j['max'], 1),
-        obrigatorio: _bool(j['obrigatorio'], false),
-        opcoes: [
-          for (final o in (j['opcoes'] as List? ?? const []).whereType<Map>())
-            OpcaoComplemento.fromJson(o)
-        ],
-      );
+  factory GrupoComplemento.fromJson(Map j) {
+    final opcoes = [
+      for (final o in (j['opcoes'] as List? ?? const []).whereType<Map>())
+        OpcaoComplemento.fromJson(o)
+    ];
+    return GrupoComplemento(
+      id: _id(j['id']),
+      nome: '${j['nome'] ?? ''}',
+      min: _int(j['min']),
+      // `max` nulo = SEM LIMITE (é assim que o painel grava). Lido como 1, o grupo
+      // "escolha quantos quiser" virava escolha única no totem (ERR-025).
+      max: j['max'] == null
+          ? (opcoes.isEmpty ? 1 : opcoes.length)
+          : _int(j['max'], 1),
+      obrigatorio: _bool(j['obrigatorio'], false),
+      opcoes: opcoes,
+    );
+  }
+
+  GrupoComplemento comOpcoes(List<OpcaoComplemento> novas) => GrupoComplemento(
+      id: id,
+      nome: nome,
+      min: min,
+      max: max,
+      obrigatorio: obrigatorio,
+      opcoes: novas);
+
+  /// Mínimo efetivo: `obrigatorio` com `min = 0` conta como 1.
+  int get minimo => obrigatorio && min == 0 ? 1 : min;
 }
 
 class Produto {
@@ -120,6 +152,20 @@ class Produto {
   final List<String> upsell;
 
   String? get codigoPdvRegem => ExternalRef.codigoRegem(externalRefs);
+
+  Produto copyWith({bool? disponivel, List<GrupoComplemento>? grupos}) => Produto(
+        id: id,
+        categoriaId: categoriaId,
+        nome: nome,
+        descricao: descricao,
+        precoCentavos: precoCentavos,
+        disponivel: disponivel ?? this.disponivel,
+        imagemUrl: imagemUrl,
+        externalRefs: externalRefs,
+        grupos: grupos ?? this.grupos,
+        selo: selo,
+        upsell: upsell,
+      );
 
   factory Produto.fromJson(Map j) => Produto(
         id: _id(j['id']),
@@ -182,6 +228,30 @@ class Categoria {
       );
 }
 
+/// O que está pausado AGORA no painel (vem em toda resposta do sync da nuvem, por cima do
+/// retrato publicado — ERR-017). Ausente (servidor da loja, API antiga) = vale o retrato.
+class Disponibilidade {
+  const Disponibilidade({
+    this.produtosIndisponiveis = const {},
+    this.categoriasPausadas = const {},
+    this.opcoesIndisponiveis = const {},
+  });
+  final Set<String> produtosIndisponiveis;
+  final Set<String> categoriasPausadas;
+  final Set<String> opcoesIndisponiveis;
+
+  static Disponibilidade? fromJson(Object? j) {
+    if (j is! Map) return null;
+    Set<String> ids(Object? v) =>
+        {for (final x in (v is List ? v : const [])) '$x'};
+    return Disponibilidade(
+      produtosIndisponiveis: ids(j['produtosIndisponiveis']),
+      categoriasPausadas: ids(j['categoriasPausadas']),
+      opcoesIndisponiveis: ids(j['opcoesIndisponiveis']),
+    );
+  }
+}
+
 class MenuSnapshot {
   const MenuSnapshot({required this.versao, required this.categorias, required this.produtos});
   final int versao;
@@ -192,6 +262,42 @@ class MenuSnapshot {
         for (final p in produtos)
           if (p.categoriaId == categoriaId && p.disponivel) p
       ];
+
+  /// O cardápio que o cliente VÊ: o retrato publicado com a disponibilidade aplicada.
+  ///
+  /// - com [d] (nuvem): a disponibilidade AO VIVO manda — pausar e despausar no painel chega
+  ///   sem publicar; categoria pausada sai com os produtos dela;
+  /// - sem [d]: vale o `disponivel` do próprio retrato;
+  /// - opção indisponível sai da lista (ERR-024); e produto cuja etapa obrigatória ficou sem
+  ///   opções suficientes sai da venda — o cliente não conseguiria concluí-lo.
+  MenuSnapshot aplicarDisponibilidade(Disponibilidade? d) {
+    final pausadas = d?.categoriasPausadas ?? const <String>{};
+    final produtosVisiveis = <Produto>[];
+    for (final p in produtos) {
+      if (pausadas.contains(p.categoriaId)) continue;
+      var disponivel =
+          d == null ? p.disponivel : !d.produtosIndisponiveis.contains(p.id);
+      final grupos = <GrupoComplemento>[];
+      for (final g in p.grupos) {
+        final opcoes = [
+          for (final o in g.opcoes)
+            if (d == null ? o.disponivel : !d.opcoesIndisponiveis.contains(o.id))
+              o.comDisponivel(true)
+        ];
+        if (opcoes.length < g.minimo) disponivel = false;
+        grupos.add(g.comOpcoes(opcoes));
+      }
+      produtosVisiveis.add(p.copyWith(disponivel: disponivel, grupos: grupos));
+    }
+    return MenuSnapshot(
+      versao: versao,
+      categorias: [
+        for (final c in categorias)
+          if (!pausadas.contains(c.id)) c
+      ],
+      produtos: produtosVisiveis,
+    );
+  }
 
   /// Produto por id (ou `null`) — usado para resolver upsell (F2).
   Produto? porId(String id) {

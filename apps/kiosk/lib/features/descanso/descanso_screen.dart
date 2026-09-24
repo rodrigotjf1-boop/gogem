@@ -66,9 +66,12 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
 
   @override
   Widget build(BuildContext context) {
-    final caps = ref.watch(hardwareCapsProvider);
     final saude = ref.watch(printerHealthProvider);
     final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
+    // "Animações" do painel: `off` desliga (anima=false); `reduzido` tira as partículas e
+    // encurta o movimento, como o perfil de hardware fraco.
+    final capsHw = ref.watch(hardwareCapsProvider);
+    final caps = ap.animacaoReduzida ? capsHw.reduzidas : capsHw;
     final t = Theme.of(context).textTheme;
     final anima = !ap.semAnimacao;
     // PORTÃO 1 — descanso: sem papel/tampa/offline => totem fora de operação.
@@ -95,6 +98,7 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
                 chamada: ap.chamada,
                 precoIsca: ap.precoIsca,
                 anima: anima,
+                particulas: caps.enableParticles,
               ),
             )
           else ...[

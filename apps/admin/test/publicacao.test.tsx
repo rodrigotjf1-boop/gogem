@@ -185,3 +185,59 @@ describe('Publicar', () => {
     });
   });
 });
+
+// ERR-010/011 — o que fica fora do totem por falta de código PDV é DITO na publicação.
+describe('Publicar — itens sem código PDV', () => {
+  it('mostra os produtos e opções pagas que ficaram fora', async () => {
+    server.use(
+      http.get(`${API}/catalogo/versoes`, () => HttpResponse.json([])),
+      http.post(`${API}/catalogo/publicar`, () =>
+        HttpResponse.json({
+          versao: 2,
+          publishedAt: '2026-09-24T10:00:00.000Z',
+          totais: { categorias: 1, produtos: 1, grupos: 0, opcoes: 0 },
+          avisos: {
+            produtosSemCodigo: [{ id: 'p9', nome: 'Combo Novo' }],
+            opcoesPagasSemCodigo: [{ id: 'o9', nome: 'Bacon extra' }],
+          },
+        }),
+      ),
+    );
+    montar('/publicar', 'gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Publicar nova versão' }),
+    );
+
+    const aviso = await screen.findByRole('status', {
+      name: 'Itens fora do totem',
+    });
+    expect(aviso).toHaveTextContent('Combo Novo');
+    expect(aviso).toHaveTextContent('Bacon extra');
+  });
+
+  it('sem avisos, nada de alerta', async () => {
+    server.use(
+      http.get(`${API}/catalogo/versoes`, () => HttpResponse.json([])),
+      http.post(`${API}/catalogo/publicar`, () =>
+        HttpResponse.json({
+          versao: 3,
+          publishedAt: '2026-09-24T10:00:00.000Z',
+          totais: { categorias: 1, produtos: 2, grupos: 0, opcoes: 0 },
+          avisos: { produtosSemCodigo: [], opcoesPagasSemCodigo: [] },
+        }),
+      ),
+    );
+    montar('/publicar', 'gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Publicar nova versão' }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('v3'),
+    );
+    expect(
+      screen.queryByRole('status', { name: 'Itens fora do totem' }),
+    ).not.toBeInTheDocument();
+  });
+});

@@ -56,14 +56,18 @@ export interface CategoriaInput {
   pausada?: boolean;
 }
 
+/**
+ * Campo opcional: `null` APAGA; `undefined` (ausente) mantém o que está no servidor — o
+ * `JSON.stringify` descarta `undefined`, e a API entende "não mexer" (ERR-013).
+ */
 export interface ProdutoInput {
   nome: string;
-  descricao?: string;
+  descricao?: string | null;
   precoCentavos: number;
   disponivel?: boolean;
   imagemUrl?: string | null;
-  selo?: string;
-  categoriaId?: string;
+  selo?: string | null;
+  categoriaId?: string | null;
   cardapioId?: string;
   externalRefs?: ExternalRef[];
 }
@@ -249,7 +253,8 @@ export interface Grupo {
 export interface GrupoInput {
   nome: string;
   min?: number;
-  max?: number;
+  /** `null` = sem limite (apaga o máximo que havia). */
+  max?: number | null;
   obrigatorio?: boolean;
   ordem?: number;
 }

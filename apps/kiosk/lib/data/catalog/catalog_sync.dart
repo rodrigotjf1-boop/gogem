@@ -21,18 +21,29 @@ class SyncState {
     this.versao,
     this.ultimaSync,
     this.mensagem,
+    this.disponibilidade = 0,
   });
   final SyncStatus status;
   final int? versao;
   final DateTime? ultimaSync;
   final String? mensagem;
 
-  SyncState copyWith({SyncStatus? status, int? versao, DateTime? ultimaSync, String? mensagem}) =>
+  /// Sobe a cada mudança da disponibilidade ao vivo: o cardápio da tela recarrega na
+  /// pausa/despausa, sem esperar versão nova (e sem recarregar a cada sync à toa).
+  final int disponibilidade;
+
+  SyncState copyWith(
+          {SyncStatus? status,
+          int? versao,
+          DateTime? ultimaSync,
+          String? mensagem,
+          int? disponibilidade}) =>
       SyncState(
         status: status ?? this.status,
         versao: versao ?? this.versao,
         ultimaSync: ultimaSync ?? this.ultimaSync,
         mensagem: mensagem,
+        disponibilidade: disponibilidade ?? this.disponibilidade,
       );
 }
 
@@ -63,11 +74,16 @@ final gogemApiProvider = Provider<GogemApi>((ref) {
   );
 });
 
-/// Cardápio corrente (recarrega quando a versão do sync muda).
+/// Cardápio corrente — o retrato publicado com a disponibilidade aplicada (pausas ao vivo,
+/// opções indisponíveis). Recarrega quando a versão OU a disponibilidade mudam.
 final menuProvider = FutureProvider<MenuSnapshot?>((ref) async {
   ref.watch(catalogSyncProvider.select((s) => s.versao)); // dependência de recarga
+  ref.watch(catalogSyncProvider.select((s) => s.disponibilidade));
   final repo = await ref.watch(catalogRepositoryProvider.future);
-  return repo.carregarCorrente();
+  final snap = await repo.carregarCorrente();
+  if (snap == null) return null;
+  return snap.aplicarDisponibilidade(
+      Disponibilidade.fromJson(await repo.carregarDisponibilidade()));
 });
 
 /// Aparência do totem (por loja). Recarrega a cada sync (a aparência é LIVE,
@@ -127,27 +143,38 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       final api = ref.read(gogemApiProvider);
       final res = await api.getCatalogoPublicado(desde: atual);
       switch (res) {
-        case MenuJaAtualizado(:final aparenciaJson, :final fiscalJson):
-          // Aparência e fiscal são LIVE: persistem mesmo sem catálogo novo.
+        case MenuJaAtualizado(
+            :final aparenciaJson,
+            :final fiscalJson,
+            :final disponibilidadeJson
+          ):
+          // Aparência, fiscal e disponibilidade são LIVE: persistem mesmo sem catálogo novo.
           await repo.salvarAparencia(aparenciaJson);
           await repo.salvarFiscal(fiscalJson);
+          final mudou = await repo.salvarDisponibilidade(disponibilidadeJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
-              status: SyncStatus.atualizado, versao: atual, ultimaSync: DateTime.now());
+              status: SyncStatus.atualizado,
+              versao: atual,
+              ultimaSync: DateTime.now(),
+              disponibilidade: mudou ? state.disponibilidade + 1 : null);
         case MenuAtualizado(
             :final body,
             :final snapshot,
             :final aparenciaJson,
-            :final fiscalJson
+            :final fiscalJson,
+            :final disponibilidadeJson
           ):
           await repo.salvarSnapshot(body);
           await repo.salvarAparencia(aparenciaJson);
           await repo.salvarFiscal(fiscalJson);
+          final mudou = await repo.salvarDisponibilidade(disponibilidadeJson);
           _falhasSeguidas = 0;
           state = state.copyWith(
               status: SyncStatus.atualizado,
               versao: snapshot.versao,
-              ultimaSync: DateTime.now());
+              ultimaSync: DateTime.now(),
+              disponibilidade: mudou ? state.disponibilidade + 1 : null);
       }
     } on GogemApiException catch (e) {
       _falhasSeguidas++;

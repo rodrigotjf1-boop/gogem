@@ -6,17 +6,21 @@ import '../catalog/catalog_models.dart';
 sealed class PublicadoResult {}
 
 class MenuJaAtualizado extends PublicadoResult {
-  MenuJaAtualizado(this.aparenciaJson, {this.fiscalJson});
+  MenuJaAtualizado(this.aparenciaJson, {this.fiscalJson, this.disponibilidadeJson});
 
   /// Aparência (por loja) — vem LIVE em toda resposta, mesmo sem catálogo novo.
   final Object? aparenciaJson;
 
   /// Fiscal da loja (servidor local) — também LIVE: ligar a NFC-e não muda o cardápio.
   final Object? fiscalJson;
+
+  /// O que está pausado AGORA no painel (nuvem) — LIVE, por cima do retrato publicado.
+  final Object? disponibilidadeJson;
 }
 
 class MenuAtualizado extends PublicadoResult {
-  MenuAtualizado(this.body, this.snapshot, this.aparenciaJson, {this.fiscalJson});
+  MenuAtualizado(this.body, this.snapshot, this.aparenciaJson,
+      {this.fiscalJson, this.disponibilidadeJson});
 
   /// Corpo bruto (persistido como fonte da verdade local).
   final Map<String, dynamic> body;
@@ -27,6 +31,9 @@ class MenuAtualizado extends PublicadoResult {
 
   /// Fiscal da loja (servidor local).
   final Object? fiscalJson;
+
+  /// Disponibilidade ao vivo (nuvem).
+  final Object? disponibilidadeJson;
 }
 
 class GogemApiException implements Exception {
@@ -144,12 +151,14 @@ class GogemApi {
     final body = jsonDecode(utf8.decode(res.bodyBytes));
     final aparencia = body is Map ? body['aparencia'] : null;
     final fiscal = body is Map ? body['fiscal'] : null;
+    final disponibilidade = body is Map ? body['disponibilidade'] : null;
     if (body is Map && body['atualizado'] == false) {
-      return MenuJaAtualizado(aparencia, fiscalJson: fiscal);
+      return MenuJaAtualizado(aparencia,
+          fiscalJson: fiscal, disponibilidadeJson: disponibilidade);
     }
     if (body is Map<String, dynamic>) {
       return MenuAtualizado(body, MenuSnapshot.fromPublicadoJson(body), aparencia,
-          fiscalJson: fiscal);
+          fiscalJson: fiscal, disponibilidadeJson: disponibilidade);
     }
     throw GogemApiException(200, 'corpo inesperado');
   }

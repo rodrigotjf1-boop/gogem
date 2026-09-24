@@ -302,7 +302,8 @@ function GrupoForm({
     const input: GrupoInput = {
       nome: nome.trim(),
       min: Number(min) || 0,
-      max: max.trim() === '' ? undefined : Number(max),
+      // Vazio = sem limite: `null` apaga o máximo que havia (ERR-013).
+      max: max.trim() === '' ? null : Number(max),
       obrigatorio,
     };
     if (input.max != null && input.max < (input.min ?? 0)) {

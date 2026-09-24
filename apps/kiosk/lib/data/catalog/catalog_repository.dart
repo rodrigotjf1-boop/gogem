@@ -48,6 +48,42 @@ class CatalogRepository {
     return jsonDecode(r.first['valor'] as String);
   }
 
+  /// Disponibilidade ao vivo (o que está pausado no painel) — LIVE como a aparência.
+  /// Diferente dela, a AUSÊNCIA também vale: resposta sem o campo (servidor da loja, API
+  /// antiga) apaga a guardada — senão uma pausa antiga da nuvem ficaria para sempre.
+  /// Devolve `true` quando mudou (o cardápio da tela precisa recarregar).
+  Future<bool> salvarDisponibilidade(Object? disponibilidade) async {
+    final novo = _canonica(disponibilidade);
+    final r = await _db
+        .query('kv', where: 'chave = ?', whereArgs: ['disponibilidade']);
+    final atual = r.isEmpty ? null : r.first['valor'] as String?;
+    if (atual == novo) return false;
+    if (novo == null) {
+      await _db.delete('kv', where: 'chave = ?', whereArgs: ['disponibilidade']);
+    } else {
+      await _db.insert('kv', {'chave': 'disponibilidade', 'valor': novo},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    return true;
+  }
+
+  /// JSON com as listas ORDENADAS: a API não garante a ordem, e comparar o texto cru
+  /// recarregaria o cardápio da tela a cada sync sem nada ter mudado.
+  static String? _canonica(Object? d) {
+    if (d is! Map) return null;
+    return jsonEncode({
+      for (final k in (d.keys.map((k) => '$k').toList()..sort()))
+        k: d[k] is List ? ([for (final x in d[k] as List) '$x']..sort()) : d[k],
+    });
+  }
+
+  Future<Object?> carregarDisponibilidade() async {
+    final r = await _db
+        .query('kv', where: 'chave = ?', whereArgs: ['disponibilidade']);
+    if (r.isEmpty) return null;
+    return jsonDecode(r.first['valor'] as String);
+  }
+
   Future<void> salvarSnapshot(Map<String, dynamic> corpo) async {
     final versao = (corpo['versao'] as num).toInt();
     await _db.transaction((tx) async {

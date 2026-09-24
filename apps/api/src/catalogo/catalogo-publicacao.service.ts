@@ -3,6 +3,8 @@ import { Prisma, type Aparencia } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardapioService } from '../cardapio/cardapio.service';
 import { AparenciaService } from '../aparencia/aparencia.service';
+import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
+import { codigoPdvRegem } from '../common/codigo-pdv';
 
 /** Totais do catálogo publicado (retornados no publicar). */
 export interface PublicarTotais {
@@ -10,6 +12,32 @@ export interface PublicarTotais {
   produtos: number;
   grupos: number;
   opcoes: number;
+}
+
+/**
+ * O que ficou FORA da versão publicada, e por quê. Só existe em loja integrada ao Regem: lá
+ * a venda chega ao Regem pelo código PDV, e o que não tem código não tem como ser vendido.
+ */
+export interface PublicarAvisos {
+  /** Produtos sem código PDV — não entram no totem até ganharem o código. */
+  produtosSemCodigo: Array<{ id: string; nome: string }>;
+  /**
+   * Opções PAGAS sem código PDV — saem do totem: o Regem recusaria a venda (o pagamento
+   * incluiria um valor que ele não conhece). Opção GRÁTIS sem código fica, e o totem a manda
+   * como observação do item ("sem cebola").
+   */
+  opcoesPagasSemCodigo: Array<{ id: string; nome: string }>;
+}
+
+/**
+ * Disponibilidade AO VIVO, por cima do retrato publicado: pausar um produto (ou categoria, ou
+ * opção) no painel chega ao totem no próximo sync, sem publicar — publicar levaria junto
+ * todo o rascunho que o gerente ainda não quis publicar.
+ */
+export interface DisponibilidadeAoVivo {
+  produtosIndisponiveis: string[];
+  categoriasPausadas: string[];
+  opcoesIndisponiveis: string[];
 }
 
 /** Metadados de uma versão (sem o corpo do snapshot). */
@@ -37,6 +65,7 @@ export class CatalogoPublicacaoService {
     private readonly prisma: PrismaService,
     private readonly cardapios: CardapioService,
     private readonly aparencia: AparenciaService,
+    private readonly regem: RegemConfigResolver,
   ) {}
 
   /**
@@ -45,10 +74,13 @@ export class CatalogoPublicacaoService {
    * ([tenantId, versao])` protege a integridade — em colisão (P2002) tentamos
    * mais uma vez com `versao + 1`.
    */
-  async publicar(
-    publishedById: string | null,
-  ): Promise<{ versao: number; publishedAt: Date; totais: PublicarTotais }> {
-    const { snapshot, totais } = await this.assembleSnapshot();
+  async publicar(publishedById: string | null): Promise<{
+    versao: number;
+    publishedAt: Date;
+    totais: PublicarTotais;
+    avisos: PublicarAvisos;
+  }> {
+    const { snapshot, totais, avisos } = await this.assembleSnapshot();
     let versao = await this.proximaVersao();
 
     // Uma retentativa em caso de corrida (P2002 na unique [tenantId, versao]).
@@ -66,6 +98,7 @@ export class CatalogoPublicacaoService {
           versao: created.versao,
           publishedAt: created.publishedAt,
           totais,
+          avisos,
         };
       } catch (err) {
         if (isUniqueViolation(err) && tentativa === 0) {
@@ -106,13 +139,19 @@ export class CatalogoPublicacaoService {
    * sync do totem é um follow-up — TODO trocar o guard quando existir.
    */
   async getPublicado(desde?: number): Promise<
-    | { versao: number; atualizado: false; aparencia: Aparencia }
+    | {
+        versao: number;
+        atualizado: false;
+        aparencia: Aparencia;
+        disponibilidade: DisponibilidadeAoVivo;
+      }
     | {
         versao: number;
         publishedAt: Date;
         snapshot: Prisma.JsonValue;
         atualizado: true;
         aparencia: Aparencia;
+        disponibilidade: DisponibilidadeAoVivo;
       }
   > {
     const latest = await this.prisma.menuVersion.findFirst({
@@ -123,11 +162,20 @@ export class CatalogoPublicacaoService {
         'Nenhuma versão do catálogo publicada ainda.',
       );
     }
-    // A aparência é LIVE (por loja): vai em toda resposta do sync — inclusive
-    // quando o catálogo não mudou — para o totem re-tematizar sem re-publicar.
-    const aparencia = await this.aparencia.obter();
+    // A aparência e a disponibilidade são LIVE: vão em toda resposta do sync —
+    // inclusive quando o catálogo não mudou — para o totem re-tematizar e tirar da
+    // venda o que foi pausado, sem re-publicar.
+    const [aparencia, disponibilidade] = await Promise.all([
+      this.aparencia.obter(),
+      this.disponibilidadeAoVivo(),
+    ]);
     if (desde !== undefined && desde >= latest.versao) {
-      return { versao: latest.versao, atualizado: false, aparencia };
+      return {
+        versao: latest.versao,
+        atualizado: false,
+        aparencia,
+        disponibilidade,
+      };
     }
     return {
       versao: latest.versao,
@@ -135,6 +183,36 @@ export class CatalogoPublicacaoService {
       snapshot: latest.snapshot,
       atualizado: true,
       aparencia,
+      disponibilidade,
+    };
+  }
+
+  /**
+   * O que está pausado AGORA no cardápio ativo (ERR-017). Só ids — o totem aplica por cima
+   * do retrato publicado: o que está aqui sai da venda; o que NÃO está volta (despausar
+   * também chega sem publicar). Categoria despausada só reaparece publicando (os produtos
+   * dela não estão no retrato).
+   */
+  private async disponibilidadeAoVivo(): Promise<DisponibilidadeAoVivo> {
+    const cardapioId = await this.cardapios.ativoId();
+    const [produtos, categorias, opcoes] = await Promise.all([
+      this.prisma.produto.findMany({
+        where: { cardapioId, disponivel: false },
+        select: { id: true },
+      }),
+      this.prisma.categoria.findMany({
+        where: { cardapioId, pausada: true },
+        select: { id: true },
+      }),
+      this.prisma.complementoOpcao.findMany({
+        where: { disponivel: false },
+        select: { id: true },
+      }),
+    ]);
+    return {
+      produtosIndisponiveis: produtos.map((p) => p.id),
+      categoriasPausadas: categorias.map((c) => c.id),
+      opcoesIndisponiveis: opcoes.map((o) => o.id),
     };
   }
 
@@ -155,6 +233,7 @@ export class CatalogoPublicacaoService {
   private async assembleSnapshot(): Promise<{
     snapshot: CatalogoSnapshot;
     totais: PublicarTotais;
+    avisos: PublicarAvisos;
   }> {
     // O totem recebe SEMPRE o cardápio ativo (Fase 3B).
     const cardapioId = await this.cardapios.ativoId();
@@ -205,9 +284,36 @@ export class CatalogoPublicacaoService {
       categorias.filter((c) => c.pausada).map((c) => c.id),
     );
     const categoriasAtivas = categorias.filter((c) => !c.pausada);
-    const produtosAtivos = produtos.filter(
-      (p) => !(p.categoriaId && pausadaIds.has(p.categoriaId)),
+
+    // Loja integrada ao Regem (a venda vai para lá pelo código PDV): o que não tem código
+    // não tem como ser vendido — o produto seria recusado DEPOIS do pagamento, e a opção
+    // paga derrubaria a venda inteira ("a soma dos pagamentos não bate"). Fica fora da
+    // versão, e o painel mostra o que ficou (ERR-010/011). Sem integração, nada muda.
+    const integrado = await this.regem.resolve().then(
+      () => true,
+      () => false,
     );
+    const produtosSemCodigo: PublicarAvisos['produtosSemCodigo'] = [];
+    const opcoesPagas = new Map<string, string>();
+    const produtosAtivos = produtos.filter((p) => {
+      if (p.categoriaId && pausadaIds.has(p.categoriaId)) return false;
+      if (integrado && !codigoPdvRegem(p.externalRefs)) {
+        produtosSemCodigo.push({ id: p.id, nome: p.nome });
+        return false;
+      }
+      return true;
+    });
+    const opcaoEntra = (o: {
+      id: string;
+      nome: string;
+      precoCentavosDelta: number;
+      externalRefs: Prisma.JsonValue;
+    }): boolean => {
+      if (!integrado || o.precoCentavosDelta <= 0) return true;
+      if (codigoPdvRegem(o.externalRefs)) return true;
+      opcoesPagas.set(o.id, o.nome);
+      return false;
+    };
 
     const snapshot: CatalogoSnapshot = {
       geradoEm: new Date().toISOString(),
@@ -231,33 +337,36 @@ export class CatalogoPublicacaoService {
         externalRefs: p.externalRefs,
         upsell: upsellPorProduto.get(p.id) ?? [],
         // Shape do totem inalterado: `grupos` (agora resolvidos do vínculo).
-        grupos: p.complementos.map((pc) => ({
-          id: pc.grupo.id,
-          nome: pc.grupo.nome,
-          min: pc.grupo.min,
-          max: pc.grupo.max,
-          obrigatorio: pc.grupo.obrigatorio,
-          ordem: pc.ordem,
-          opcoes: pc.grupo.opcoes.map((o) => ({
-            id: o.id,
-            nome: o.nome,
-            precoCentavosDelta: o.precoCentavosDelta,
-            disponivel: o.disponivel,
-            imagemUrl: o.imagemUrl,
-            ordem: o.ordem,
-            externalRefs: o.externalRefs,
-          })),
-        })),
+        grupos: p.complementos.map((pc) => {
+          const opcoes = pc.grupo.opcoes.filter(opcaoEntra);
+          return {
+            id: pc.grupo.id,
+            nome: pc.grupo.nome,
+            min: pc.grupo.min,
+            // `max` nulo = SEM LIMITE. O totem espera um número e lia o nulo como 1 — o
+            // grupo "escolha quantos quiser" virava escolha única (ERR-025). O teto é o
+            // número de opções, como o Regem já faz no servidor da loja.
+            max: pc.grupo.max ?? Math.max(opcoes.length, 1),
+            obrigatorio: pc.grupo.obrigatorio,
+            ordem: pc.ordem,
+            opcoes: opcoes.map((o) => ({
+              id: o.id,
+              nome: o.nome,
+              precoCentavosDelta: o.precoCentavosDelta,
+              disponivel: o.disponivel,
+              imagemUrl: o.imagemUrl,
+              ordem: o.ordem,
+              externalRefs: o.externalRefs,
+            })),
+          };
+        }),
       })),
     };
 
-    const grupos = produtosAtivos.reduce(
-      (n, p) => n + p.complementos.length,
-      0,
-    );
-    const opcoes = produtosAtivos.reduce(
-      (n, p) =>
-        n + p.complementos.reduce((m, pc) => m + pc.grupo.opcoes.length, 0),
+    // Totais do que FOI publicado (não do rascunho).
+    const grupos = snapshot.produtos.reduce((n, p) => n + p.grupos.length, 0);
+    const opcoes = snapshot.produtos.reduce(
+      (n, p) => n + p.grupos.reduce((m, g) => m + g.opcoes.length, 0),
       0,
     );
 
@@ -268,6 +377,13 @@ export class CatalogoPublicacaoService {
         produtos: produtosAtivos.length,
         grupos,
         opcoes,
+      },
+      avisos: {
+        produtosSemCodigo,
+        opcoesPagasSemCodigo: [...opcoesPagas].map(([id, nome]) => ({
+          id,
+          nome,
+        })),
       },
     };
   }
@@ -309,7 +425,8 @@ interface CatalogoSnapshot {
       id: string;
       nome: string;
       min: number;
-      max: number | null;
+      /** Sempre um número: "sem limite" sai como o total de opções. */
+      max: number;
       obrigatorio: boolean;
       ordem: number;
       opcoes: Array<{

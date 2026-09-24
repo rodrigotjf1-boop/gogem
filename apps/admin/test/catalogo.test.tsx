@@ -251,3 +251,75 @@ describe('Catálogo — criar categoria', () => {
     expect(await screen.findByText('Bebidas')).toBeInTheDocument();
   });
 });
+
+// ERR-013 — apagar um campo e salvar mantinha o valor antigo: o vazio ia como `undefined`,
+// sumia do JSON, e a API entendia "não mexer".
+describe('Catálogo — apagar campo na edição', () => {
+  it('produto: descrição, selo e categoria apagados vão como null', async () => {
+    let enviado: Record<string, unknown> | null = null;
+    server.use(
+      http.get(`${API}/categorias`, () => HttpResponse.json([CATEGORIA])),
+      http.get(`${API}/produtos`, () =>
+        HttpResponse.json([{ ...PRODUTO, selo: 'Novo' }]),
+      ),
+      http.patch(`${API}/produtos/p1`, async ({ request }) => {
+        enviado = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...PRODUTO, ...enviado });
+      }),
+    );
+    montarLogado('gerente');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar X-Salada' }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Descrição'), {
+      target: { value: '' },
+    });
+    fireEvent.change(within(dialog).getByLabelText(/Selo de destaque/), {
+      target: { value: '' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Categoria'), {
+      target: { value: '' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(enviado).not.toBeNull());
+    expect(enviado).toMatchObject({
+      descricao: null,
+      selo: null,
+      categoriaId: null,
+    });
+  });
+
+  it('etapa: apagar o máximo manda null (volta a "sem limite")', async () => {
+    let enviado: Record<string, unknown> | null = null;
+    server.use(
+      http.get(`${API}/categorias`, () => HttpResponse.json([CATEGORIA])),
+      http.get(`${API}/produtos`, () => HttpResponse.json([PRODUTO])),
+      http.get(`${API}/produtos/p1/grupos`, () =>
+        HttpResponse.json([{ ...GRUPO, min: 0, max: 2, obrigatorio: false }]),
+      ),
+      http.patch(`${API}/grupos/g1`, async ({ request }) => {
+        enviado = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...GRUPO, ...enviado });
+      }),
+    );
+    montarLogado('gerente');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Complementos de X-Salada' }),
+    );
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(
+      await within(dialog).findByRole('button', {
+        name: 'Editar etapa Escolha a bebida',
+      }),
+    );
+    fireEvent.change(within(dialog).getByLabelText('Máximo'), {
+      target: { value: '' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Salvar etapa' }));
+
+    await waitFor(() => expect(enviado).not.toBeNull());
+    expect(enviado).toHaveProperty('max', null);
+  });
+});

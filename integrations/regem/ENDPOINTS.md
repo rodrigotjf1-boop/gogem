@@ -271,8 +271,13 @@ No totem **a compra só termina com o cupom fiscal na mão do cliente**. A venda
 
 ### LACUNAS fiscais
 - **L-FIS-3:** no modo nuvem não existe rota (X-Sync-Token) para o GoGeM desfazer uma venda
-  externa já lançada — cancelar pelo painel do GoGeM estorna o pagamento mas não avisa o Regem,
-  e o DANFE que não imprimiu não tem como cancelar a nota. *(pedido ao Regem por prompt)*
+  externa já lançada. *(pedido ao Regem por prompt, 24/09/2026)* Contrato proposto, que o GoGeM
+  **já chama** no cancelamento pelo painel: `POST /vendas/externa-pdv/cancelar
+  {idempotencyKey, motivo}` → 200 `{ok, encontrada, jaCancelada, notaCancelada,
+  cancelamentoPendente}`; venda desconhecida → 200 com `encontrada:false` (nunca 404 — no GoGeM
+  o 404 quer dizer "Regem sem a rota": ele cancela o lado dele e manda o operador cancelar no
+  Regem); recusa (nota fora do prazo, pedido já cobrado no caixa) → 422 com o motivo, e aí o
+  GoGeM NÃO estorna.
 - **L-FIS-1:** transmissão real SEFAZ (`SefazDireto`) — cert A1, assinatura, SOAP, por UF. *(G — fora do escopo do piloto se o totem operar em "modo sem fiscal" ou "fiscal no integrado/Regem")*
 - **L-FIS-2:** para o GoGeM emitir a partir de venda externa, `emitirSeAtivo` já cobre (dispara no `venderExterno`); falta só o CPF na nota (ligado à L-VEN-CPF).
 

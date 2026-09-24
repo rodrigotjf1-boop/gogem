@@ -142,3 +142,58 @@ describe('Relatórios', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+// ERR-016 — cancelar pelo painel agora passa pelo Regem; a tela diz o que aconteceu lá.
+describe('Relatórios — cancelamento e o Regem', () => {
+  it('Regem sem a rota: cancela, estorna e AVISA para cancelar no Regem', async () => {
+    baseHandlers();
+    server.use(
+      http.post(`${API}/relatorios/pedidos/:id/cancelar`, ({ params }) =>
+        HttpResponse.json({
+          status: 'cancelado',
+          pedidoId: String(params.id),
+          estorno: { feito: true, meio: 'credito', valorCentavos: 3000, mensagem: '' },
+          regem: {
+            avisado: false,
+            mensagem:
+              'O Regem desta loja ainda não recebe o cancelamento pelo GoGeM: cancele a venda também no Regem.',
+          },
+        }),
+      ),
+    );
+    montar('gerente');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Cancelar pedido/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar cancelamento' }));
+
+    expect(await within(dialog).findByTestId('aviso-regem')).toHaveTextContent(
+      'cancele a venda também no Regem',
+    );
+  });
+
+  it('Regem RECUSA: mostra o motivo real (e não um erro genérico)', async () => {
+    baseHandlers();
+    server.use(
+      http.post(`${API}/relatorios/pedidos/:id/cancelar`, () =>
+        HttpResponse.json(
+          {
+            statusCode: 422,
+            message:
+              'O Regem não cancelou a venda: Pedido já cobrado no caixa. Nada foi estornado — resolva no Regem.',
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    montar('gerente');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Cancelar pedido/ }));
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar cancelamento' }));
+
+    expect(
+      await within(dialog).findByText(/Pedido já cobrado no caixa/),
+    ).toBeInTheDocument();
+  });
+});

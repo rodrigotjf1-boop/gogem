@@ -13,7 +13,7 @@ function makeService() {
     dispositivo: { findMany: vi.fn() },
     produto: { findMany: vi.fn() },
   };
-  const cancelamento = { cancelarPorId: vi.fn() };
+  const cancelamento = { cancelarPeloPainel: vi.fn() };
   const service = new RelatorioService(
     prisma as unknown as PrismaService,
     cancelamento as unknown as import('../src/pagamentos/cancelamento.service').CancelamentoService,
@@ -111,18 +111,17 @@ describe('RelatorioService', () => {
     });
   });
 
-  it('cancelar delega ao CancelamentoService (origem admin) e devolve o estorno', async () => {
+  it('cancelar delega ao cancelamento PELO PAINEL (avisa o Regem) e devolve o estorno', async () => {
     const { service, cancelamento } = makeService();
-    cancelamento.cancelarPorId.mockResolvedValue({
+    cancelamento.cancelarPeloPainel.mockResolvedValue({
       status: 'cancelado',
       pedidoId: 'p1',
       estorno: { feito: true, meio: 'credito', valorCentavos: 3000 },
     });
     const res = await service.cancelar('p1', 'falta de saldo');
-    expect(cancelamento.cancelarPorId).toHaveBeenCalledWith(
+    expect(cancelamento.cancelarPeloPainel).toHaveBeenCalledWith(
       'p1',
       'falta de saldo',
-      'admin',
     );
     expect(res.status).toBe('cancelado');
     expect(res.estorno.feito).toBe(true);

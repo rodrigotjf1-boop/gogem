@@ -180,6 +180,27 @@ export interface RegemTotemDinheiroBody {
   totalCentavos?: number;
 }
 
+/**
+ * Resposta do cancelamento de venda externa no Regem (`POST /vendas/externa-pdv/cancelar`,
+ * L-FIS-3 — contrato proposto ao Regem em 24/09/2026).
+ *  - `cancelada`: o Regem desfez a venda (ou ela já estava desfeita, ou ele não a conhecia —
+ *    `encontrada:false`, nada a desfazer);
+ *  - `sem_integracao`: a empresa não tem Regem — não há o que avisar;
+ *  - `rota_ausente`: o Regem ainda não tem a rota (404) — o operador cancela lá à mão.
+ * Recusa (400/422: nota fora do prazo, pedido já cobrado no caixa) LANÇA `RegemRecusouError`;
+ * queda (rede, 5xx) lança `Error`. Nos dois casos o GoGeM NÃO estorna.
+ */
+export type CancelamentoNoRegem =
+  | {
+      status: 'cancelada';
+      encontrada: boolean;
+      jaCancelada: boolean;
+      notaCancelada: boolean;
+      cancelamentoPendente: boolean;
+    }
+  | { status: 'sem_integracao' }
+  | { status: 'rota_ausente' };
+
 /** Timeout padrão da requisição ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -305,6 +326,72 @@ export class RegemSalesClient {
       senha: senha != null && Number.isFinite(senha) ? senha : undefined,
       total: b.total,
     } as RegemVendaExternaResposta;
+  }
+
+  /**
+   * Desfaz no Regem uma venda externa (cancelamento pelo painel do GoGeM — ERR-016). O Regem
+   * estorna estoque e caixa, cancela a produção e a NFC-e (ou agenda o cancelamento, se ainda
+   * está em contingência). Idempotente pela `idempotencyKey`.
+   */
+  async cancelarVendaExterna(body: {
+    idempotencyKey: string;
+    motivo: string;
+  }): Promise<CancelamentoNoRegem> {
+    let cfg: { base: string; token: string };
+    try {
+      cfg = await this.resolver.resolve();
+    } catch {
+      return { status: 'sem_integracao' };
+    }
+    const url = `${cfg.base.replace(/\/$/, '')}/vendas/externa-pdv/cancelar`;
+    const controller = new AbortController();
+    // O cancelamento da nota vai à SEFAZ (evento 110111): leva o tempo dela.
+    const timer = setTimeout(() => controller.abort(), VENDA_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-Sync-Token': cfg.token,
+          'X-Loja-Token': cfg.token,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const motivo = err instanceof Error ? err.message : String(err);
+      throw new Error(`Falha ao cancelar a venda no Regem (${url}): ${motivo}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status === 404) return { status: 'rota_ausente' };
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => '');
+      const mensagem = `Cancelamento no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`;
+      if (STATUS_RECUSA_DEFINITIVA.has(res.status)) {
+        throw new RegemRecusouError(
+          res.status,
+          mensagemDoRegem(corpo),
+          mensagem,
+        );
+      }
+      throw new Error(mensagem);
+    }
+    const b = (await res.json().catch(() => ({}))) as {
+      encontrada?: boolean;
+      jaCancelada?: boolean;
+      notaCancelada?: boolean;
+      cancelamentoPendente?: boolean;
+    };
+    return {
+      status: 'cancelada',
+      encontrada: b.encontrada !== false,
+      jaCancelada: b.jaCancelada === true,
+      notaCancelada: b.notaCancelada === true,
+      cancelamentoPendente: b.cancelamentoPendente === true,
+    };
   }
 
   /**

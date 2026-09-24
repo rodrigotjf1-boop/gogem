@@ -20,6 +20,7 @@ import {
   type PedidoRelatorio,
   type PedidoStatus,
 } from '@/lib/relatorios';
+import { mensagemDeErro } from '@/lib/publicacao';
 
 /** Datas padrão: 1º dia do mês corrente até hoje (YYYY-MM-DD). */
 function periodoPadrao(): { de: string; ate: string } {
@@ -627,8 +628,10 @@ function CancelarDialog({
       // estorno eletrônico saiu ou se precisa devolver no balcão.
       const r = await cancelar.mutateAsync({ id: pedido.id, motivo: texto });
       setResultado(r);
-    } catch {
-      setErro('Não foi possível cancelar. Tente novamente.');
+    } catch (e) {
+      // A recusa do Regem (nota fora do prazo, pedido já cobrado no caixa) vem com o
+      // motivo — é ele que diz ao operador onde resolver.
+      setErro(mensagemDeErro(e));
     }
   }
 
@@ -660,6 +663,18 @@ function CancelarDialog({
             {resultado.estorno?.mensagem && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {resultado.estorno.mensagem}
+              </p>
+            )}
+            {resultado.regem && (
+              <p
+                data-testid="aviso-regem"
+                className={
+                  resultado.regem.avisado
+                    ? 'mt-2 text-emerald-600'
+                    : 'mt-2 font-medium text-amber-600'
+                }
+              >
+                {resultado.regem.mensagem}
               </p>
             )}
           </div>
