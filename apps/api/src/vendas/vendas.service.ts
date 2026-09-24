@@ -1,11 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  RegemErroNfce,
   RegemNfce,
+  RegemRecusouError,
   RegemSalesClient,
   type RegemVendaExternaResposta,
 } from '../integracoes/regem/regem-sales.client';
+import {
+  CancelamentoService,
+  type EstornoResultado,
+} from '../pagamentos/cancelamento.service';
 import { VendaTotemDto, VendaFalhaTotemDto } from './dto/venda-totem.dto';
 
 /** Plataforma reportada ao Regem (origem da venda). */
@@ -34,9 +46,53 @@ export interface VendaTotemResultado {
   comandaId: string;
   senha?: number | null;
   total?: number | null;
-  /** Resumo da NFC-e (quando a loja emite cupom fiscal) — o totem imprime o DANFE com isto. */
+  /**
+   * Resultado fiscal (contrato do Regem #574): `null` = não se espera nota; `autorizada` ou
+   * `contingencia` com o `danfe` para imprimir; `nao_emitida` com o `erro` — a venda foi
+   * desfeita no Regem e o pagamento, estornado aqui.
+   */
   nfce?: RegemNfce | null;
   idempotente?: boolean;
+  /** A venda NÃO vale (nota não emitida, ou cancelada pelo painel/Regem). */
+  cancelado?: boolean;
+  /** O estorno feito agora (nota não emitida) — o totem mostra ao cliente. */
+  estorno?: EstornoResultado;
+}
+
+/**
+ * O motivo da venda desfeita por falta de nota, no MESMO formato que o Regem grava
+ * (`motivoVendaDesfeita`): quem lê os dois relatórios vê o mesmo texto.
+ */
+export function motivoNotaNaoEmitida(erro?: RegemErroNfce | null): string {
+  if (!erro) return 'NFC-e não emitida';
+  const cod = erro.codigo ? ` ${erro.codigo}` : '';
+  return `NFC-e não emitida (${erro.etapa}${cod}): ${erro.motivo}`.slice(
+    0,
+    500,
+  );
+}
+
+/**
+ * Traduz a falha do repasse ao Regem para o totem, preservando a CLASSE do erro:
+ *  - recusa definitiva do Regem → 422 (reenviar dá o mesmo: o totem tira da fila e estorna);
+ *  - rede, tempo esgotado, 5xx, integração sem configuração → 503 (o totem reenvia depois).
+ * Antes tudo virava 500 genérico, e o totem insistia para sempre numa venda recusada — e
+ * parava a fila inteira atrás dela.
+ */
+function erroParaTotem(err: unknown): Error {
+  if (err instanceof RegemRecusouError) {
+    return new UnprocessableEntityException({
+      message: `O sistema da loja recusou a venda: ${err.motivo}`,
+      motivo: err.motivo,
+    });
+  }
+  const m = err instanceof Error ? err.message : String(err);
+  return new ServiceUnavailableException(
+    `Sistema da loja indisponível agora — a venda será reenviada: ${m}`.slice(
+      0,
+      500,
+    ),
+  );
 }
 
 /**
@@ -62,6 +118,7 @@ export class VendasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly regem: RegemSalesClient,
+    private readonly cancelamento: CancelamentoService,
   ) {}
 
   async registrarVendaTotem(
@@ -74,12 +131,16 @@ export class VendasService {
       where: { idempotencyKey: dto.idempotencyKey },
     });
 
-    if (existente && existente.status === 'enviado') {
-      return {
-        comandaId: existente.regemComandaId as string,
-        senha: existente.regemSenha,
-        idempotente: true,
-      };
+    // Já concluído: devolve a MESMA resposta da primeira vez — com a nota. O totem reenvia
+    // justamente quando a primeira resposta se perdeu; devolver só comanda e senha fazia o
+    // cliente sair sem o DANFE de uma nota emitida (ERR-019).
+    // CANCELADO não reabre nunca: reenviar ao Regem traria de volta ao faturamento uma venda
+    // desfeita (nota não emitida) ou cancelada pelo painel.
+    if (
+      existente &&
+      (existente.status === 'enviado' || existente.status === 'cancelado')
+    ) {
+      return respostaGuardada(existente);
     }
 
     // 2. Cria (ou reabre um pedido que falhou) em status `pendente`. O
@@ -178,7 +239,7 @@ export class VendasService {
       this.logger.warn(
         `Venda ${dto.idempotencyKey} falhou no Regem: ${motivo}`,
       );
-      throw err;
+      throw erroParaTotem(err);
     }
 
     // 4. Sucesso: guarda o resultado do Regem.
@@ -193,6 +254,31 @@ export class VendasService {
       },
     });
 
+    // 5. A NOTA NÃO SAIU (Regem #574): no totem, sem cupom fiscal não há compra — o Regem já
+    //    desfez a venda. O pagamento é estornado AQUI, na hora, sem depender de o totem voltar
+    //    a falar com a nuvem, e o pedido fica cancelado com o motivo fiscal (é o que o
+    //    relatório mostra). Idempotente: o totem pedir o estorno de novo não estorna em dobro.
+    if (resposta.nfce?.status === 'nao_emitida') {
+      const motivo = motivoNotaNaoEmitida(resposta.nfce.erro);
+      const r = await this.cancelamento.estornarPorOrder(
+        dto.idempotencyKey,
+        motivo,
+        'regem-fiscal',
+        { etapa: resposta.nfce.erro?.etapa },
+      );
+      this.logger.warn(
+        `Venda ${dto.idempotencyKey} sem NFC-e — desfeita no Regem, estorno ${r.estorno.feito ? 'solicitado' : 'NÃO saiu'}: ${motivo}`,
+      );
+      return {
+        comandaId: resposta.comandaId,
+        senha: resposta.senha,
+        total: resposta.total,
+        nfce: resposta.nfce,
+        cancelado: true,
+        estorno: r.estorno,
+      };
+    }
+
     return {
       comandaId: resposta.comandaId,
       senha: resposta.senha,
@@ -203,9 +289,10 @@ export class VendasService {
 
   /**
    * Relay do pedido em DINHEIRO → RETIRADA "a receber" no Regem
-   * (`/delivery/totem-dinheiro`), cobrada no balcão. Best-effort: em falha grava
-   * `falha` + motivo e NÃO relança (o cliente já tem o cupom "pague no caixa") —
-   * devolve a senha LOCAL ao totem.
+   * (`/delivery/totem-dinheiro`), cobrada no balcão. Em falha grava `falha` + motivo e
+   * DEVOLVE O ERRO ao totem (503 passageiro / 422 recusa): o totem imprime o cupom com a
+   * senha local do mesmo jeito e a fila dele reenvia. Antes respondia 201 com a senha local
+   * e ninguém reenviava — o pedido nunca chegava ao balcão (ERR-015).
    */
   private async relayDinheiro(
     pedidoId: string,
@@ -243,10 +330,9 @@ export class VendasService {
         data: { status: 'falha', erro: motivo },
       });
       this.logger.warn(
-        `Dinheiro ${dto.idempotencyKey} — relay /delivery/totem-dinheiro falhou (best-effort): ${motivo}`,
+        `Dinheiro ${dto.idempotencyKey} — relay /delivery/totem-dinheiro falhou: ${motivo}`,
       );
-      // Best-effort: NÃO relança. O totem mostra a senha local (o cupom já saiu).
-      return { comandaId: '', senha: dto.senhaLocal ?? null };
+      throw erroParaTotem(err);
     }
   }
 
@@ -350,6 +436,32 @@ export class VendasService {
         : p,
     );
   }
+}
+
+/**
+ * A resposta guardada da primeira vez (idempotência). Pedido cancelado sem resposta do Regem
+ * (cancelado pelo painel antes de chegar lá) não tem o que devolver: 409, que a fila do totem
+ * já entende como "este pedido está resolvido, pare de reenviar".
+ */
+function respostaGuardada(p: {
+  status: string;
+  regemComandaId: string | null;
+  regemSenha: number | null;
+  regemResposta: Prisma.JsonValue | null;
+}): VendaTotemResultado {
+  const r = (p.regemResposta ?? null) as RegemVendaExternaResposta | null;
+  const cancelado = p.status === 'cancelado';
+  if (cancelado && !r) {
+    throw new ConflictException('Pedido cancelado — não é reenviado ao Regem.');
+  }
+  return {
+    comandaId: p.regemComandaId ?? r?.comandaId ?? '',
+    senha: p.regemSenha ?? r?.senha ?? null,
+    total: r?.total ?? null,
+    nfce: r?.nfce ?? null,
+    idempotente: true,
+    ...(cancelado ? { cancelado: true } : {}),
+  };
 }
 
 /** Rótulos que representam cartão (placeholder do totem) — não PIX/dinheiro. */

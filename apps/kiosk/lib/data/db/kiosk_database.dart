@@ -40,6 +40,10 @@ abstract final class KioskDatabase {
       "ALTER TABLE pedidos_locais ADD COLUMN tentativas INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE pedidos_locais ADD COLUMN enviado_em TEXT",
       "ALTER TABLE pedidos_locais ADD COLUMN resposta_json TEXT",
+      // Servidor da loja: o id do pedido RETIDO no Regem. Com ele a fila reenvia pela
+      // LIBERAÇÃO (mesma senha, mesma nota) — reenviar como venda nova abria uma segunda
+      // senha e deixava o retido expirar.
+      "ALTER TABLE pedidos_locais ADD COLUMN retido_id TEXT",
     ]) {
       try {
         await db.execute(alter);

@@ -90,6 +90,56 @@ export interface RegemNfce {
    * sem reescrever: reescrever o documento aqui seria uma segunda versão do DANFE.
    */
   danfe?: string | null;
+  /** Contingência com a 2ª via ("VIA DO ESTABELECIMENTO") ligada na loja (mig 287 do Regem). */
+  viaEstabelecimento?: boolean;
+  /**
+   * Só em `status: 'nao_emitida'` (Regem #574): a nota NÃO saiu e a venda foi desfeita lá.
+   * `motivo` é o texto do Regem (vai para o relatório); `repete` diz se a próxima venda vai
+   * falhar igual (configuração, certificado, emitente) — o totem alerta em vez de estornar em série.
+   */
+  erro?: RegemErroNfce | null;
+}
+
+/** Por que a NFC-e não saiu (contrato do Regem em `fiscal/nfce-totem.ts`). */
+export interface RegemErroNfce {
+  etapa:
+    'configuracao' | 'rejeitada' | 'denegada' | 'sem_contingencia' | 'interno';
+  codigo: string | null;
+  motivo: string;
+  repete: boolean;
+}
+
+/**
+ * O Regem RECUSOU a venda de forma definitiva (400/422: código PDV que não existe, soma dos
+ * pagamentos que não fecha, venda sem itens…). Reenviar a mesma venda dá o mesmo resultado —
+ * quem chama deve tirá-la da fila, não insistir.
+ */
+export class RegemRecusouError extends Error {
+  constructor(
+    readonly status: number,
+    /** A mensagem do Regem, limpa (sem URL nem corpo JSON). */
+    readonly motivo: string,
+    mensagem: string,
+  ) {
+    super(mensagem);
+    this.name = 'RegemRecusouError';
+  }
+}
+
+/** Status do Regem que significam recusa DEFINITIVA da venda (o resto é passageiro). */
+const STATUS_RECUSA_DEFINITIVA = new Set([400, 422]);
+
+/** Extrai a `message` do erro do Nest (string ou lista) do corpo de resposta do Regem. */
+export function mensagemDoRegem(corpo: string): string {
+  try {
+    const b = JSON.parse(corpo) as { message?: unknown };
+    const m = b?.message;
+    if (Array.isArray(m)) return m.map(String).join('; ');
+    if (typeof m === 'string' && m.trim()) return m.trim();
+  } catch {
+    /* corpo não é JSON */
+  }
+  return corpo.trim().slice(0, 300) || 'sem detalhe';
 }
 
 export interface RegemVendaExternaResposta {
@@ -133,6 +183,13 @@ export interface RegemTotemDinheiroBody {
 /** Timeout padrão da requisição ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 15_000;
 
+/**
+ * Prazo da VENDA paga (ms). Com NFC-e o Regem só responde depois da nota: até ~12 s na
+ * primeira vez (10 s de SEFAZ + contingência) e até 25 s quando a repetição espera uma
+ * emissão em andamento. O totem espera 45 s; 30 s aqui deixam folga para a volta.
+ */
+const VENDA_TIMEOUT_MS = 30_000;
+
 @Injectable()
 export class RegemSalesClient {
   constructor(private readonly resolver: RegemConfigResolver) {}
@@ -148,7 +205,7 @@ export class RegemSalesClient {
 
     const url = `${base.replace(/\/$/, '')}/vendas/externa-pdv`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), VENDA_TIMEOUT_MS);
     let res: Response;
     try {
       res = await fetch(url, {
@@ -172,9 +229,15 @@ export class RegemSalesClient {
     if (!res.ok) {
       // Inclui o corpo do erro para diagnóstico (best-effort).
       const corpo = await res.text().catch(() => '');
-      throw new Error(
-        `Venda no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
-      );
+      const mensagem = `Venda no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`;
+      if (STATUS_RECUSA_DEFINITIVA.has(res.status)) {
+        throw new RegemRecusouError(
+          res.status,
+          mensagemDoRegem(corpo),
+          mensagem,
+        );
+      }
+      throw new Error(mensagem);
     }
 
     return (await res.json()) as RegemVendaExternaResposta;
@@ -214,9 +277,15 @@ export class RegemSalesClient {
     }
     if (!res.ok) {
       const corpo = await res.text().catch(() => '');
-      throw new Error(
-        `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`,
-      );
+      const mensagem = `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`;
+      if (STATUS_RECUSA_DEFINITIVA.has(res.status)) {
+        throw new RegemRecusouError(
+          res.status,
+          mensagemDoRegem(corpo),
+          mensagem,
+        );
+      }
+      throw new Error(mensagem);
     }
     // Resposta pode vir vazia/variada — parse defensivo. A SENHA da retirada (a
     // que a cozinha/balcão chama) pode vir como `senha`, `numero` ou

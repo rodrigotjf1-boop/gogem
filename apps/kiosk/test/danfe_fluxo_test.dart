@@ -33,6 +33,7 @@ void main() {
       'Chave: 33260900000000000191650510000000021000000029\n@QR:$qr';
 
   late FakeTransport papel;
+  late FakeFilaImpressao fila;
 
   http.Client servidor({Map<String, dynamic>? nfce}) => MockClient((req) async {
         if (req.url.path.endsWith('/vendas')) {
@@ -54,7 +55,7 @@ void main() {
         printerTransportProvider.overrideWithValue(papel),
         // Sem isto, o caminho de falha trava: a fila real abre um sqflite que nao
         // existe no ambiente de teste.
-        filaImpressaoProvider.overrideWith((ref) => FakeFilaImpressao()),
+        filaImpressaoProvider.overrideWith((ref) => fila),
         gogemApiProvider.overrideWithValue(GogemApi(
             baseUrl: 'https://nuvem/api',
             bearer: '',
@@ -82,7 +83,10 @@ void main() {
     await _bombear(tester, 14);
   }
 
-  setUp(() => papel = FakeTransport());
+  setUp(() {
+    papel = FakeTransport();
+    fila = FakeFilaImpressao();
+  });
 
   /// Quantas vezes o comando "imprime o simbolo QR" apareceu no papel.
   int qrsImpressos() => _contar(papel.tudoEscrito.join(','),
@@ -149,11 +153,13 @@ void main() {
 
   testWidgets('nota emitida e impressora sem papel: o cliente e avisado',
       (tester) async {
-    // O papel acaba DEPOIS do cupom (o totem nem deixa vender com a impressora
-    // vazia — esse é o portão de venda). A nota, então, já está emitida: é o caso
-    // que não pode passar calado.
+    // O papel acaba no DANFE (o totem nem deixa vender com a impressora vazia — esse
+    // é o portão de venda). A nota, então, já está emitida: é o caso que não pode
+    // passar calado. Na NUVEM não há como desfazer a venda daqui: ela vale, o DANFE
+    // vai para a reimpressão e a tela manda o cliente ao balcão (no servidor da loja,
+    // a venda é desfeita — teste em resultado_fiscal_fluxo_test).
     papel.aposLeitura = () {
-      if (String.fromCharCodes(papel.tudoEscrito).contains('SENHA')) {
+      if (String.fromCharCodes(papel.tudoEscrito).contains('DANFE NFC-e')) {
         papel.semPapel = true;
       }
     };
@@ -165,8 +171,27 @@ void main() {
           'danfe': danfe,
         }));
     // Documento fiscal que não saiu não pode virar silêncio: a tela manda o
-    // cliente ao balcão com a senha (o cancelamento + estorno é o passo F4).
+    // cliente ao balcão com a senha.
     expect(find.byKey(const ValueKey('aviso-sem-nota')), findsOneWidget);
+    // ERR-020 — o DANFE e o cupom do MESMO pedido ficam OS DOIS na reimpressão (com a
+    // mesma chave, o DANFE era descartado pela fila).
+    final chaves = fila.rows.map((r) => r['uuid'] as String).toList();
+    expect(chaves.where((k) => k.endsWith('#danfe')), hasLength(1));
+    expect(chaves.where((k) => !k.contains('#')), hasLength(1));
+  });
+
+  testWidgets('o DANFE sai ANTES do cupom da senha', (tester) async {
+    await venderNoCartao(
+        tester,
+        servidor(nfce: {
+          'status': 'autorizada',
+          'contingencia': false,
+          'danfe': danfe,
+        }));
+    final txt = String.fromCharCodes(papel.tudoEscrito);
+    // Se o DANFE não sair e a venda for desfeita, o cliente não pode ter na mão o
+    // cupom de uma senha que não existe mais.
+    expect(txt.indexOf('DANFE NFC-e'), lessThan(txt.indexOf('SENHA')));
   });
 }
 

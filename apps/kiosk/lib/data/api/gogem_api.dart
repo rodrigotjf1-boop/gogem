@@ -33,9 +33,31 @@ class GogemApiException implements Exception {
   GogemApiException(this.status, this.mensagem);
   final int status;
   final String mensagem;
+
+  /// A mensagem do servidor, limpa (o `message` do corpo JSON), para mostrar e registrar.
+  String get motivo {
+    try {
+      final b = jsonDecode(mensagem);
+      final m = b is Map ? b['message'] : null;
+      if (m is List) return m.join('; ');
+      if (m is String && m.trim().isNotEmpty) return m.trim();
+    } catch (_) {/* corpo não é JSON */}
+    final t = mensagem.trim();
+    return t.length > 200 ? t.substring(0, 200) : t;
+  }
+
   @override
   String toString() => 'GogemApiException($status): $mensagem';
 }
+
+/// Recusa DEFINITIVA da venda (400/422): reenviar a mesma venda dá o mesmo resultado. O
+/// resto (rede, tempo esgotado, 5xx, 401/403/404/408/429) é passageiro e se reenvia.
+bool recusaDefinitiva(int status) => status == 400 || status == 422;
+
+/// Quanto o totem espera a venda (ou a liberação do pedido retido). Com NFC-e o Regem só
+/// responde depois da nota: ~12 s no pior caso da primeira vez, até 25 s quando a repetição
+/// espera uma emissão em andamento. 45 s é o combinado com o Regem (#574).
+const prazoVendaTotem = Duration(seconds: 45);
 
 /// Cliente HTTP do GoGeM.
 ///
@@ -177,7 +199,8 @@ class GogemApi {
   /// POST /vendas — lançamento idempotente do pedido pago (F6).
   /// `Idempotency-Key` = uuid do pedido: reenvio JAMAIS duplica; o backend
   /// responde 200/201 (ou 409 já-processado, tratado como sucesso pelo sync).
-  Future<Map<String, dynamic>> enviarVenda(Map<String, dynamic> corpo) async {
+  Future<Map<String, dynamic>> enviarVenda(Map<String, dynamic> corpo,
+      {Duration timeout = prazoVendaTotem}) async {
     final uri = Uri.parse('$baseUrl/vendas');
     final res = await _client
         .post(uri,
@@ -187,7 +210,7 @@ class GogemApi {
               'Idempotency-Key': '${corpo['idempotencyKey']}',
             },
             body: jsonEncode(corpo))
-        .timeout(const Duration(seconds: 15));
+        .timeout(timeout);
     if (res.statusCode == 200 || res.statusCode == 201) {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
       return b is Map<String, dynamic> ? b : <String, dynamic>{};
@@ -214,14 +237,16 @@ class GogemApi {
   }
 
   /// K4 — POST /vendas/:id/liberar: pagamento aprovado, o retido vira venda (comanda,
-  /// caixa, produção). Reenvio não duplica: o servidor é idempotente pela chave do totem.
+  /// caixa, produção). Reenvio não duplica: o servidor é idempotente pela chave do totem —
+  /// e a repetição devolve a MESMA nota, com o DANFE remontado (é assim que se reimprime).
   Future<Map<String, dynamic>> liberarPedidoRetido(
-      String pedidoId, List<dynamic> pagamentos) async {
+      String pedidoId, List<dynamic> pagamentos,
+      {Duration timeout = prazoVendaTotem}) async {
     final res = await _client
         .post(Uri.parse('$baseUrl/vendas/$pedidoId/liberar'),
             headers: {..._headers, 'Content-Type': 'application/json'},
             body: jsonEncode({'pagamentos': pagamentos}))
-        .timeout(const Duration(seconds: 20));
+        .timeout(timeout);
     if (res.statusCode == 200 || res.statusCode == 201) {
       final b = jsonDecode(utf8.decode(res.bodyBytes));
       return b is Map<String, dynamic> ? b : <String, dynamic>{};
@@ -242,6 +267,58 @@ class GogemApi {
     } catch (_) {
       /* o servidor expira o retido sozinho */
     }
+  }
+
+  /// POST /pagamentos/estorno — o pagamento foi APROVADO mas a venda não se concluiu (a
+  /// NFC-e não foi emitida, a venda foi recusada, o cupom fiscal não imprimiu). A nuvem do
+  /// GoGeM estorna pelo `orderId` (uuid do pedido) e registra o motivo no relatório; no
+  /// servidor da loja a chamada chega pelo repasse do Regem. Idempotente.
+  ///
+  /// Devolve o `estorno` (`feito`, `meio`, `valorCentavos`, `mensagem`). LANÇA em falha —
+  /// quem chama decide: sem rede, o estorno fica pendente e a fila tenta de novo.
+  Future<Map<String, dynamic>> estornarPagamento({
+    required String orderId,
+    required String motivo,
+    String? etapa,
+    int? senha,
+    List<dynamic>? itens,
+  }) async {
+    final res = await _client
+        .post(Uri.parse('$baseUrl/pagamentos/estorno'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'orderId': orderId,
+              'motivo': motivo.length > 500 ? motivo.substring(0, 500) : motivo,
+              if (etapa != null) 'etapa': etapa,
+              if (senha != null) 'senha': senha,
+              if (itens != null && itens.isNotEmpty) 'itens': itens,
+            }))
+        .timeout(const Duration(seconds: 25));
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final b = jsonDecode(utf8.decode(res.bodyBytes));
+      final e = b is Map ? b['estorno'] : null;
+      return e is Map ? e.cast<String, dynamic>() : <String, dynamic>{};
+    }
+    throw GogemApiException(res.statusCode, res.body);
+  }
+
+  /// POST /vendas/:id/falha-impressao — servidor da loja (Regem #574): o DANFE não saiu no
+  /// papel. O Regem cancela a nota (ou agenda, se está em contingência), desfaz a venda e
+  /// cancela o pedido. Devolve `{ok, notaCancelada, cancelamentoPendente}`. LANÇA em falha:
+  /// sem essa confirmação a venda continua valendo e NÃO se estorna.
+  Future<Map<String, dynamic>> falhaImpressao(
+      String pedidoId, String motivo) async {
+    final res = await _client
+        .post(Uri.parse('$baseUrl/vendas/$pedidoId/falha-impressao'),
+            headers: {..._headers, 'Content-Type': 'application/json'},
+            body: jsonEncode({'motivo': motivo}))
+        // O cancelamento da nota vai à SEFAZ (evento 110111): leva o tempo dela.
+        .timeout(const Duration(seconds: 30));
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final b = jsonDecode(utf8.decode(res.bodyBytes));
+      return b is Map<String, dynamic> ? b : <String, dynamic>{};
+    }
+    throw GogemApiException(res.statusCode, res.body);
   }
 
   /// POST /vendas/falha — reporta um pagamento que NÃO passou (erro/recusa/

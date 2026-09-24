@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/kiosk/inatividade_guard.dart';
 import 'core/kiosk/kiosk_service.dart';
 import 'core/pareamento/device_token.dart';
 import 'core/tempo/relogio_servidor.dart';
@@ -11,7 +11,6 @@ import 'core/theme/gogem_theme.dart';
 import 'data/catalog/aparencia.dart';
 import 'data/catalog/catalog_sync.dart';
 import 'data/update/updater.dart';
-import 'domain/order/cart.dart';
 import 'domain/order/venda_sync.dart';
 
 /// Modo quiosque (fixa a tela no Android). Ligado por padrão; nos builds de
@@ -66,57 +65,13 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
       routerConfig: router,
       // Idle inteligente (F4): sem toque por 90s no meio de um pedido → volta
       // ao descanso e limpa carrinho/checkout (o próximo cliente começa do
-      // zero). Desligado em testes de widget (evita timer pendente).
+      // zero) — nunca durante uma venda. Desligado em testes de widget (evita
+      // timer pendente).
       builder: widget.iniciarSync
-          ? (context, child) =>
-              _InatividadeGuard(child: child ?? const SizedBox.shrink())
+          ? (context, child) => InatividadeGuard(
+              aoExpirar: () => router.go('/descanso'),
+              child: child ?? const SizedBox.shrink())
           : null,
-    );
-  }
-}
-
-class _InatividadeGuard extends ConsumerStatefulWidget {
-  const _InatividadeGuard({required this.child});
-  final Widget child;
-  @override
-  ConsumerState<_InatividadeGuard> createState() => _InatividadeGuardState();
-}
-
-class _InatividadeGuardState extends ConsumerState<_InatividadeGuard> {
-  Timer? _t;
-  static const _limite = Duration(seconds: 90);
-
-  @override
-  void initState() {
-    super.initState();
-    _reset();
-  }
-
-  @override
-  void dispose() {
-    _t?.cancel();
-    super.dispose();
-  }
-
-  void _reset() {
-    _t?.cancel();
-    _t = Timer(_limite, _voltarAoDescanso);
-  }
-
-  void _voltarAoDescanso() {
-    // Ir para /descanso é seguro em qualquer rota (o redirect trata /parear;
-    // /descanso→/descanso é no-op). Limpa o pedido em andamento.
-    ref.read(cartProvider.notifier).limpar();
-    ref.read(checkoutProvider.notifier).limpar();
-    router.go('/descanso');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _reset(),
-      child: widget.child,
     );
   }
 }
