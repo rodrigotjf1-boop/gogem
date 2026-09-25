@@ -7,11 +7,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { Roles } from '../../auth/roles.decorator';
 import { RolesGuard } from '../../auth/roles.guard';
+import { RegemConfigResolver } from './regem-config.resolver';
 import {
   RegemImportService,
   type RegemImportResumo,
@@ -28,7 +28,7 @@ import {
 export class RegemImportController {
   constructor(
     private readonly service: RegemImportService,
-    private readonly config: ConfigService,
+    private readonly regem: RegemConfigResolver,
   ) {}
 
   @Post()
@@ -38,13 +38,13 @@ export class RegemImportController {
       'Resumo do import: categorias/produtos/grupos/opções criados e atualizados.',
   })
   async importar(): Promise<RegemImportResumo> {
-    const base = this.config.get<string>('REGEM_API_BASE');
-    const token = this.config.get<string>('REGEM_SYNC_TOKEN');
-    if (!base || !token) {
+    // A integração é a DA EMPRESA de quem pede — antes o import exigia as envs globais, e
+    // recusava a empresa com integração própria quando elas não existiam (ERR-012).
+    await this.regem.resolve().catch((e: unknown) => {
       throw new BadRequestException(
-        'Integração Regem não configurada: defina REGEM_API_BASE e REGEM_SYNC_TOKEN no ambiente da API.',
+        e instanceof Error ? e.message : 'Integração Regem não configurada.',
       );
-    }
+    });
     return this.service.importar();
   }
 

@@ -49,8 +49,6 @@ DATABASE_URL=postgresql://gogem:SENHA@gogem-db:5432/gogem?schema=public
 REDIS_URL=redis://gogem-redis:6379
 JWT_SECRET=<64+ chars aleatórios — gere com: openssl rand -hex 48>
 PORT=3000
-REGEM_API_BASE=https://api.dmsregem.com/api/v1     # ajuste para o staging do Regem se houver
-REGEM_SYNC_TOKEN=<token do equipamento servidor_local — ver §4>
 S3_ENDPOINT=http://gogem-media:9000
 S3_ACCESS_KEY=...  S3_SECRET_KEY=...  S3_BUCKET=gogem
 NODE_ENV=production
@@ -61,7 +59,7 @@ No EasyPanel os serviços do mesmo projeto se resolvem pelo nome (`gogem-db`, `g
 
 1. Deploy dos PRs **#226** e **#228** no ambiente do Regem que o staging vai consumir;
 2. **Aplicar a migration 146** (`comanda.cpf`) na nuvem JUNTO do deploy do #226 — sem ela a venda externa quebra;
-3. Cadastrar um **`equipamento` do tipo `servidor_local`** no tenant do cliente piloto no Regem e copiar o `token` → `REGEM_SYNC_TOKEN` do GoGeM. (O tenant do Regem é derivado desse dispositivo — um token por cliente.)
+3. Cadastrar um **`equipamento` do tipo `servidor_local`** no tenant do cliente piloto no Regem e colar o `token` na integração da empresa no painel do GoGeM (**Integrações → Regem**). (O tenant do Regem é derivado desse dispositivo — um token por cliente.) Não existe mais token do Regem em env (ERR-012).
 
 ## 5. Subir e validar
 

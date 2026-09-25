@@ -1,16 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RegemConfigResolver } from '../src/integracoes/regem/regem-config.resolver';
 import type { PrismaService } from '../src/prisma/prisma.service';
-import type { ConfigService } from '@nestjs/config';
 
 function make() {
   const prisma = { integracao: { findFirst: vi.fn() } };
-  const config = { get: vi.fn().mockReturnValue(undefined) };
-  const resolver = new RegemConfigResolver(
-    prisma as unknown as PrismaService,
-    config as unknown as ConfigService,
-  );
-  return { resolver, prisma, config };
+  const resolver = new RegemConfigResolver(prisma as unknown as PrismaService);
+  return { resolver, prisma };
 }
 
 const cfg = (base: string, token: string, ativo = true) => ({
@@ -18,7 +13,7 @@ const cfg = (base: string, token: string, ativo = true) => ({
   config: { apiBase: base, token },
 });
 
-describe('RegemConfigResolver — cascata loja → empresa → env', () => {
+describe('RegemConfigResolver — cascata loja → empresa (sem Regem padrão)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('usa o token DA LOJA quando há integração ativa da unidade', async () => {
@@ -65,15 +60,21 @@ describe('RegemConfigResolver — cascata loja → empresa → env', () => {
     });
   });
 
-  it('sem config no banco: cai no fallback das envs', async () => {
-    const { resolver, prisma, config } = make();
+  // ERR-012 — o "Regem padrão" das envs mandava a venda da empresa SEM integração para o
+  // Regem de OUTRA empresa (e baixava o cardápio dela), com resposta de sucesso.
+  it('sem integração da empresa: ERRO — mesmo com as envs globais definidas', async () => {
+    const { resolver, prisma } = make();
     prisma.integracao.findFirst.mockResolvedValue(null);
-    config.get.mockImplementation((k: string) =>
-      k === 'REGEM_API_BASE' ? 'https://env' : 'tok-env',
-    );
-
-    const out = await resolver.resolve({ unidadeId: 'u1' });
-    expect(out).toEqual({ base: 'https://env', token: 'tok-env' });
+    process.env.REGEM_API_BASE = 'https://regem-do-piloto';
+    process.env.REGEM_SYNC_TOKEN = 'TOKEN-DO-PILOTO';
+    try {
+      await expect(resolver.resolve({ unidadeId: 'u1' })).rejects.toThrow(
+        /não configurada/i,
+      );
+    } finally {
+      delete process.env.REGEM_API_BASE;
+      delete process.env.REGEM_SYNC_TOKEN;
+    }
   });
 
   it('nada configurado: lança erro acionável', async () => {

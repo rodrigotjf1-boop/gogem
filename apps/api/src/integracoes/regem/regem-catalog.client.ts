@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { RegemConfigResolver, type RegemConfig } from './regem-config.resolver';
+import { CABECALHO_INTEGRADOR } from './integrador';
 
 /**
  * Cliente HTTP do catálogo do Regem (fatia 3).
  *
  * Puxa o catálogo publicado do Regem por `codigo_pdv` (contrato real do
- * endpoint `GET {REGEM_API_BASE}/sync/catalogo`, autenticado por
+ * endpoint `GET {apiBase}/sync/catalogo`, autenticado por
  * `X-Sync-Token`). Base e token são resolvidos POR TENANT pelo
- * `RegemConfigResolver` (Integração do tenant → fallback env). Usa o `fetch`
+ * `RegemConfigResolver` (loja → empresa; sem Regem padrão). Usa o `fetch`
  * global (Node 20+) com timeout via AbortController.
  *
  * IMPORTANTE (contrato do Regem): `precoVenda`/`precoDelta` chegam como
@@ -111,6 +112,7 @@ export class RegemCatalogClient {
         headers: {
           'X-Sync-Token': token,
           'X-Loja-Token': token,
+          ...CABECALHO_INTEGRADOR,
           Accept: 'application/json',
         },
         signal: controller.signal,

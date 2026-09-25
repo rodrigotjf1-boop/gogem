@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { RegemConfigResolver } from './regem-config.resolver';
+import { CABECALHO_INTEGRADOR } from './integrador';
 
 /**
  * Cliente HTTP de venda do Regem (issue #12.2).
  *
- * Lança a venda de totem no Regem via `POST {REGEM_API_BASE}/vendas/externa-pdv`
+ * Lança a venda de totem no Regem via `POST {apiBase}/vendas/externa-pdv`
  * (endpoint L-VEN-1, PR #226 do Regem), autenticado por `X-Sync-Token`. Base e
- * token vêm do ConfigService (`REGEM_API_BASE`, `REGEM_SYNC_TOKEN`) — NUNCA
+ * token vêm da integração da loja/empresa (`RegemConfigResolver`) — NUNCA
  * hardcoded (CLAUDE.md §8). Espelha o `RegemCatalogClient`: `fetch` global
  * (Node 20+) com timeout via AbortController.
  *
@@ -213,6 +214,7 @@ export class RegemSalesClient {
         headers: {
           'X-Sync-Token': token,
           'X-Loja-Token': token,
+          ...CABECALHO_INTEGRADOR,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -263,6 +265,7 @@ export class RegemSalesClient {
         headers: {
           'X-Sync-Token': token,
           'X-Loja-Token': token,
+          ...CABECALHO_INTEGRADOR,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -328,6 +331,7 @@ export class RegemSalesClient {
         headers: {
           'X-Sync-Token': cfg.token,
           'X-Loja-Token': cfg.token,
+          ...CABECALHO_INTEGRADOR,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },

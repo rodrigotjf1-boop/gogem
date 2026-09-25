@@ -191,3 +191,27 @@ describe('Relatórios — cancelamento com o Regem ativo', () => {
     ).toBeInTheDocument();
   });
 });
+
+// ERR-014 — o painel mandava `T00:00:00`/`T23:59:59` sem fuso e a API (em UTC) cortava o dia
+// às 21h de Brasília. Agora vai só a data; o dia da loja é calculado na API.
+describe('Relatórios — período enviado à API', () => {
+  it('manda só a data (sem hora), para a API aplicar o fuso da loja', async () => {
+    const pedidas: URLSearchParams[] = [];
+    baseHandlers();
+    server.use(
+      http.get(`${API}/relatorios/pedidos`, ({ request }) => {
+        pedidas.push(new URL(request.url).searchParams);
+        return HttpResponse.json(PEDIDOS);
+      }),
+    );
+    montar('gerente');
+
+    expect(await screen.findByText('Totem entrada')).toBeInTheDocument();
+    expect(pedidas.length).toBeGreaterThan(0);
+    for (const q of pedidas) {
+      expect(q.get('de')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(q.get('ate')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+});
+

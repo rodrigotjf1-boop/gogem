@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /** Config resolvida do conector Regem para o tenant do contexto. */
@@ -11,21 +10,18 @@ export interface RegemConfig {
 /**
  * RegemConfigResolver — resolve `{ base, token }` do Regem PARA O TENANT ATUAL.
  *
- * Precedência (Fase 2): a linha `Integracao(tipo='regem')` do tenant (escopada
- * pelo middleware do Prisma) vence quando está `ativo` e traz `apiBase`+`token`
- * em `config`. Caso contrário cai no fallback das envs globais
- * (`REGEM_API_BASE`/`REGEM_SYNC_TOKEN`) — que mantém o piloto de 1 loja
- * funcionando. Sem nenhum dos dois → erro claro (a venda/o import falham com
- * mensagem acionável, não com 500 opaco).
+ * Precedência: a integração DA LOJA do contexto e, depois, a da EMPRESA — a linha
+ * `Integracao(tipo='regem')` do tenant (escopada pelo middleware do Prisma), `ativo` e com
+ * `apiBase`+`token` em `config`. Sem ela → erro claro (a venda/o import falham com mensagem
+ * acionável, não com 500 opaco).
  *
- * Assim o GoGeM deixa de ser mono-tenant: cada loja pareia o seu Regem.
+ * NÃO existe mais o "Regem padrão" das envs (`REGEM_API_BASE`/`REGEM_SYNC_TOKEN`), herança do
+ * piloto de uma loja só: com ele, a empresa SEM integração mandava venda e baixava cardápio do
+ * Regem de OUTRA empresa, com resposta de sucesso (ERR-012). Cada empresa pareia o seu Regem.
  */
 @Injectable()
 export class RegemConfigResolver {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * `ignoreActive` (usado pelo "testar conexão") considera a integração mesmo
@@ -62,14 +58,9 @@ export class RegemConfigResolver {
     const cfgEmpresa = extrair(empresa);
     if (cfgEmpresa) return cfgEmpresa;
 
-    const base = this.config.get<string>('REGEM_API_BASE')?.trim();
-    const token = this.config.get<string>('REGEM_SYNC_TOKEN')?.trim();
-    if (base && token) return { base, token };
-
     throw new Error(
       'Integração Regem não configurada para esta loja: preencha e ative a ' +
-        'integração Regem (apiBase + token) na loja ou na empresa, ou defina ' +
-        'REGEM_API_BASE e REGEM_SYNC_TOKEN no ambiente.',
+        'integração Regem (apiBase + token) na loja ou na empresa.',
     );
   }
 }

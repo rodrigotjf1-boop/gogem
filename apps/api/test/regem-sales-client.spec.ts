@@ -102,3 +102,17 @@ describe('mensagemDoRegem', () => {
     expect(mensagemDoRegem('')).toBe('sem detalhe');
   });
 });
+
+describe('RegemSalesClient — o GoGeM se identifica ao Regem', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('toda chamada leva X-Integrador: gogem ao lado do token', async () => {
+    responde(201, { comandaId: 'c1', senha: 1 });
+    await cliente().lancarVendaExterna(corpo);
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    expect(init.headers).toMatchObject({
+      'X-Sync-Token': 't',
+      'X-Integrador': 'gogem',
+    });
+  });
+});

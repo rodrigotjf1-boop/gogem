@@ -30,9 +30,6 @@ No projeto `gogem-staging` (referência completa: `docs/deploy-staging-gogem.md`
    PORT=3000
    NODE_ENV=production
    CORS_ORIGIN=https://app.gogem.com.br
-   # opcional (integração Regem — §6):
-   REGEM_API_BASE=
-   REGEM_SYNC_TOKEN=
    ```
    > O Dockerfile já roda `prisma migrate deploy` no boot (cria as tabelas).
 3. **Domínio** `api.gogem.com.br` (TLS) + **DNS** A record → IP da VPS.
@@ -102,8 +99,8 @@ Sem JWT no build, o totem abre na **tela de pareamento** no 1º boot. O fluxo:
 
 1. No **Regem**, cadastre um `equipamento` do tipo **`servidor_local`** no tenant
    do cliente e copie o `token`.
-2. Na API GoGeM (§1), preencha `REGEM_API_BASE` e `REGEM_SYNC_TOKEN=<token>` e
-   redeploy.
+2. No painel do GoGeM → **Integrações** → card **Regem**, preencha **URL da API**
+   e **Token de sincronização** e ative (cada empresa tem a sua; não vai em env).
 3. No admin → **Importar** → **Importar do Regem** (casa por código PDV; aditivo).
 4. **Publique** de novo (§3) para o totem receber.
 
