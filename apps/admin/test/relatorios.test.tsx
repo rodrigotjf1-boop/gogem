@@ -47,11 +47,12 @@ const PRODUTOS = [
   { codigoPdv: 'B', nome: 'Batata', quantidade: 4, pedidos: 4 },
 ];
 
-function baseHandlers() {
+function baseHandlers(cancelamento = { noPainel: true, mensagem: null as string | null }) {
   server.use(
     http.get(`${API}/relatorios/resumo`, () => HttpResponse.json(RESUMO)),
     http.get(`${API}/relatorios/pedidos`, () => HttpResponse.json(PEDIDOS)),
     http.get(`${API}/relatorios/produtos`, () => HttpResponse.json(PRODUTOS)),
+    http.get(`${API}/relatorios/cancelamento`, () => HttpResponse.json(cancelamento)),
   );
 }
 
@@ -143,46 +144,39 @@ describe('Relatórios', () => {
   });
 });
 
-// ERR-016 — cancelar pelo painel agora passa pelo Regem; a tela diz o que aconteceu lá.
-describe('Relatórios — cancelamento e o Regem', () => {
-  it('Regem sem a rota: cancela, estorna e AVISA para cancelar no Regem', async () => {
-    baseHandlers();
-    server.use(
-      http.post(`${API}/relatorios/pedidos/:id/cancelar`, ({ params }) =>
-        HttpResponse.json({
-          status: 'cancelado',
-          pedidoId: String(params.id),
-          estorno: { feito: true, meio: 'credito', valorCentavos: 3000, mensagem: '' },
-          regem: {
-            avisado: false,
-            mensagem:
-              'O Regem desta loja ainda não recebe o cancelamento pelo GoGeM: cancele a venda também no Regem.',
-          },
-        }),
-      ),
-    );
+// ERR-016 — decisão do dono (25/09/2026): com o Regem ATIVO, o cancelamento é feito no
+// Regem (ele avisa o GoGeM, que estorna). O painel não oferece o botão e diz por quê.
+describe('Relatórios — cancelamento com o Regem ativo', () => {
+  it('loja integrada: sem botão de cancelar, e a tela explica onde cancelar', async () => {
+    baseHandlers({
+      noPainel: false,
+      mensagem:
+        'Loja integrada ao Regem: o cancelamento é feito no Regem, que avisa o GoGeM para estornar o cartão/PIX.',
+    });
     montar('gerente');
 
-    fireEvent.click(await screen.findByRole('button', { name: /Cancelar pedido/ }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar cancelamento' }));
-
-    expect(await within(dialog).findByTestId('aviso-regem')).toHaveTextContent(
-      'cancele a venda também no Regem',
-    );
+    expect(
+      await screen.findByText(/o cancelamento é feito no Regem/),
+    ).toBeInTheDocument();
+    // A tabela carregou (o pedido aparece), mas sem a ação.
+    expect(await screen.findByText('Ana')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Cancelar pedido/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it('Regem RECUSA: mostra o motivo real (e não um erro genérico)', async () => {
+  it('recusa do servidor (409) aparece com o motivo real, não um erro genérico', async () => {
+    // A tela carregou antes de a integração ser ligada: o botão aparece, o servidor recusa.
     baseHandlers();
     server.use(
       http.post(`${API}/relatorios/pedidos/:id/cancelar`, () =>
         HttpResponse.json(
           {
-            statusCode: 422,
+            statusCode: 409,
             message:
-              'O Regem não cancelou a venda: Pedido já cobrado no caixa. Nada foi estornado — resolva no Regem.',
+              'Loja integrada ao Regem: o cancelamento é feito no Regem, que avisa o GoGeM para estornar o cartão/PIX.',
           },
-          { status: 422 },
+          { status: 409 },
         ),
       ),
     );
@@ -193,7 +187,7 @@ describe('Relatórios — cancelamento e o Regem', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Confirmar cancelamento' }));
 
     expect(
-      await within(dialog).findByText(/Pedido já cobrado no caixa/),
+      await within(dialog).findByText(/o cancelamento é feito no Regem/),
     ).toBeInTheDocument();
   });
 });

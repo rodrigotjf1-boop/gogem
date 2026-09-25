@@ -13,7 +13,10 @@ function makeService() {
     dispositivo: { findMany: vi.fn() },
     produto: { findMany: vi.fn() },
   };
-  const cancelamento = { cancelarPeloPainel: vi.fn() };
+  const cancelamento = {
+    cancelarPeloPainel: vi.fn(),
+    regraCancelamento: vi.fn(),
+  };
   const service = new RelatorioService(
     prisma as unknown as PrismaService,
     cancelamento as unknown as import('../src/pagamentos/cancelamento.service').CancelamentoService,
@@ -125,6 +128,18 @@ describe('RelatorioService', () => {
     );
     expect(res.status).toBe('cancelado');
     expect(res.estorno.feito).toBe(true);
+  });
+
+  it('regraCancelamento repassa a regra do serviço (o painel esconde o botão por ela)', async () => {
+    const { service, cancelamento } = makeService();
+    cancelamento.regraCancelamento.mockResolvedValue({
+      noPainel: false,
+      mensagem: 'Loja integrada ao Regem',
+    });
+    expect(await service.regraCancelamento()).toEqual({
+      noPainel: false,
+      mensagem: 'Loja integrada ao Regem',
+    });
   });
 
   it('porPagamento agrupa por forma·bandeira e soma os valores', async () => {

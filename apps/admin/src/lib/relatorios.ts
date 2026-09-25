@@ -133,20 +133,27 @@ export interface EstornoResultado {
   mensagem: string;
 }
 
-/** O que o Regem fez com a venda cancelada pelo painel (loja integrada). */
-export interface AvisoRegem {
-  avisado: boolean;
-  notaCancelada?: boolean;
-  cancelamentoPendente?: boolean;
-  mensagem: string;
-}
-
 export interface CancelamentoResultado {
   status: 'cancelado';
-  pedidoId: string;
+  pedidoId: string | null;
   estorno: EstornoResultado;
-  /** Ausente em loja sem Regem (e em API antiga). */
-  regem?: AvisoRegem;
+}
+
+/**
+ * O painel pode cancelar pedidos desta loja? Com o Regem ATIVO, não: o cancelamento é
+ * feito no Regem, que avisa o GoGeM para estornar (decisão do dono, 25/09/2026). A regra
+ * é do servidor — a tela só esconde o botão e explica.
+ */
+export interface RegraCancelamento {
+  noPainel: boolean;
+  mensagem: string | null;
+}
+
+export function useRegraCancelamento() {
+  return useQuery({
+    queryKey: ['relatorios', 'cancelamento'],
+    queryFn: () => apiGet<RegraCancelamento>('/relatorios/cancelamento'),
+  });
 }
 
 export function useCancelarPedido() {

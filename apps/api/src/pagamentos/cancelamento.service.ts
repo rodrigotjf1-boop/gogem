@@ -1,18 +1,15 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditoriaService } from '../auditoria/auditoria.service';
-import {
-  RegemRecusouError,
-  RegemSalesClient,
-} from '../integracoes/regem/regem-sales.client';
+import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
 import { PspResolver } from './psp/psp-resolver';
 
 /** Detalhe do estorno (para o Regem imprimir a comanda / o admin exibir). */
@@ -27,22 +24,31 @@ export interface EstornoResultado {
   mensagem: string;
 }
 
-/** O que o Regem disse do cancelamento feito pelo painel (ERR-016). */
-export interface AvisoRegem {
-  /** true = o Regem desfez a venda (ou não a conhecia); false = o operador cancela lá. */
-  avisado: boolean;
-  notaCancelada?: boolean;
-  cancelamentoPendente?: boolean;
-  mensagem: string;
-}
-
 export interface CancelamentoResultado {
   status: 'cancelado';
-  pedidoId: string;
+  /**
+   * `null` = servidor da loja sem pagamento eletrônico na nuvem (nada a estornar nem a
+   * registrar aqui).
+   */
+  pedidoId: string | null;
   estorno: EstornoResultado;
-  /** Só no cancelamento pelo painel de loja integrada ao Regem. */
-  regem?: AvisoRegem;
 }
+
+/** O painel do GoGeM pode cancelar os pedidos desta loja? */
+export interface RegraCancelamento {
+  noPainel: boolean;
+  /** Por que não (vai na tela e na recusa da rota). */
+  mensagem: string | null;
+}
+
+/**
+ * Decisão do dono (25/09/2026): com a integração do Regem ATIVA, cancelamento é feito NO
+ * REGEM. O Regem desfaz a venda (caixa, estoque, cozinha, nota) e avisa o GoGeM em
+ * `POST /sync/regem/pedido-cancelado`, que estorna o cartão/PIX. Cancelar pelo painel do
+ * GoGeM devolvia o dinheiro e deixava a venda valendo no Regem (ERR-016).
+ */
+export const MSG_CANCELAMENTO_NO_REGEM =
+  'Loja integrada ao Regem: o cancelamento é feito no Regem, que avisa o GoGeM para estornar o cartão/PIX.';
 
 function jaEstornado(meio: string, valorCentavos: number): EstornoResultado {
   return {
@@ -108,10 +114,10 @@ export class CancelamentoService {
     private readonly prisma: PrismaService,
     private readonly psp: PspResolver,
     private readonly auditoria: AuditoriaService,
-    private readonly regem: RegemSalesClient,
+    private readonly regem: RegemConfigResolver,
   ) {}
 
-  /** Cancela por id do Pedido (sem avisar o Regem — ver `cancelarPeloPainel`). */
+  /** Cancela por id do Pedido (sem regra de integração — ver `cancelarPeloPainel`). */
   async cancelarPorId(
     id: string,
     motivo: string,
@@ -123,79 +129,42 @@ export class CancelamentoService {
   }
 
   /**
-   * Cancelamento pelo PAINEL (relatórios): o Regem desfaz a venda PRIMEIRO, e só então o
-   * dinheiro volta ao cliente (ERR-016). Antes o painel estornava e o Regem seguia com a
-   * venda valendo — faturamento, estoque e caixa de uma venda que não existia mais.
-   *  - Regem recusa (nota fora do prazo, pedido já cobrado no caixa) → 422 com o motivo,
-   *    NADA estornado: o operador resolve no Regem;
-   *  - Regem fora do ar → 503, nada estornado;
-   *  - Regem sem a rota (versão antiga) → cancela e estorna aqui, e avisa o operador para
-   *    cancelar também no Regem (o comportamento de antes, agora dito na tela).
+   * A regra do cancelamento pelo painel. "Integrada" é o mesmo critério da venda e da
+   * publicação: a loja cujas vendas vão para o Regem (o resolver acha a configuração).
+   */
+  async regraCancelamento(): Promise<RegraCancelamento> {
+    const integrada = await this.regem.resolve().then(
+      () => true,
+      () => false,
+    );
+    return integrada
+      ? { noPainel: false, mensagem: MSG_CANCELAMENTO_NO_REGEM }
+      : { noPainel: true, mensagem: null };
+  }
+
+  /**
+   * Cancelamento pelo PAINEL (relatórios). Loja integrada ao Regem → 409: cancela-se no
+   * Regem (ERR-016). A regra mora AQUI — o painel só esconde o botão.
    */
   async cancelarPeloPainel(
     id: string,
     motivo: string,
   ): Promise<CancelamentoResultado> {
-    const pedido = await this.prisma.pedido.findFirst({ where: { id } });
-    if (!pedido) throw new NotFoundException('Pedido não encontrado.');
-    if (pedido.status === 'cancelado') {
-      return this.executar(pedido, motivo, 'admin');
-    }
-    const regem = await this.avisarRegem(pedido.idempotencyKey, motivo);
-    const r = await this.executar(pedido, motivo, 'admin');
-    return regem ? { ...r, regem } : r;
+    const regra = await this.regraCancelamento();
+    if (!regra.noPainel) throw new ConflictException(regra.mensagem);
+    return this.cancelarPorId(id, motivo, 'admin');
   }
 
-  private async avisarRegem(
-    idempotencyKey: string,
-    motivo: string,
-  ): Promise<AvisoRegem | undefined> {
-    let r: Awaited<ReturnType<RegemSalesClient['cancelarVendaExterna']>>;
-    try {
-      r = await this.regem.cancelarVendaExterna({
-        idempotencyKey,
-        motivo: `Cancelado no painel do GoGeM: ${motivo}`.slice(0, 255),
-      });
-    } catch (err) {
-      if (err instanceof RegemRecusouError) {
-        throw new UnprocessableEntityException(
-          `O Regem não cancelou a venda: ${err.motivo}. Nada foi estornado — resolva no Regem.`,
-        );
-      }
-      const m = err instanceof Error ? err.message : String(err);
-      this.logger.warn(
-        `Cancelamento no Regem falhou (${idempotencyKey}): ${m}`,
-      );
-      throw new ServiceUnavailableException(
-        'O sistema da loja (Regem) não respondeu. Nada foi cancelado nem estornado — tente de novo em instantes.',
-      );
-    }
-    switch (r.status) {
-      case 'sem_integracao':
-        return undefined;
-      case 'rota_ausente':
-        return {
-          avisado: false,
-          mensagem:
-            'O Regem desta loja ainda não recebe o cancelamento pelo GoGeM: cancele a venda também no Regem.',
-        };
-      case 'cancelada':
-        return {
-          avisado: true,
-          notaCancelada: r.notaCancelada,
-          cancelamentoPendente: r.cancelamentoPendente,
-          mensagem: !r.encontrada
-            ? 'O Regem não tinha esta venda — nada a desfazer lá.'
-            : r.cancelamentoPendente
-              ? 'Venda desfeita no Regem; a NFC-e será cancelada assim que a SEFAZ autorizar a contingência.'
-              : r.notaCancelada
-                ? 'Venda desfeita no Regem e NFC-e cancelada.'
-                : 'Venda desfeita no Regem.',
-        };
-    }
-  }
-
-  /** Cancela por idempotencyKey (ou regemComandaId) — inbound do Regem. */
+  /**
+   * Cancela por idempotencyKey (ou regemComandaId) — o cancelamento feito NO REGEM
+   * (`POST /sync/regem/pedido-cancelado`).
+   *
+   * No servidor da loja a nuvem não tem o pedido (a venda mora no Regem da loja), só o
+   * PAGAMENTO: aí o estorno vai pelo `orderId` (= idempotencyKey) e o pedido nasce aqui já
+   * cancelado, para o relatório. Antes esse caso respondia 404 e o cartão não era estornado
+   * (ERR-026). Sem pagamento eletrônico na nuvem, responde com `feito: false` — nada a
+   * estornar aqui (dinheiro devolve-se no balcão).
+   */
   async cancelarPorChave(
     chave: { idempotencyKey?: string; regemComandaId?: string },
     motivo: string,
@@ -212,8 +181,13 @@ export class CancelamentoService {
       );
     }
     const pedido = await this.prisma.pedido.findFirst({ where });
-    if (!pedido) throw new NotFoundException('Pedido não encontrado.');
-    return this.executar(pedido, motivo, origem);
+    if (pedido) return this.executar(pedido, motivo, origem);
+    // Só pela comanda do Regem não há como achar o pagamento: é a chave do totem que o liga.
+    if (!chave.idempotencyKey) {
+      throw new NotFoundException('Pedido não encontrado.');
+    }
+    const r = await this.estornarPorOrder(chave.idempotencyKey, motivo, origem);
+    return { status: 'cancelado', pedidoId: r.pedidoId, estorno: r.estorno };
   }
 
   /**

@@ -11,6 +11,7 @@ import { formatarBRL } from '@/lib/money';
 import {
   useCancelarPedido,
   usePedidos,
+  useRegraCancelamento,
   useProdutos,
   useRelatorioHorarios,
   useRelatorioPagamentos,
@@ -271,6 +272,10 @@ function PedidosTabela({
   const podeEscrever = usePodeEscrever();
   const { data, isLoading, isError, refetch } = usePedidos({ de, ate, status });
   const [cancelando, setCancelando] = React.useState<PedidoRelatorio | null>(null);
+  // Loja integrada ao Regem cancela NO REGEM (ERR-016): sem botão aqui, com o porquê.
+  // Enquanto a regra carrega, o botão não aparece — antes sobrar do que cancelar errado.
+  const regra = useRegraCancelamento();
+  const podeCancelar = podeEscrever && regra.data?.noPainel === true;
 
   if (isLoading) return <Carregando texto="Carregando pedidos…" />;
   if (isError) return <ErroBloco onRetry={() => refetch()} />;
@@ -285,6 +290,14 @@ function PedidosTabela({
 
   return (
     <>
+      {podeEscrever && regra.data?.noPainel === false && (
+        <p
+          role="note"
+          className="mb-3 rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground"
+        >
+          {regra.data.mensagem}
+        </p>
+      )}
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <caption className="sr-only">Pedidos do período</caption>
@@ -297,7 +310,7 @@ function PedidosTabela({
               <th className="px-4 py-2 font-medium">Pagamento</th>
               <th className="px-4 py-2 text-right font-medium">Total</th>
               <th className="px-4 py-2 font-medium">Status</th>
-              {podeEscrever && <th className="px-4 py-2 text-right font-medium">Ações</th>}
+              {podeCancelar && <th className="px-4 py-2 text-right font-medium">Ações</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -331,7 +344,7 @@ function PedidosTabela({
                 <td className="px-4 py-2">
                   <StatusBadge status={p.status} motivo={p.canceladoMotivo} />
                 </td>
-                {podeEscrever && (
+                {podeCancelar && (
                   <td className="px-4 py-2 text-right">
                     {p.status === 'enviado' && (
                       <Button
@@ -663,18 +676,6 @@ function CancelarDialog({
             {resultado.estorno?.mensagem && (
               <p className="mt-1 text-xs text-muted-foreground">
                 {resultado.estorno.mensagem}
-              </p>
-            )}
-            {resultado.regem && (
-              <p
-                data-testid="aviso-regem"
-                className={
-                  resultado.regem.avisado
-                    ? 'mt-2 text-emerald-600'
-                    : 'mt-2 font-medium text-amber-600'
-                }
-              >
-                {resultado.regem.mensagem}
               </p>
             )}
           </div>

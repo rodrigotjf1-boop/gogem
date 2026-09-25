@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -7,10 +8,7 @@ import {
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { PspResolver } from '../src/pagamentos/psp/psp-resolver';
 import type { AuditoriaService } from '../src/auditoria/auditoria.service';
-import {
-  RegemRecusouError,
-  type RegemSalesClient,
-} from '../src/integracoes/regem/regem-sales.client';
+import type { RegemConfigResolver } from '../src/integracoes/regem/regem-config.resolver';
 
 function makeService() {
   const prisma = {
@@ -31,16 +29,15 @@ function makeService() {
   const gw = { reembolsar: vi.fn() };
   const psp = { resolver: vi.fn().mockResolvedValue(gw) };
   const auditoria = { registrar: vi.fn() };
+  // Loja SEM Regem por padrão (o resolver não acha configuração).
   const regem = {
-    cancelarVendaExterna: vi
-      .fn()
-      .mockResolvedValue({ status: 'sem_integracao' }),
+    resolve: vi.fn().mockRejectedValue(new Error('sem integração')),
   };
   const service = new CancelamentoService(
     prisma as unknown as PrismaService,
     psp as unknown as PspResolver,
     auditoria as unknown as AuditoriaService,
-    regem as unknown as RegemSalesClient,
+    regem as unknown as RegemConfigResolver,
   );
   return { service, prisma, psp, gw, auditoria, regem };
 }
@@ -351,114 +348,142 @@ describe('CancelamentoService.estornarPorOrder — resultado fiscal do totem', (
   });
 });
 
-// ERR-016 — o painel estornava e o Regem seguia com a venda valendo (faturamento, estoque,
-// caixa de uma venda que não existia mais).
-describe('CancelamentoService.cancelarPeloPainel — o Regem desfaz antes do estorno', () => {
+// ERR-016 — decisão do dono (25/09/2026): com o Regem ATIVO, cancela-se no Regem. O painel
+// estornava e o Regem seguia com a venda valendo.
+describe('CancelamentoService — cancelamento pelo painel', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  const POINT = {
-    id: 'pp1',
-    status: 'approved',
-    paymentId: 'MP1',
-    tipo: 'credito',
-    amountCents: 3000,
-  };
-
-  it('Regem desfaz → estorna, cancela e mostra o que o Regem fez', async () => {
+  it('loja INTEGRADA ao Regem → 409 com o porquê, e NADA estornado nem cancelado', async () => {
     const { service, prisma, gw, regem } = makeService();
+    regem.resolve.mockResolvedValue({ base: 'https://regem', token: 't' });
     prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
-    prisma.pointPayment.findFirst.mockResolvedValue(POINT);
-    gw.reembolsar.mockResolvedValue({ refundId: 'R1', status: 'approved' });
-    regem.cancelarVendaExterna.mockResolvedValue({
-      status: 'cancelada',
-      encontrada: true,
-      jaCancelada: false,
-      notaCancelada: true,
-      cancelamentoPendente: false,
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      id: 'pp1',
+      status: 'approved',
+      paymentId: 'MP1',
+      tipo: 'credito',
+      amountCents: 3000,
     });
-
-    const r = await service.cancelarPeloPainel('ped1', 'cliente desistiu');
-
-    expect(regem.cancelarVendaExterna).toHaveBeenCalledWith({
-      idempotencyKey: 'idem1',
-      motivo: 'Cancelado no painel do GoGeM: cliente desistiu',
-    });
-    // A ordem importa: o Regem primeiro, o dinheiro depois.
-    expect(regem.cancelarVendaExterna.mock.invocationCallOrder[0]).toBeLessThan(
-      gw.reembolsar.mock.invocationCallOrder[0],
-    );
-    expect(r.estorno.feito).toBe(true);
-    expect(r.regem).toMatchObject({ avisado: true, notaCancelada: true });
-  });
-
-  it('Regem RECUSA (nota fora do prazo) → 422 com o motivo e NADA estornado', async () => {
-    const { service, prisma, gw, regem } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
-    prisma.pointPayment.findFirst.mockResolvedValue(POINT);
-    regem.cancelarVendaExterna.mockRejectedValue(
-      new RegemRecusouError(422, 'Prazo de cancelamento da NFC-e vencido', 'x'),
-    );
 
     const err = await service
       .cancelarPeloPainel('ped1', 'x')
       .catch((e: unknown) => e);
 
-    expect((err as { status: number }).status).toBe(422);
-    expect(String((err as Error).message)).toContain('Prazo de cancelamento');
-    expect(gw.reembolsar).not.toHaveBeenCalled();
-    expect(prisma.pedido.update).not.toHaveBeenCalled();
-  });
-
-  it('Regem FORA → 503 e nada cancelado nem estornado', async () => {
-    const { service, prisma, gw, regem } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
-    regem.cancelarVendaExterna.mockRejectedValue(new Error('ECONNREFUSED'));
-
-    await expect(service.cancelarPeloPainel('ped1', 'x')).rejects.toMatchObject(
-      {
-        status: 503,
-      },
+    expect((err as { status: number }).status).toBe(409);
+    expect(String((err as Error).message)).toContain(
+      'o cancelamento é feito no Regem',
     );
     expect(gw.reembolsar).not.toHaveBeenCalled();
     expect(prisma.pedido.update).not.toHaveBeenCalled();
   });
 
-  it('Regem sem a rota (versão antiga) → cancela e estorna aqui, e AVISA para cancelar lá', async () => {
-    const { service, prisma, gw, regem } = makeService();
+  it('loja SEM Regem → cancela e estorna pelo painel, como sempre', async () => {
+    const { service, prisma, gw } = makeService();
     prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
-    prisma.pointPayment.findFirst.mockResolvedValue(POINT);
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      id: 'pp1',
+      status: 'approved',
+      paymentId: 'MP1',
+      tipo: 'credito',
+      amountCents: 3000,
+    });
     gw.reembolsar.mockResolvedValue({ refundId: 'R1', status: 'approved' });
-    regem.cancelarVendaExterna.mockResolvedValue({ status: 'rota_ausente' });
 
-    const r = await service.cancelarPeloPainel('ped1', 'x');
+    const r = await service.cancelarPeloPainel('ped1', 'cliente desistiu');
 
     expect(r.estorno.feito).toBe(true);
-    expect(r.regem).toMatchObject({ avisado: false });
-    expect(r.regem?.mensagem).toContain('cancele a venda também no Regem');
-  });
-
-  it('loja sem Regem → cancela e estorna sem aviso nenhum', async () => {
-    const { service, prisma, regem } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
-
-    const r = await service.cancelarPeloPainel('ped1', 'x');
-
-    expect(regem.cancelarVendaExterna).toHaveBeenCalled();
-    expect(r.regem).toBeUndefined();
     expect(prisma.pedido.update.mock.calls.at(-1)?.[0].data.status).toBe(
       'cancelado',
     );
   });
 
-  it('pedido JÁ cancelado não chama o Regem de novo', async () => {
-    const { service, prisma, regem } = makeService();
-    prisma.pedido.findFirst.mockResolvedValue({
-      ...PEDIDO,
-      status: 'cancelado',
+  it('regraCancelamento diz à tela se o painel pode cancelar', async () => {
+    const semRegem = makeService();
+    expect(await semRegem.service.regraCancelamento()).toEqual({
+      noPainel: true,
+      mensagem: null,
     });
+    const comRegem = makeService();
+    comRegem.regem.resolve.mockResolvedValue({ base: 'b', token: 't' });
+    expect(await comRegem.service.regraCancelamento()).toMatchObject({
+      noPainel: false,
+    });
+  });
+});
 
-    await service.cancelarPeloPainel('ped1', 'x');
+// ERR-026 — no servidor da loja a nuvem não tem o pedido, só o pagamento: o cancelamento
+// feito no Regem respondia 404 e o cartão não era estornado.
+describe('CancelamentoService.cancelarPorChave — cancelamento vindo do Regem', () => {
+  beforeEach(() => vi.clearAllMocks());
 
-    expect(regem.cancelarVendaExterna).not.toHaveBeenCalled();
+  it('servidor da loja (sem pedido na nuvem) → estorna pelo pagamento e registra', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+    prisma.pointPayment.findFirst.mockResolvedValue({
+      id: 'pp9',
+      status: 'approved',
+      paymentId: 'MP9',
+      tipo: 'debito',
+      amountCents: 4200,
+      createdAt: new Date(),
+    });
+    gw.reembolsar.mockResolvedValue({ refundId: 'R9', status: 'approved' });
+
+    const r = await service.cancelarPorChave(
+      { idempotencyKey: 'uuid-9' },
+      'Cancelado no Regem: cliente desistiu',
+      'regem',
+    );
+
+    expect(gw.reembolsar).toHaveBeenCalledWith('MP9', 'refund_uuid-9');
+    expect(r).toMatchObject({
+      status: 'cancelado',
+      pedidoId: 'novo',
+      estorno: { feito: true, refundId: 'R9' },
+    });
+    expect(prisma.pedido.create.mock.calls[0][0].data).toMatchObject({
+      idempotencyKey: 'uuid-9',
+      status: 'cancelado',
+      canceladoMotivo: 'Cancelado no Regem: cliente desistiu',
+      totalCentavos: 4200,
+    });
+  });
+
+  it('sem pagamento eletrônico na nuvem → 200 com feito=false, sem inventar registro', async () => {
+    const { service, prisma, gw } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+
+    const r = await service.cancelarPorChave(
+      { idempotencyKey: 'uuid-din' },
+      'x',
+      'regem',
+    );
+
+    expect(gw.reembolsar).not.toHaveBeenCalled();
+    expect(prisma.pedido.create).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ pedidoId: null, estorno: { feito: false } });
+  });
+
+  it('só a comanda do Regem, sem pedido na nuvem → 404 (sem a chave não há como achar o pagamento)', async () => {
+    const { service, prisma } = makeService();
+    prisma.pedido.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.cancelarPorChave({ regemComandaId: 'cmd-1' }, 'x', 'regem'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('cancelamento vindo do Regem NÃO passa pela regra do painel (é o caminho certo)', async () => {
+    const { service, prisma, regem } = makeService();
+    regem.resolve.mockResolvedValue({ base: 'b', token: 't' });
+    prisma.pedido.findFirst.mockResolvedValue({ ...PEDIDO });
+
+    const r = await service.cancelarPorChave(
+      { idempotencyKey: 'idem1' },
+      'x',
+      'regem',
+    );
+
+    expect(r.status).toBe('cancelado');
   });
 });
