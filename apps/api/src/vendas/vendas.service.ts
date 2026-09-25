@@ -99,7 +99,7 @@ function erroParaTotem(err: unknown): Error {
  * VendasService — repasse da venda de totem ao Regem (issue #12.2).
  *
  * O totem fala SÓ com o GoGeM. Este serviço grava o `Pedido` (tenant-scoped) e
- * lança a venda no Regem (`RegemSalesClient`), guardando o `REGEM_SYNC_TOKEN`
+ * lança a venda no Regem (`RegemSalesClient`), guardando o token da integração
  * no servidor — o token do Regem não se espalha por totem.
  *
  * Idempotência dupla (CLAUDE.md §1):

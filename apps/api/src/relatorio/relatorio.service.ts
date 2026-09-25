@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { FUSO_LOJA, inicioDoDia, inicioDoMes } from '../common/fuso-loja';
 import {
   CancelamentoService,
   CancelamentoResultado,
@@ -106,19 +107,12 @@ export class RelatorioService {
     mesAtual: FaturamentoCard;
     mesAnterior: FaturamentoCard;
   }> {
-    const inicioHoje = new Date(
-      agora.getFullYear(),
-      agora.getMonth(),
-      agora.getDate(),
-    );
-    const inicioSemana = new Date(inicioHoje);
-    inicioSemana.setDate(inicioSemana.getDate() - 6);
-    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
-    const inicioMesAnterior = new Date(
-      agora.getFullYear(),
-      agora.getMonth() - 1,
-      1,
-    );
+    // Dia e mês da LOJA, não do servidor (que roda em UTC): calculado no fuso do servidor,
+    // o card "Hoje" zerava às 21h de Brasília (ERR-014).
+    const inicioHoje = inicioDoDia(agora);
+    const inicioSemana = inicioDoDia(agora, undefined, -6);
+    const inicioMes = inicioDoMes(agora);
+    const inicioMesAnterior = inicioDoMes(agora, undefined, -1);
     const fimMesAnterior = new Date(inicioMes.getTime() - 1);
 
     // As quatro somas são independentes: em paralelo, o resumo custa uma ida ao banco,
@@ -234,7 +228,7 @@ export class RelatorioService {
       select: { createdAt: true, totalCentavos: true },
     });
     const fmtHora = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Sao_Paulo',
+      timeZone: FUSO_LOJA,
       hour: '2-digit',
       hourCycle: 'h23',
     });

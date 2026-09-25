@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RegemConfigResolver } from './regem-config.resolver';
+import { CABECALHO_INTEGRADOR } from './integrador';
 
 /** Timeout da requisição de pausa ao Regem (ms). */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -38,6 +39,7 @@ export class RegemPauseClient {
         headers: {
           'X-Sync-Token': token,
           'X-Loja-Token': token,
+          ...CABECALHO_INTEGRADOR,
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },

@@ -197,3 +197,30 @@ describe('RelatorioService', () => {
     expect(out[23].pedidos).toBe(0); // 23h UTC não vira 23h local
   });
 });
+
+// ERR-014 — o resumo calculava "hoje" e "mês" no fuso do servidor (UTC): o card "Hoje"
+// zerava às 21h de Brasília.
+describe('RelatorioService.resumo — dia e mês da LOJA', () => {
+  it('às 22h30 do dia 24 (Brasília), "hoje" ainda é o dia 24', async () => {
+    const { service, prisma } = makeService();
+    prisma.pedido.aggregate.mockResolvedValue({
+      _sum: { totalCentavos: 0 },
+      _count: 0,
+    });
+
+    await service.resumo(new Date('2026-09-25T01:30:00Z'));
+
+    const inicios = prisma.pedido.aggregate.mock.calls.map((c) =>
+      (c[0].where.createdAt.gte as Date).toISOString(),
+    );
+    expect(inicios).toEqual([
+      '2026-09-24T03:00:00.000Z', // hoje
+      '2026-09-18T03:00:00.000Z', // 7 dias
+      '2026-09-01T03:00:00.000Z', // mês atual
+      '2026-08-01T03:00:00.000Z', // mês anterior
+    ]);
+    const fimMesAnterior = prisma.pedido.aggregate.mock.calls[3][0].where
+      .createdAt.lte as Date;
+    expect(fimMesAnterior.toISOString()).toBe('2026-09-01T02:59:59.999Z');
+  });
+});

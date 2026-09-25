@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CancelarPedidoDto } from './dto/cancelar-pedido.dto';
+import { periodo } from './periodo';
 import {
   RelatorioPedidosDto,
   RelatorioPeriodoDto,
@@ -74,11 +75,3 @@ export class RelatorioController {
 }
 
 /** Resolve o intervalo: usa de/ate quando válidos, senão o mês corrente. */
-function periodo(q: RelatorioPeriodoDto): { de: Date; ate: Date } {
-  const agora = new Date();
-  const de = q.de
-    ? new Date(q.de)
-    : new Date(agora.getFullYear(), agora.getMonth(), 1);
-  const ate = q.ate ? new Date(q.ate) : agora;
-  return { de, ate };
-}

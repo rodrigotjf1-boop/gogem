@@ -66,9 +66,13 @@ export interface FiltroRelatorio {
   status?: PedidoStatus;
 }
 
-/** Datas do input (dia) → limites ISO do intervalo (início e fim do dia). */
+/**
+ * Datas do input (dia) → o período que vai à API. Vai SÓ a data: quem sabe onde o dia começa é
+ * a API, no fuso da loja. Com `T00:00:00` sem fuso, a API (em UTC) lia meia-noite de UTC — o dia
+ * virava às 21h de Brasília (ERR-014).
+ */
 function intervalo(de: string, ate: string): { de: string; ate: string } {
-  return { de: `${de}T00:00:00`, ate: `${ate}T23:59:59` };
+  return { de, ate };
 }
 
 export function useResumo(): UseQueryResult<Resumo> {

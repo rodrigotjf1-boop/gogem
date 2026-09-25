@@ -695,9 +695,9 @@ model Pedido {
 // integração por tenant, com credenciais/parâmetros em `config` (Json). Os
 // segredos NUNCA voltam crus ao front — o service mascara (só diz se há valor).
 //
-// O conector Regem lê `config = { apiBase, token }` daqui (resolvido por tenant,
-// com fallback para as envs REGEM_API_BASE/REGEM_SYNC_TOKEN do piloto). Assim o
-// GoGeM deixa de ser mono-tenant (1 token global) e cada loja pareia a sua.
+// O conector Regem lê `config = { apiBase, token }` daqui (loja → empresa). Não há
+// fallback para envs globais (ERR-012): sem integração, a empresa não fala com o
+// Regem. Cada loja pareia a sua.
 model Integracao {
   id          String   @id @default(uuid())
   tenantId    String
