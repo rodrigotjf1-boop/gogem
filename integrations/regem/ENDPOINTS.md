@@ -264,20 +264,25 @@ No totem **a compra só termina com o cupom fiscal na mão do cliente**. A venda
 - **DANFE que não imprimiu:** servidor da loja → `POST /vendas/:pedidoId/falha-impressao
   {motivo}` → `{ok, notaCancelada, cancelamentoPendente}` (autorizada: 110111 na hora;
   contingência: cancelamento agendado para depois da autorização) → só com `ok:true` o totem
-  estorna. Nuvem → **não há rota** para desfazer a venda externa (lacuna — ver L-FIS-3): a venda
-  vale, o DANFE vai para a fila de reimpressão e a tela manda o cliente ao balcão.
+  estorna. Nuvem → o totem não desfaz a venda: ela vale, o DANFE vai para a fila de
+  reimpressão e a tela manda o cliente ao balcão.
+- **Cancelamento (decisão do dono, 25/09/2026):** com a integração do Regem ATIVA, cancela-se
+  **no Regem**, nunca no painel do GoGeM (que recusa com 409 e esconde o botão). O Regem desfaz a
+  venda e **avisa o GoGeM** em `POST /sync/regem/pedido-cancelado` (X-Sync-Token da integração)
+  com `{idempotencyKey, regemComandaId?, motivo}` → o GoGeM estorna o cartão/PIX e responde
+  `{status, pedidoId, estorno:{feito, meio, valorCentavos, refundId?, mensagem}}`. Funciona nos
+  dois modos: na nuvem cancela o pedido; no servidor da loja (a nuvem só tem o pagamento) estorna
+  pelo `idempotencyKey` e cria o pedido cancelado para o relatório. Idempotente. Sem
+  `idempotencyKey` e sem pedido na nuvem → 404 (não há como achar o pagamento).
 - **Recusa definitiva** (400/422: código PDV que não existe, soma que não fecha) → o totem
   estorna e tira a venda da fila; **falha passageira** (rede, 5xx, 503) → reenvia.
 
 ### LACUNAS fiscais
-- **L-FIS-3:** no modo nuvem não existe rota (X-Sync-Token) para o GoGeM desfazer uma venda
-  externa já lançada. *(pedido ao Regem por prompt, 24/09/2026)* Contrato proposto, que o GoGeM
-  **já chama** no cancelamento pelo painel: `POST /vendas/externa-pdv/cancelar
-  {idempotencyKey, motivo}` → 200 `{ok, encontrada, jaCancelada, notaCancelada,
-  cancelamentoPendente}`; venda desconhecida → 200 com `encontrada:false` (nunca 404 — no GoGeM
-  o 404 quer dizer "Regem sem a rota": ele cancela o lado dele e manda o operador cancelar no
-  Regem); recusa (nota fora do prazo, pedido já cobrado no caixa) → 422 com o motivo, e aí o
-  GoGeM NÃO estorna.
+- **L-FIS-3 (revista em 25/09/2026):** o Regem **não chama** `/sync/regem/pedido-cancelado`
+  quando uma venda do totem é cancelada lá — o cartão/PIX do cliente não é estornado (só o GoGeM
+  tem as credenciais do Mercado Pago). *(pedido ao Regem por prompt)* A rota
+  `POST /vendas/externa-pdv/cancelar`, proposta em 24/09, foi DESCARTADA: o cancelamento não
+  sai mais do GoGeM.
 - **L-FIS-1:** transmissão real SEFAZ (`SefazDireto`) — cert A1, assinatura, SOAP, por UF. *(G — fora do escopo do piloto se o totem operar em "modo sem fiscal" ou "fiscal no integrado/Regem")*
 - **L-FIS-2:** para o GoGeM emitir a partir de venda externa, `emitirSeAtivo` já cobre (dispara no `venderExterno`); falta só o CPF na nota (ligado à L-VEN-CPF).
 

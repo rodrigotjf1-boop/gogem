@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CancelamentoService,
   CancelamentoResultado,
+  type RegraCancelamento,
 } from '../pagamentos/cancelamento.service';
 
 /** Linha do relatório de pedidos. */
@@ -255,9 +256,14 @@ export class RelatorioService {
    * quando houver. Delega ao CancelamentoService (fonte única, mesma lógica do
    * cancelamento vindo do Regem). Devolve os detalhes do estorno para a UI.
    */
-  /** Cancelamento pelo painel: o Regem desfaz a venda antes do estorno (ERR-016). */
+  /** Cancelamento pelo painel — recusado em loja integrada ao Regem (ERR-016). */
   async cancelar(id: string, motivo: string): Promise<CancelamentoResultado> {
     return this.cancelamento.cancelarPeloPainel(id, motivo);
+  }
+
+  /** O painel pode cancelar? (a tela esconde o botão; a regra é do servidor.) */
+  regraCancelamento(): Promise<RegraCancelamento> {
+    return this.cancelamento.regraCancelamento();
   }
 
   // ── internos ──────────────────────────────────────────────────────────────

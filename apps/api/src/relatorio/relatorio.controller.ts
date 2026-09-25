@@ -60,6 +60,13 @@ export class RelatorioController {
     return this.service.porHorario(de, ate);
   }
 
+  // O painel pode cancelar? Loja integrada ao Regem cancela no Regem (ERR-016): a tela
+  // esconde o botão e mostra por quê; a recusa de verdade está no POST abaixo.
+  @Get('cancelamento')
+  regraCancelamento() {
+    return this.service.regraCancelamento();
+  }
+
   @Post('pedidos/:id/cancelar')
   cancelar(@Param('id') id: string, @Body() dto: CancelarPedidoDto) {
     return this.service.cancelar(id, dto.motivo);
