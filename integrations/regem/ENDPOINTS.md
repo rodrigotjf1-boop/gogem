@@ -32,6 +32,7 @@
 |---|---|
 | **Endpoint de token** | **LACUNA** (não há emissor OAuth M2M). O dispositivo é **provisionado**, não faz login. |
 | **Mecanismo recomendado** | **`X-Sync-Token`** (dispositivo `equipamento` tipo `servidor_local`). |
+| **Identificação do GoGeM** | Toda chamada do GoGeM ao Regem leva **`X-Integrador: gogem`** junto do `X-Sync-Token` (GoGeM #137, `integracoes/regem/integrador.ts`). Na nuvem, o `SyncTokenGuard` marca aquele equipamento como a credencial do GoGeM (Regem: mig 290, ERR-108), e é com o token MARCADO que o Regem chama o GoGeM de volta (`/sync/regem/pedido-cancelado`, `/sync/regem/publicar`). A marca nasce da chamada do catálogo (sync a cada 5 min e "Testar conexão"). Sem o cabeçalho, o Regem não sabe qual `servidor_local` é o do GoGeM e o aviso de cancelamento sai com outro token (401, ERR-027). Teste: `apps/api/test/regem-integrador.spec.ts`. |
 | **Guard** | `SyncTokenGuard` (`backend/src/modules/sync/sync-token.guard.ts:18`). Header `x-sync-token` → `equipamento.service.ts:254 validarToken` (match exato em `equipamento.token`, precisa `ativo`; coluna `unique`, `schema.ts:752`). |
 | **Escopo** | Nível-dispositivo, revogável. `req.sync = { tenantId, unidadeId, equipamentoId }` — **tenant derivado do dispositivo, não spoofável pelo body**. Injeta via `@SyncCtx()`. |
 | **Onde já é usado** | Telemetria/comandos do edge (`edge.controller.ts:83,109`), ingest de pedidos (`delivery.controller.ts:29`), resultado de TEF (`tef.controller.ts:86`), handshake do Socket.IO. |
