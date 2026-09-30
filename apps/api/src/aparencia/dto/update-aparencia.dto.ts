@@ -13,6 +13,18 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+/** Estilos do totem aceitos (docs/templates/00 §3.7). */
+export const TEMAS_TOTEM = [
+  'brasa',
+  'gogen',
+  'burger',
+  'brasa2',
+  'vitrine',
+  'estudio',
+  'neon',
+  'diner',
+];
+
 /** Uma mídia da tela de descanso (imagem/gif/vídeo curto) + legendas (F3). */
 export class DescansoMidiaDto {
   @IsString()
@@ -70,9 +82,13 @@ export class UpdateAparenciaDto {
   @IsIn(['Tektur', 'Poppins', 'Montserrat'])
   fonteDisplay?: string;
 
-  @ApiPropertyOptional({ enum: ['padrao', 'brasa', 'burger', 'gogen'] })
+  /**
+   * Estilo do totem. 'padrao' saiu (as lojas nele foram para o GoGen); 'burger' ainda é
+   * aceito até a migração das lojas para o Brasa 2.0, depois do APK novo.
+   */
+  @ApiPropertyOptional({ enum: TEMAS_TOTEM })
   @IsOptional()
-  @IsIn(['padrao', 'brasa', 'burger', 'gogen'])
+  @IsIn(TEMAS_TOTEM)
   temaPreset?: string;
 
   @ApiPropertyOptional({ enum: ['padrao', 'carrossel'] })

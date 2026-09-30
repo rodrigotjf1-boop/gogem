@@ -7,6 +7,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../../domain/order/cart.dart';
 import '../gogen/gogen_carrinho.dart';
+import '../templates/kiosk_template.dart';
 
 class CarrinhoScreen extends ConsumerWidget {
   const CarrinhoScreen({super.key});
@@ -16,6 +17,8 @@ class CarrinhoScreen extends ConsumerWidget {
     final cart = ref.watch(cartProvider);
     final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
     if (ap.gogen) return const GogenCarrinhoScreen();
+    final tpl = templateDe(ap);
+    if (tpl != null) return tpl.carrinho();
     return Scaffold(
       body: SafeArea(
         child: Column(children: [

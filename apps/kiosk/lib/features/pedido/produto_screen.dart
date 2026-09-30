@@ -8,6 +8,8 @@ import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../catalogo/produto_imagem.dart';
 import '../gogen/gogen_produto.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/providers.dart';
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
 
@@ -79,6 +81,22 @@ class _ProdutoScreenState extends ConsumerState<ProdutoScreen> {
         onAdicionar: adicionar,
         onVoltar: () => context.pop(),
       );
+    }
+    final tpl = templateDe(ap);
+    if (tpl != null) {
+      return tpl.produto(ProdutoProps(
+        produto: p,
+        selecoes: _sel,
+        qtd: _qtd,
+        valido: valido,
+        totalCentavos: unit * _qtd,
+        onToggle: _toggle,
+        onMenos: () => setState(() => _qtd = _qtd > 1 ? _qtd - 1 : 1),
+        onMais: () => setState(() => _qtd++),
+        onAdicionar: adicionar,
+        onVoltar: () => context.pop(),
+        mov: ref.watch(movimentoProvider),
+      ));
     }
 
     return Scaffold(

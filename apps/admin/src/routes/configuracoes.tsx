@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { usePodeEscrever } from '@/auth/auth-context';
 import { mensagemDeErro } from '@/lib/publicacao';
 import {
+  estilosDoTotem,
+  ROTULO_ESTILO,
   useAparencia,
   useSalvarAparencia,
   type Aparencia,
@@ -18,7 +20,7 @@ import {
 /**
  * Paletas recomendadas por preset ("estilo do totem"). Escolher um preset com
  * paleta aplica a cara completa em 1 clique (o lojista ainda pode ajustar as
- * cores depois). 'padrao'/'brasa' não forçam paleta (mantêm o que o lojista tem).
+ * cores depois). 'brasa' e 'gogen' não forçam paleta (o GoGen tem a dele).
  */
 const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>> =
   {
@@ -151,13 +153,8 @@ export default function ConfiguracoesPage() {
             <SelectField
               label="Estilo do totem"
               value={form.temaPreset}
-              options={['padrao', 'brasa', 'burger', 'gogen']}
-              rotulos={{
-                padrao: 'Padrão GoGeM',
-                brasa: 'Brasa (steakhouse)',
-                burger: 'Burger House (hambúrguer)',
-                gogen: 'GoGen (roleta / flame)',
-              }}
+              options={estilosDoTotem(form.temaPreset)}
+              rotulos={ROTULO_ESTILO}
               onChange={(v) =>
                 aplicarPreset(v as Aparencia['temaPreset'])
               }

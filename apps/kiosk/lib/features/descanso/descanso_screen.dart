@@ -10,7 +10,12 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../../data/update/updater.dart';
 import '../../widgets/gogem_robot.dart';
+import '../../data/catalog/catalog_models.dart';
+import '../../domain/order/cart.dart';
 import '../gogen/gogen_standby.dart';
+import '../templates/comum/catalogo_dados.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/movimento.dart';
 
 /// Throttle do auto-update: checa no máximo 1x a cada 3h (a tela de descanso
 /// monta várias vezes ao dia; não queremos bater na API a cada retorno ao idle).
@@ -64,6 +69,15 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
     }
   }
 
+  static bool _noCantoAdmin(Offset p) => p.dx < 96 && p.dy < 96;
+
+  /// Começa o pedido com o consumo escolhido no descanso (templates: Comer aqui / Para levar).
+  void _iniciar(String consumo, {required bool bloqueado}) {
+    if (bloqueado) return;
+    ref.read(checkoutProvider.notifier).setConsumo(consumo);
+    context.go('/catalogo');
+  }
+
   @override
   Widget build(BuildContext context) {
     final saude = ref.watch(printerHealthProvider);
@@ -76,17 +90,27 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
     final anima = !ap.semAnimacao;
     // PORTÃO 1 — descanso: sem papel/tampa/offline => totem fora de operação.
     final bloqueado = !saude.prontaParaVenda && saude.ultimaChecagem != null;
+    final tpl = ap.gogen ? null : templateDe(ap);
 
     return Scaffold(
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTapDown: (d) {
-          if (d.localPosition.dx < 96 && d.localPosition.dy < 96) {
+          if (_noCantoAdmin(d.localPosition)) {
             _tapAdminCorner();
             return;
           }
-          if (!bloqueado) context.go('/catalogo');
+          // Com template, quem começa é o toque que SOBE (abaixo): assim os botões
+          // "Comer aqui"/"Para levar" do template ganham o toque sem disputa.
+          if (tpl == null && !bloqueado) context.go('/catalogo');
         },
+        // Template: toque no fundo (fora dos botões) começa "Comer aqui", como hoje.
+        onTapUp: tpl == null
+            ? null
+            : (d) {
+                if (_noCantoAdmin(d.localPosition)) return;
+                _iniciar('local', bloqueado: bloqueado);
+              },
         child: Stack(children: [
           // Template GoGen: atrator próprio (flame + brasas + ticker). Substitui
           // fundo+marca+chamada; os PORTÕES abaixo (near-end/bloqueado) seguem.
@@ -100,6 +124,24 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
                 anima: anima,
                 particulas: caps.enableParticles,
               ),
+            )
+          else if (tpl != null)
+            Positioned.fill(
+              child: tpl.descanso(DescansoProps(
+                nomeLoja: ap.nomeLoja,
+                logoUrl: ap.logoUrl,
+                chamada: ap.chamada,
+                precoIsca: ap.precoIsca,
+                midias: [
+                  for (final m in ap.descansoMidias)
+                    if (m.url.isNotEmpty) m
+                ],
+                intervaloSeg: ap.descansoIntervaloSeg,
+                destaques: _destaques(),
+                mov: Movimento.de(ap, capsHw),
+                bloqueado: bloqueado,
+                onIniciar: (consumo) => _iniciar(consumo, bloqueado: bloqueado),
+              )),
             )
           else ...[
             // Fundo: carrossel da loja OU o robô/branding padrão.
@@ -180,6 +222,14 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
         ]),
       ),
     );
+  }
+}
+
+extension on _DescansoScreenState {
+  /// Produtos em destaque do cardápio (arte padrão do descanso dos templates).
+  List<Produto> _destaques() {
+    final snap = ref.watch(menuProvider).valueOrNull;
+    return snap == null ? const [] : CatalogoDados.de(snap).destaques;
   }
 }
 

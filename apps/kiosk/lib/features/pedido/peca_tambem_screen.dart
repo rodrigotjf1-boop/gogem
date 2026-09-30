@@ -8,7 +8,10 @@ import '../../data/catalog/catalog_models.dart';
 import '../../data/catalog/catalog_sync.dart' show menuProvider, aparenciaProvider;
 import '../../domain/order/cart.dart';
 import '../../domain/order/order_models.dart';
+import '../../domain/order/sugestoes.dart';
 import '../gogen/gogen_peca_tambem.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/providers.dart';
 
 /// "Peça também" (F2): entre o carrinho e a identificação, sugere produtos
 /// configurados (upsell) nos itens do carrinho. Sem sugestões → segue direto.
@@ -25,28 +28,13 @@ class _PecaTambemScreenState extends ConsumerState<PecaTambemScreen> {
   // "vazio desde o início" (pula) de "esvaziou após adicionar" (mostra ok).
   bool? _inicialTinha;
 
-  /// Upsell agregado dos itens do carrinho: na ordem, único, disponível e que
-  /// ainda não está no carrinho.
-  List<Produto> _sugeridos(MenuSnapshot snap) {
-    final noCarrinho =
-        ref.read(cartProvider).itens.map((i) => i.produto.id).toSet();
-    final vistos = <String>{};
-    final out = <Produto>[];
-    for (final item in ref.read(cartProvider).itens) {
-      for (final id in item.produto.upsell) {
-        if (!vistos.add(id) || noCarrinho.contains(id)) continue;
-        final p = snap.porId(id);
-        if (p != null && p.disponivel) out.add(p);
-      }
-    }
-    return out;
-  }
-
-  bool _temEtapaObrigatoria(Produto p) =>
-      p.grupos.any((g) => minEfetivo(g) > 0);
+  /// Upsell agregado dos itens do carrinho (a mesma regra do bloco "Combina com seu pedido"
+  /// dos templates — `domain/order/sugestoes.dart`).
+  List<Produto> _sugeridos(MenuSnapshot snap) =>
+      sugestoesUpsell(ref.read(cartProvider).itens, snap);
 
   void _adicionar(Produto p) {
-    if (_temEtapaObrigatoria(p)) {
+    if (temEtapaObrigatoria(p)) {
       // Precisa escolher complementos: abre a tela do produto.
       context.go('/produto/${p.id}');
       return;
@@ -94,6 +82,16 @@ class _PecaTambemScreenState extends ConsumerState<PecaTambemScreen> {
         onVoltar: () => context.go('/carrinho'),
         onContinuar: () => context.go('/identificacao'),
       );
+    }
+    final tpl = templateDe(ap);
+    if (tpl != null) {
+      return tpl.pecaTambem(PecaTambemProps(
+        sugeridos: sugeridos,
+        onAdicionar: _adicionar,
+        onVoltar: () => context.go('/carrinho'),
+        onContinuar: () => context.go('/identificacao'),
+        mov: ref.watch(movimentoProvider),
+      ));
     }
 
     return Scaffold(
