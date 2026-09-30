@@ -40,6 +40,14 @@ const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>
       corPainel: '#1E1815',
       raio: 22,
     },
+    // docs/templates/02-vitrine.md §9
+    vitrine: {
+      corPrimaria: '#FF5B2E',
+      corDestaque: '#FFD23F',
+      corFundo: '#0A0A0A',
+      corPainel: '#181818',
+      raio: 32,
+    },
     // docs/templates/04-neon-2.md §9
     neon: {
       corPrimaria: '#C8FF2E',

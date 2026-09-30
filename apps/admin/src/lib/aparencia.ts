@@ -79,6 +79,7 @@ export const ESTILOS_TOTEM: Aparencia['temaPreset'][] = [
   'brasa',
   'gogen',
   'brasa2',
+  'vitrine',
   'neon',
   'diner',
 ];
