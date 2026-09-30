@@ -48,6 +48,15 @@ const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>
       corPainel: '#181818',
       raio: 32,
     },
+    // docs/templates/03-estudio.md §9. Paleta clara: no totem, as telas sem versão do
+    // template ficam no tema escuro padrão (temaDoApp no app).
+    estudio: {
+      corPrimaria: '#2F55F4',
+      corDestaque: '#FFC83D',
+      corFundo: '#EEF1F5',
+      corPainel: '#FFFFFF',
+      raio: 28,
+    },
     // docs/templates/04-neon-2.md §9
     neon: {
       corPrimaria: '#C8FF2E',
