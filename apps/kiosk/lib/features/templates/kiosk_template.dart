@@ -6,6 +6,7 @@ import 'diner/diner_template.dart';
 import 'movimento.dart';
 import 'neon/neon_template.dart';
 import 'template_tokens.dart';
+import 'vitrine/vitrine_template.dart';
 
 /// Contrato de APRESENTAÇÃO de um template do totem (docs/templates/00 §3.2).
 ///
@@ -39,6 +40,7 @@ const Map<String, KioskTemplate> _registro = {
   'brasa2': Brasa2Template(),
   'neon': NeonTemplate(),
   'diner': DinerTemplate(),
+  'vitrine': VitrineTemplate(),
 };
 
 Map<String, KioskTemplate>? _registroDeTeste;
