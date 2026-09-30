@@ -12,6 +12,7 @@ import 'data/catalog/aparencia.dart';
 import 'data/catalog/catalog_sync.dart';
 import 'data/update/updater.dart';
 import 'domain/order/venda_sync.dart';
+import 'features/templates/kiosk_template.dart';
 
 /// Modo quiosque (fixa a tela no Android). Ligado por padrão; nos builds de
 /// TESTE (celular) sai com `--dart-define=GOGEM_KIOSK_LOCK=false`.
@@ -61,7 +62,7 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
     return MaterialApp.router(
       title: 'GoGeM',
       debugShowCheckedModeBanner: false,
-      theme: temaDe(ap),
+      theme: temaDoApp(ap),
       routerConfig: router,
       // Idle inteligente (F4): sem toque por 90s no meio de um pedido → volta
       // ao descanso e limpa carrinho/checkout (o próximo cliente começa do
@@ -75,3 +76,12 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
     );
   }
 }
+
+/// Tema das telas SEM versão do template (admin do totem, pareamento, carregando).
+///
+/// Com um template novo ativo (docs/templates), essas telas ficam no tema escuro padrão do
+/// GoGeM: os templates desenham com as cores próprias, e a paleta recomendada deles pode ser
+/// CLARA (Estúdio, Diner 58) — o texto claro das telas do operador ficaria ilegível sobre o
+/// fundo claro (docs/templates/03-estudio.md §9). Sem template, vale a aparência da loja.
+@visibleForTesting
+ThemeData temaDoApp(Aparencia ap) => temaDe(templateDe(ap) == null ? ap : Aparencia.padrao);

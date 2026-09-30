@@ -92,3 +92,18 @@ flutter:
           weight: 600
         - asset: assets/fonts/Rubik/Rubik-Bold.ttf
           weight: 700
+    # Diner 58 (docs/templates/05): Bungee (display), Nunito (texto), Yellowtail (cursiva).
+    - family: Bungee
+      fonts:
+        - asset: assets/fonts/Bungee/Bungee-Regular.ttf
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito/Nunito-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito/Nunito-Black.ttf
+          weight: 900
+    - family: Yellowtail
+      fonts:
+        - asset: assets/fonts/Yellowtail/Yellowtail-Regular.ttf

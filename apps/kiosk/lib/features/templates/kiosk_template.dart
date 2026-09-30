@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import 'brasa2/brasa2_template.dart';
+import 'diner/diner_template.dart';
 import 'movimento.dart';
 import 'neon/neon_template.dart';
 import 'template_tokens.dart';
@@ -37,6 +38,7 @@ abstract class KioskTemplate {
 const Map<String, KioskTemplate> _registro = {
   'brasa2': Brasa2Template(),
   'neon': NeonTemplate(),
+  'diner': DinerTemplate(),
 };
 
 Map<String, KioskTemplate>? _registroDeTeste;

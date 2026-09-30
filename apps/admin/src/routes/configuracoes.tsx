@@ -48,6 +48,15 @@ const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>
       corPainel: '#12121C',
       raio: 16,
     },
+    // docs/templates/05-diner-58.md §9. Paleta clara: no totem, as telas sem versão do
+    // template ficam no tema escuro padrão (temaDoApp no app).
+    diner: {
+      corPrimaria: '#D3202A',
+      corDestaque: '#8FD5C7',
+      corFundo: '#FFF4E2',
+      corPainel: '#FFFFFF',
+      raio: 24,
+    },
   };
 
 /**
