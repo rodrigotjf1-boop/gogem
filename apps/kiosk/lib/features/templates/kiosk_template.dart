@@ -3,6 +3,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
 import 'brasa2/brasa2_template.dart';
 import 'movimento.dart';
+import 'neon/neon_template.dart';
 import 'template_tokens.dart';
 
 /// Contrato de APRESENTAÇÃO de um template do totem (docs/templates/00 §3.2).
@@ -35,6 +36,7 @@ abstract class KioskTemplate {
 /// (`brasa`, `gogen`, `burger`, e a `padrao` antiga) segue o caminho atual das telas.
 const Map<String, KioskTemplate> _registro = {
   'brasa2': Brasa2Template(),
+  'neon': NeonTemplate(),
 };
 
 Map<String, KioskTemplate>? _registroDeTeste;
