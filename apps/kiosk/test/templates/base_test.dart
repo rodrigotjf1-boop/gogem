@@ -295,12 +295,26 @@ void main() {
       expect(tocou, isFalse);
     });
 
-    testWidgets('Etapas: concluídos com ✓, o atual numerado', (t) async {
+    // ERR-029: o "✓" era o caractere U+2713, que as fontes dos templates não têm (virava
+    // uma caixinha). Agora é ícone desenhado, e nenhum texto das etapas leva o caractere.
+    testWidgets('Etapas: concluídos com ✓ desenhado, o atual numerado', (t) async {
       await t.pumpWidget(_app(const Etapas(atual: 2, tokens: _tk)));
-      expect(find.text('✓ Cardápio'), findsOneWidget);
-      expect(find.text('✓ Sacola'), findsOneWidget);
+      expect(find.text('Cardápio'), findsOneWidget);
+      expect(find.text('Sacola'), findsOneWidget);
+      expect(find.byKey(const ValueKey('etapa-feita-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('etapa-feita-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('etapa-feita-2')), findsNothing);
       expect(find.text('3. Identificação'), findsOneWidget);
       expect(find.text('4. Pagamento'), findsOneWidget);
+      final textos = t.widgetList<Text>(find.byType(Text)).map((w) => w.data ?? '');
+      expect(textos.where((s) => s.contains('✓')), isEmpty);
+    });
+
+    testWidgets('ReciboImpresso sem nome da loja não deixa linha vazia', (t) async {
+      await t.pumpWidget(_app(const ReciboImpresso(senha: '247', tokens: _tk)));
+      final textos = t.widgetList<Text>(find.descendant(
+          of: find.byKey(const ValueKey('recibo')), matching: find.byType(Text)));
+      expect(textos.map((w) => w.data), ['SENHA 247']);
     });
 
     testWidgets('BarraSacola: contagem, total e "Ver sacola"; vazia não abre', (t) async {

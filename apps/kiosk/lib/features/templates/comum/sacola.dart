@@ -225,11 +225,17 @@ class _Voo extends StatefulWidget {
 }
 
 class _VooState extends State<_Voo> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: widget.duracao)
-    ..addStatusListener((s) {
-      if (s == AnimationStatus.completed) widget.aoTerminar();
-    })
-    ..forward();
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: widget.duracao)
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed) widget.aoTerminar();
+      })
+      ..forward();
+  }
 
   @override
   void dispose() {
