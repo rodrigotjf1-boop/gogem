@@ -107,3 +107,18 @@ flutter:
     - family: Yellowtail
       fonts:
         - asset: assets/fonts/Yellowtail/Yellowtail-Regular.ttf
+    # Template Vitrine (docs/templates/02): títulos em Syne, texto em Onest (OFL).
+    - family: Syne
+      fonts:
+        - asset: assets/fonts/Syne/Syne-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Syne/Syne-ExtraBold.ttf
+          weight: 800
+    - family: Onest
+      fonts:
+        - asset: assets/fonts/Onest/Onest-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Onest/Onest-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Onest/Onest-ExtraBold.ttf
+          weight: 800
