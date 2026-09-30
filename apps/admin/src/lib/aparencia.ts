@@ -75,7 +75,12 @@ export function useSalvarAparencia() {
  * Estilos do totem na ordem da lista (docs/templates). Cada template novo entra aqui no
  * PR em que o app do totem passa a desenhá-lo.
  */
-export const ESTILOS_TOTEM: Aparencia['temaPreset'][] = ['brasa', 'gogen', 'brasa2'];
+export const ESTILOS_TOTEM: Aparencia['temaPreset'][] = [
+  'brasa',
+  'gogen',
+  'brasa2',
+  'neon',
+];
 
 export const ROTULO_ESTILO: Record<string, string> = {
   brasa: 'Brasa (steakhouse)',
