@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_models.dart';
+import 'brasa2/brasa2_template.dart';
 import 'movimento.dart';
 import 'template_tokens.dart';
 
@@ -32,7 +33,9 @@ abstract class KioskTemplate {
 
 /// Templates registrados. Cada PR de template acrescenta a sua linha; chave fora daqui
 /// (`brasa`, `gogen`, `burger`, e a `padrao` antiga) segue o caminho atual das telas.
-const Map<String, KioskTemplate> _registro = {};
+const Map<String, KioskTemplate> _registro = {
+  'brasa2': Brasa2Template(),
+};
 
 Map<String, KioskTemplate>? _registroDeTeste;
 

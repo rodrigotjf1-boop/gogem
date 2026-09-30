@@ -62,3 +62,18 @@ flutter:
         - asset: assets/fonts/Tektur-Regular.ttf
         - asset: assets/fonts/Tektur-Medium.ttf
           weight: 600
+    # Template Brasa 2.0 (docs/templates/01): títulos em DM Serif Display, texto em Manrope.
+    # Estáticas e empacotadas (offline-first), licença OFL na pasta de cada família.
+    - family: DMSerifDisplay
+      fonts:
+        - asset: assets/fonts/DMSerifDisplay/DMSerifDisplay-Regular.ttf
+        - asset: assets/fonts/DMSerifDisplay/DMSerifDisplay-Italic.ttf
+          style: italic
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope/Manrope-ExtraBold.ttf
+          weight: 800
