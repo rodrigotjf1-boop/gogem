@@ -1,7 +1,7 @@
 name: gogem_kiosk
 description: "GoGeM - app de autoatendimento (totem) by DMS"
 publish_to: "none"
-version: 0.5.25+30
+version: 0.6.0+31
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -56,6 +56,19 @@ flutter:
   uses-material-design: true
   assets:
     - assets/fonts/Tektur-OFL.txt
+    # Licenças das fontes dos templates (docs/templates): a OFL e a Apache pedem que a
+    # licença acompanhe a fonte distribuída.
+    - assets/fonts/Bungee/OFL.txt
+    - assets/fonts/DMSerifDisplay/OFL.txt
+    - assets/fonts/Figtree/OFL.txt
+    - assets/fonts/Manrope/OFL.txt
+    - assets/fonts/Nunito/OFL.txt
+    - assets/fonts/Onest/OFL.txt
+    - assets/fonts/Rubik/OFL.txt
+    - assets/fonts/Sora/OFL.txt
+    - assets/fonts/Syne/OFL.txt
+    - assets/fonts/Unbounded/OFL.txt
+    - assets/fonts/Yellowtail/LICENSE.txt
   fonts:
     - family: Tektur
       fonts:

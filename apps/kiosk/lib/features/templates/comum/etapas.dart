@@ -59,14 +59,26 @@ class Etapas extends StatelessWidget {
                 ),
               ),
               SizedBox(height: context.dz(10)),
-              Text(
-                i < atual ? '✓ ${nomes[i]}' : '${i + 1}. ${nomes[i]}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: tokens.texto(context.dz(19),
-                    peso: FontWeight.w800,
-                    cor: i < atual ? barra : (i == atual ? tokens.text : tokens.muted)),
-              ),
+              // Concluído: ✓ DESENHADO (ícone). O caractere U+2713 não existe nas fontes dos
+              // templates (Manrope, Rubik, Nunito, Sora, Figtree…) e virava uma caixinha
+              // vazia — ERR-029.
+              Row(children: [
+                if (i < atual) ...[
+                  Icon(Icons.check_rounded,
+                      key: ValueKey('etapa-feita-$i'), size: context.dz(22), color: barra),
+                  SizedBox(width: context.dz(6)),
+                ],
+                Flexible(
+                  child: Text(
+                    i < atual ? nomes[i] : '${i + 1}. ${nomes[i]}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.texto(context.dz(19),
+                        peso: FontWeight.w800,
+                        cor: i < atual ? barra : (i == atual ? tokens.text : tokens.muted)),
+                  ),
+                ),
+              ]),
             ]),
           ),
         ],

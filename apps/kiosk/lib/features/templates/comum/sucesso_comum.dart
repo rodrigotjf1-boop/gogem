@@ -138,9 +138,10 @@ class _ReciboImpressoState extends State<ReciboImpresso> with SingleTickerProvid
           padding: EdgeInsets.symmetric(horizontal: context.dz(20), vertical: context.dz(14)),
           color: const Color(0xFFFFFFFF),
           child: Column(children: [
-            Text((widget.nomeLoja ?? '').toUpperCase(),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: mono.copyWith(fontWeight: FontWeight.w700)),
+            if ((widget.nomeLoja ?? '').trim().isNotEmpty)
+              Text(widget.nomeLoja!.trim().toUpperCase(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: mono.copyWith(fontWeight: FontWeight.w700)),
             Text('SENHA ${widget.senha}', style: mono.copyWith(fontSize: context.dz(22), fontWeight: FontWeight.w700)),
             const Spacer(),
             for (var i = 0; i < 3; i++)
