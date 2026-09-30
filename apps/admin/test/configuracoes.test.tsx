@@ -104,6 +104,7 @@ describe('Configurações · Aparência', () => {
       'GoGen (roleta / flame)',
       'Brasa 2.0 (steakhouse com fogo)',
       'Vitrine (cardápio em stories)',
+      'Estúdio (clean, produtos flutuando)',
       'Neon 2.0 (noite urbana)',
       'Diner 58 (lanchonete anos 50)',
     ]);
@@ -140,7 +141,7 @@ describe('Configurações · Aparência', () => {
     await screen.findByLabelText('Nome da loja');
     const estilo = screen.getByLabelText('Estilo do totem') as HTMLSelectElement;
     expect(estilo.value).toBe('burger');
-    expect([...estilo.options].map((o) => o.value)).toEqual(['brasa', 'gogen', 'brasa2', 'vitrine', 'neon', 'diner', 'burger']);
+    expect([...estilo.options].map((o) => o.value)).toEqual(['brasa', 'gogen', 'brasa2', 'vitrine', 'estudio', 'neon', 'diner', 'burger']);
   });
 
   it('execução não vê o botão de salvar', async () => {
