@@ -32,6 +32,14 @@ const PALETA_PRESET: Partial<Record<Aparencia['temaPreset'], Partial<Aparencia>>
       raio: 16,
       fonteDisplay: 'Montserrat',
     },
+    // docs/templates/01-brasa-2.md §9
+    brasa2: {
+      corPrimaria: '#EC7433',
+      corDestaque: '#F4B63F',
+      corFundo: '#120E0C',
+      corPainel: '#1E1815',
+      raio: 22,
+    },
   };
 
 /**

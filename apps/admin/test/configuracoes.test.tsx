@@ -94,13 +94,42 @@ describe('Configurações · Aparência', () => {
     expect(await screen.findByText('Mídias do carrossel')).toBeInTheDocument();
   });
 
-  it('estilo do totem: só Brasa e GoGen — Padrão e Burger House saíram da lista', async () => {
+  it('estilo do totem: Brasa, GoGen e os templates novos — Padrão e Burger House saíram', async () => {
     montar('gerente');
     await screen.findByLabelText('Nome da loja');
     const estilo = screen.getByLabelText('Estilo do totem') as HTMLSelectElement;
     const opcoes = [...estilo.options].map((o) => o.textContent);
-    expect(opcoes).toEqual(['Brasa (steakhouse)', 'GoGen (roleta / flame)']);
+    expect(opcoes).toEqual([
+      'Brasa (steakhouse)',
+      'GoGen (roleta / flame)',
+      'Brasa 2.0 (steakhouse com fogo)',
+    ]);
     expect(estilo.value).toBe('brasa');
+  });
+
+  it('escolher o Brasa 2.0 aplica a paleta recomendada do template', async () => {
+    let recebido: Record<string, unknown> | null = null;
+    montar('gerente');
+    server.use(
+      http.put(`${API}/aparencia`, async ({ request }) => {
+        recebido = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...APARENCIA, ...recebido });
+      }),
+    );
+    await screen.findByLabelText('Nome da loja');
+    fireEvent.change(screen.getByLabelText('Estilo do totem'), {
+      target: { value: 'brasa2' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar aparência' }));
+    await waitFor(() => expect(recebido).not.toBeNull());
+    expect(recebido).toMatchObject({
+      temaPreset: 'brasa2',
+      corPrimaria: '#EC7433',
+      corDestaque: '#F4B63F',
+      corFundo: '#120E0C',
+      corPainel: '#1E1815',
+      raio: 22,
+    });
   });
 
   it('loja ainda no Burger House vê o estilo dela (até a migração), não um select vazio', async () => {
@@ -108,7 +137,7 @@ describe('Configurações · Aparência', () => {
     await screen.findByLabelText('Nome da loja');
     const estilo = screen.getByLabelText('Estilo do totem') as HTMLSelectElement;
     expect(estilo.value).toBe('burger');
-    expect([...estilo.options].map((o) => o.value)).toEqual(['brasa', 'gogen', 'burger']);
+    expect([...estilo.options].map((o) => o.value)).toEqual(['brasa', 'gogen', 'brasa2', 'burger']);
   });
 
   it('execução não vê o botão de salvar', async () => {
