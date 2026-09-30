@@ -7,6 +7,7 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart' show aparenciaProvider;
 import '../../domain/order/conclusao_venda.dart';
 import '../gogen/gogen_tokens.dart';
+import '../templates/kiosk_template.dart';
 
 /// A compra NÃO se concluiu depois do pagamento aprovado — a NFC-e não foi emitida, o
 /// sistema da loja recusou a venda, ou o cupom fiscal não imprimiu. O cliente precisa
@@ -84,10 +85,12 @@ class _VendaNaoConcluidaScreenState
   Widget build(BuildContext context) {
     final ap = ref.watch(aparenciaProvider).valueOrNull ?? Aparencia.padrao;
     final gogen = ap.gogen;
-    final fundo = gogen ? GogenColors.cream : GogemColors.bg;
-    final tinta = gogen ? GogenColors.ink : GogemColors.ink;
-    final tinta2 = gogen ? GogenColors.ink2 : GogemColors.inkDim;
-    final alerta = gogen ? GogenColors.flame1 : GogemColors.heat;
+    // Templates novos: só as cores e a fonte do título mudam — texto e regra são os mesmos.
+    final tk = templateDe(ap)?.tokens;
+    final fundo = tk?.bg ?? (gogen ? GogenColors.cream : GogemColors.bg);
+    final tinta = tk?.text ?? (gogen ? GogenColors.ink : GogemColors.ink);
+    final tinta2 = tk?.muted ?? (gogen ? GogenColors.ink2 : GogemColors.inkDim);
+    final alerta = tk?.err ?? (gogen ? GogenColors.flame1 : GogemColors.heat);
     final t = Theme.of(context).textTheme;
     return Scaffold(
       backgroundColor: fundo,
@@ -107,7 +110,8 @@ class _VendaNaoConcluidaScreenState
                       const SizedBox(height: 20),
                       Text(_titulo,
                           textAlign: TextAlign.center,
-                          style: t.headlineMedium?.copyWith(color: tinta)),
+                          style: t.headlineMedium?.copyWith(
+                              color: tinta, fontFamily: tk?.fonteDisplay)),
                       const SizedBox(height: 12),
                       Text('A compra foi cancelada.',
                           textAlign: TextAlign.center,

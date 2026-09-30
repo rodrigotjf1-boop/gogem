@@ -10,6 +10,8 @@ import '../../domain/fiscal/fiscal_loja.dart';
 import '../../domain/order/cart.dart';
 import '../../widgets/numpad.dart';
 import '../gogen/gogen_identificacao.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/providers.dart';
 
 /// CPF na nota — opcional. "PULAR" segue sem CPF; com CPF, só avança se os
 /// dígitos verificadores baterem.
@@ -88,6 +90,22 @@ class _IdentificacaoScreenState extends ConsumerState<IdentificacaoScreen> {
         onVoltar: () => context.go('/carrinho'),
         avisoCpfObrigatorio: aviso,
       );
+    }
+    final tpl = templateDe(ap);
+    if (tpl != null) {
+      return tpl.identificacao(IdentificacaoProps(
+        nomeController: _nomeCtrl,
+        cpf: _cpf,
+        completo: _completo,
+        valido: _valido,
+        onDigito: _digito,
+        onApagar: _apagar,
+        onPular: _pular,
+        onConfirmar: _completo && _valido ? _confirmar : () {},
+        onVoltar: () => context.go('/carrinho'),
+        avisoCpfObrigatorio: aviso,
+        mov: ref.watch(movimentoProvider),
+      ));
     }
     return Scaffold(
       body: SafeArea(

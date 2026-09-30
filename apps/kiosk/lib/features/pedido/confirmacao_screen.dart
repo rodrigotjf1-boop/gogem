@@ -7,6 +7,8 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart';
 import '../../widgets/gogem_robot.dart';
 import '../gogen/gogen_sucesso.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/providers.dart';
 
 /// Pedido confirmado: o robô "imprime" (paperExtent 0→1, animação única — sem
 /// loop, seguro para pumpAndSettle) e a SENHA aparece em fonte gigante.
@@ -83,6 +85,22 @@ class _ConfirmacaoScreenState extends ConsumerState<ConfirmacaoScreen>
           fiscal: widget.fiscal,
           onNovoPedido: () => context.go('/descanso'),
         ),
+      );
+    }
+    final tpl = templateDe(ap);
+    if (tpl != null) {
+      return AnimatedBuilder(
+        animation: _print,
+        builder: (_, __) => tpl.sucesso(SucessoProps(
+          senha: widget.senha,
+          impresso: widget.impresso,
+          entrada: _print.value,
+          dinheiro: widget.dinheiro,
+          segundos: _segundos,
+          fiscal: widget.fiscal,
+          onNovoPedido: () => context.go('/descanso'),
+          mov: ref.watch(movimentoProvider),
+        )),
       );
     }
     return Scaffold(

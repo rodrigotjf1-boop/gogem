@@ -13,6 +13,8 @@ import '../../data/catalog/aparencia.dart';
 import '../../data/catalog/catalog_sync.dart'
     show gogemApiProvider, aparenciaProvider, fiscalProvider;
 import '../gogen/gogen_pagamento.dart';
+import '../templates/kiosk_template.dart';
+import '../templates/providers.dart';
 import '../../core/kiosk/inatividade_guard.dart';
 import '../../domain/fiscal/bloqueio_fiscal.dart';
 import '../../domain/fiscal/resultado_fiscal.dart';
@@ -752,6 +754,30 @@ class _PagamentoScreenState extends ConsumerState<PagamentoScreen> {
         onCancelarPix: () => ref.read(pixProviderProvider).cancelar(),
         onCancelarPoint: () => ref.read(pointProviderProvider).cancelar(),
       );
+    }
+    final tpl = templateDe(ap);
+    if (tpl != null) {
+      return tpl.pagamento(PagamentoProps(
+        totalCentavos: cart.totalCentavos,
+        bloqueado: _bloqueado,
+        motivo: _motivo,
+        processando: _processando,
+        erro: _erroPagamento,
+        pointAtivo: _pointAtivo,
+        pixCopiaECola: _pixDesafio?.copiaECola,
+        pixContador: _mmss(_pixSegundos),
+        mensagemProcessando: _confirmando,
+        onVoltar: () => context.go('/identificacao'),
+        onVoltarCarrinho: () => context.go('/carrinho'),
+        onTentarNovamente: _portao,
+        onPagarPix: () => _pagar(FormaPagamento.pix),
+        onPagarCartao: () => _pagar(FormaPagamento.credito),
+        onPagarDinheiro: () => _pagar(FormaPagamento.dinheiro),
+        onCancelarPix: () => ref.read(pixProviderProvider).cancelar(),
+        onCancelarPoint: () => ref.read(pointProviderProvider).cancelar(),
+        cliente: ref.watch(checkoutProvider).cliente,
+        mov: ref.watch(movimentoProvider),
+      ));
     }
 
     if (_bloqueado) {

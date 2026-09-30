@@ -269,9 +269,10 @@ model Aparencia {
   nomeLoja             String?
   logoUrl              String?
   fonteDisplay         String   @default("Tektur")
-  // Preset visual do totem (F3): 'padrao' | 'brasa' (steakhouse dark). Muda o
-  // estilo do descanso/cards sem trocar as cores da loja.
-  temaPreset           String   @default("padrao")
+  // Estilo do totem: 'brasa' | 'gogen' | 'brasa2' | 'vitrine' | 'estudio' | 'neon' |
+  // 'diner' (docs/templates). Loja nova começa no 'brasa'; 'padrao' e 'burger' saíram da
+  // lista do painel (o app ainda os desenha).
+  temaPreset           String   @default("brasa")
   descansoTipo         String   @default("padrao") // 'padrao' | 'carrossel'
   descansoIntervaloSeg Int      @default(6)
   descansoMidias       Json     @default("[]")

@@ -13,10 +13,19 @@ class ProdutoImagem extends StatelessWidget {
     required this.url,
     this.borderRadius,
     this.iconeVazio = 0.34,
+    this.fit = BoxFit.cover,
+    this.memCacheWidth,
   });
 
   final String? url;
   final BorderRadius? borderRadius;
+
+  /// `cover` (foto) por padrão; `contain` para o recorte (PNG sem fundo) dos templates.
+  final BoxFit fit;
+
+  /// Largura (px físicos) com que a imagem fica em memória — o tamanho exibido, não o do
+  /// arquivo (o Tinker Board tem 2 GB). Nulo = decodifica no tamanho original.
+  final int? memCacheWidth;
 
   /// Tamanho do ícone de fallback como fração do menor lado (0..1).
   final double iconeVazio;
@@ -30,9 +39,10 @@ class ProdutoImagem extends StatelessWidget {
           ? _Placeholder(iconeVazio: iconeVazio)
           : CachedNetworkImage(
               imageUrl: url!,
-              fit: BoxFit.cover,
+              fit: fit,
               width: double.infinity,
               height: double.infinity,
+              memCacheWidth: memCacheWidth,
               fadeInDuration: const Duration(milliseconds: 180),
               placeholder: (_, __) => const _Placeholder(carregando: true),
               errorWidget: (_, __, ___) => _Placeholder(iconeVazio: iconeVazio),

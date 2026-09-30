@@ -50,7 +50,9 @@ class Aparencia {
   final String? nomeLoja;
   final String? logoUrl;
   final String fonteDisplay; // 'Tektur' | 'Poppins' | 'Montserrat'
-  final String temaPreset; // 'padrao' | 'brasa' | 'burger'
+  /// 'brasa' | 'gogen' | 'brasa2' | 'vitrine' | 'estudio' | 'neon' | 'diner'
+  /// ('padrao' e 'burger' saíram da lista do painel; o app ainda sabe desenhá-los).
+  final String temaPreset;
   final String descansoTipo; // 'padrao' | 'carrossel'
   final int descansoIntervaloSeg;
   final List<DescansoMidia> descansoMidias;
@@ -85,6 +87,13 @@ class Aparencia {
   /// Template "GoGen" — layout PRÓPRIO (roleta de categorias, standby rico etc.),
   /// não só cores. As telas do fluxo delegam pras variantes GoGen quando true.
   bool get gogen => temaPreset == 'gogen';
+
+  // Templates de docs/templates (layout e movimento próprios, via `templateDe`).
+  bool get brasa2 => temaPreset == 'brasa2';
+  bool get vitrine => temaPreset == 'vitrine';
+  bool get estudio => temaPreset == 'estudio';
+  bool get neon => temaPreset == 'neon';
+  bool get diner => temaPreset == 'diner';
 
   /// Presets "editoriais" (Brasa/Burger House): tipografia display maior, peso e
   /// caixa-alta, fundo/cards quentes. Agrupa os tratamentos comuns aos dois.

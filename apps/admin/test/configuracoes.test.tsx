@@ -23,7 +23,7 @@ const APARENCIA = {
   nomeLoja: 'MISTER BURGERS',
   logoUrl: null,
   fonteDisplay: 'Tektur',
-  temaPreset: 'padrao',
+  temaPreset: 'brasa',
   descansoTipo: 'padrao',
   descansoIntervaloSeg: 6,
   descansoMidias: [],
@@ -37,11 +37,14 @@ function usuario(papel: 'gerente' | 'execucao') {
   return { id: 'u1', tenantId: 't1', unidadeId: null, email: 'c@l', nome: 'C', papel };
 }
 
-function montar(papel: 'gerente' | 'execucao' = 'gerente') {
+function montar(
+  papel: 'gerente' | 'execucao' = 'gerente',
+  aparencia: Record<string, unknown> = APARENCIA,
+) {
   setToken('tok');
   server.use(
     http.get(`${API}/auth/me`, () => HttpResponse.json(usuario(papel))),
-    http.get(`${API}/aparencia`, () => HttpResponse.json(APARENCIA)),
+    http.get(`${API}/aparencia`, () => HttpResponse.json(aparencia)),
   );
   window.history.pushState({}, '', '/configuracoes');
   render(<App />);
@@ -89,6 +92,23 @@ describe('Configurações · Aparência', () => {
       target: { value: 'carrossel' },
     });
     expect(await screen.findByText('Mídias do carrossel')).toBeInTheDocument();
+  });
+
+  it('estilo do totem: só Brasa e GoGen — Padrão e Burger House saíram da lista', async () => {
+    montar('gerente');
+    await screen.findByLabelText('Nome da loja');
+    const estilo = screen.getByLabelText('Estilo do totem') as HTMLSelectElement;
+    const opcoes = [...estilo.options].map((o) => o.textContent);
+    expect(opcoes).toEqual(['Brasa (steakhouse)', 'GoGen (roleta / flame)']);
+    expect(estilo.value).toBe('brasa');
+  });
+
+  it('loja ainda no Burger House vê o estilo dela (até a migração), não um select vazio', async () => {
+    montar('gerente', { ...APARENCIA, temaPreset: 'burger' });
+    await screen.findByLabelText('Nome da loja');
+    const estilo = screen.getByLabelText('Estilo do totem') as HTMLSelectElement;
+    expect(estilo.value).toBe('burger');
+    expect([...estilo.options].map((o) => o.value)).toEqual(['brasa', 'gogen', 'burger']);
   });
 
   it('execução não vê o botão de salvar', async () => {
