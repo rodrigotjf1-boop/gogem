@@ -80,6 +80,7 @@ export const ESTILOS_TOTEM: Aparencia['temaPreset'][] = [
   'gogen',
   'brasa2',
   'neon',
+  'diner',
 ];
 
 export const ROTULO_ESTILO: Record<string, string> = {
