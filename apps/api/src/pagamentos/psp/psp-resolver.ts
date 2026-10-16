@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { segredoDa } from '../../integracao/segredos';
 import { MercadoPagoPspGateway } from './mercadopago-psp.gateway';
 import { MercadoPagoPointGateway } from './mercadopago-point.gateway';
 import { SandboxPspGateway } from './sandbox-psp.gateway';
@@ -11,6 +12,9 @@ import { PspGateway } from './psp-gateway';
  * fallback de ambiente (`GOGEM_PSP`/`MERCADOPAGO_ACCESS_TOKEN`, dev/operador
  * único) e, na ausência de tudo, no **sandbox** (QR de teste que aprova sozinho).
  * Assim cada lojista pluga a própria conta no admin — sem env por instância.
+ *
+ * O access token vem cifrado do banco (`segredoDa`). Cifrado que não abre é
+ * erro (503), nunca "sem integração": cair no fallback trocaria a conta.
  */
 @Injectable()
 export class PspResolver {
@@ -21,7 +25,7 @@ export class PspResolver {
     const integ = await this.prisma.integracao.findFirst({
       where: { tipo: 'mercadopago', ativo: true },
     });
-    const token = (integ?.config as Record<string, string> | null)?.accessToken;
+    const token = segredoDa(integ, 'accessToken');
     return token ? new MercadoPagoPspGateway(token) : this.fallbackEnv();
   }
 
@@ -37,7 +41,7 @@ export class PspResolver {
       where: { tipo: 'mercadopago', ativo: true },
     });
     const cfg = integ?.config as Record<string, string> | null;
-    const token = cfg?.accessToken;
+    const token = segredoDa(integ, 'accessToken');
     // Maquininha DO totem (multi-terminal) tem prioridade; senão a padrão da loja.
     const deviceId = deviceIdOverride?.trim() || cfg?.deviceId;
     return token && deviceId
@@ -50,8 +54,7 @@ export class PspResolver {
     const integ = await this.prisma.integracao.findFirst({
       where: { tipo: 'mercadopago', ativo: true },
     });
-    const cfg = integ?.config as Record<string, string> | null;
-    return cfg?.accessToken ?? null;
+    return segredoDa(integ, 'accessToken') || null;
   }
 
   private fallbackEnv(): PspGateway {

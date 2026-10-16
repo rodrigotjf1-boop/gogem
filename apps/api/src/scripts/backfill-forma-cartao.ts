@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import { Prisma, PrismaClient } from '@prisma/client';
 import { classificarPagamento } from '../pagamentos/psp/mercadopago-point.gateway';
+import { segredoDa } from '../integracao/segredos';
 
 /**
  * Backfill da forma REAL do cartão em pedidos ANTIGOS (antes do enriquecimento
@@ -37,8 +38,7 @@ async function tokenDoTenant(
   const integ = await prisma.integracao.findFirst({
     where: { tenantId, tipo: 'mercadopago', ativo: true },
   });
-  const cfg = integ?.config as Record<string, string> | null;
-  const token = cfg?.accessToken ?? null;
+  const token = segredoDa(integ, 'accessToken') || null;
   cache.set(tenantId, token);
   return token;
 }

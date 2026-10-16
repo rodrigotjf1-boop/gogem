@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { segredoDa, type LinhaComSegredo } from '../../integracao/segredos';
 
 /** Config resolvida do conector Regem para o tenant do contexto. */
 export interface RegemConfig {
@@ -18,6 +19,8 @@ export interface RegemConfig {
  * NÃO existe mais o "Regem padrão" das envs (`REGEM_API_BASE`/`REGEM_SYNC_TOKEN`), herança do
  * piloto de uma loja só: com ele, a empresa SEM integração mandava venda e baixava cardápio do
  * Regem de OUTRA empresa, com resposta de sucesso (ERR-012). Cada empresa pareia o seu Regem.
+ *
+ * O token vem cifrado do banco (`segredoDa` abre; valor antigo em claro passa como está).
  */
 @Injectable()
 export class RegemConfigResolver {
@@ -33,17 +36,18 @@ export class RegemConfigResolver {
   }): Promise<RegemConfig> {
     const ignoreActive = opts?.ignoreActive ?? false;
     const extrair = (
-      row: { ativo: boolean; config: unknown } | null,
+      row: (LinhaComSegredo & { ativo: boolean }) | null,
     ): RegemConfig | null => {
       if (!row || !(ignoreActive || row.ativo)) return null;
-      const cfg = (row.config ?? {}) as { apiBase?: string; token?: string };
+      const cfg = (row.config ?? {}) as { apiBase?: string };
       const base = (cfg.apiBase ?? '').trim();
-      const token = (cfg.token ?? '').trim();
-      return base && token ? { base, token } : null;
+      if (!base) return null;
+      const token = segredoDa(row, 'token');
+      return token ? { base, token } : null;
     };
 
     // Precedência: (1) integração DA LOJA do contexto → (2) nível empresa
-    // (unidadeId NULL) → (3) envs globais (piloto). Tenant-scoped pelo middleware.
+    // (unidadeId NULL). Tenant-scoped pelo middleware.
     if (opts?.unidadeId) {
       const loja = await this.prisma.integracao.findFirst({
         where: { tipo: 'regem', unidadeId: opts.unidadeId },

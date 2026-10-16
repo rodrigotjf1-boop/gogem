@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { TenantContext } from '../tenant/tenant-context';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
 import { RegemCatalogClient } from '../integracoes/regem/regem-catalog.client';
@@ -13,6 +15,7 @@ import {
   type RegemImportResumo,
 } from '../integracoes/regem/regem-import.service';
 import { CONECTORES, SECRET_MASK, type Conector } from './conectores';
+import { segredoDa, selarConfig } from './segredos';
 import { UpsertIntegracaoDto } from './dto/upsert-integracao.dto';
 
 /** Campo de config já resolvido para exibição (segredo nunca vaza cru). */
@@ -59,7 +62,7 @@ export interface TesteResultado {
  *
  * Segurança: segredos (token, client secret) NUNCA voltam crus ao front — só
  * `preenchido`. No upsert, campo-segredo em branco = mantém o guardado (não
- * apaga sem querer ao reeditar).
+ * apaga sem querer ao reeditar). Segredo novo é gravado cifrado (`selarConfig`).
  */
 @Injectable()
 export class IntegracaoService {
@@ -91,11 +94,11 @@ export class IntegracaoService {
       where: { tipo },
     });
     const atual = (existente?.config ?? {}) as Record<string, string>;
-    const config = this.mesclarConfig(conector, atual, dto.config ?? {});
+    const mesclado = this.mesclarConfig(conector, atual, dto.config ?? {});
 
     const configurado = conector.campos
       .filter((f) => !f.opcional)
-      .every((f) => (config[f.key] ?? '').trim().length > 0);
+      .every((f) => (mesclado[f.key] ?? '').trim().length > 0);
     const ativo = dto.ativo ?? existente?.ativo ?? false;
     if (ativo && !configurado) {
       throw new BadRequestException(
@@ -103,9 +106,29 @@ export class IntegracaoService {
       );
     }
 
+    // Segredo em claro sai daqui cifrado. "Novo" = o lojista acabou de digitar:
+    // sem a chave no servidor, esse é recusado (nada é gravado em claro).
+    const novos = new Set(
+      conector.campos
+        .filter((f) => f.secret && mesclado[f.key] !== atual[f.key])
+        .map((f) => f.key),
+    );
+    const tenantId = existente?.tenantId ?? TenantContext.getTenantId();
+    if (!tenantId) throw new ForbiddenException('Empresa não identificada.');
+    // Linha nova é do nível empresa: o create abaixo não preenche a loja.
+    const selada = selarConfig(
+      conector,
+      { tenantId, unidadeId: existente?.unidadeId ?? null, tipo },
+      mesclado,
+      existente?.segredoBusca ?? null,
+      novos,
+    );
+    const config = selada.config;
+
     const nome = dto.nome ?? existente?.nome ?? null;
     const data = {
       config: config as Prisma.InputJsonValue,
+      segredoBusca: selada.segredoBusca,
       ativo,
       nome,
     };
@@ -195,7 +218,7 @@ export class IntegracaoService {
     const row = await this.prisma.integracao.findFirst({
       where: { tipo: 'mercadopago' },
     });
-    const token = (row?.config as Record<string, string> | null)?.accessToken;
+    const token = segredoDa(row, 'accessToken');
     let resultado: TesteResultado;
     if (!token) {
       resultado = {
