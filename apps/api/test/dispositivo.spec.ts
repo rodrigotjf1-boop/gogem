@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DispositivoService } from '../src/dispositivo/dispositivo.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
+import { resumoDoTokenDoDispositivo } from '../src/auth/token-do-dispositivo';
 
 function makeService() {
   const prisma = {
@@ -126,7 +127,7 @@ describe('DispositivoService.reparear', () => {
     const res = await service.reparear('d-1');
     expect(res.codigoPareamento).toMatch(/^\d{6}$/);
     const data = prisma.dispositivo.update.mock.calls[0][0].data;
-    expect(data.token).toBe(null);
+    expect(data.tokenHash).toBe(null);
     expect(data.pareado).toBe(false);
     expect(data.codigoPareamento).toMatch(/^\d{6}$/);
   });
@@ -207,7 +208,9 @@ describe('DispositivoService.parear', () => {
     expect(res.token).toMatch(/^[0-9a-f]{64}$/);
 
     const upd = prisma.dispositivo.updateMany.mock.calls[0][0];
-    expect(upd.data.token).toBe(res.token);
+    // O banco recebe só o resumo; o token sai uma vez, na resposta ao totem.
+    expect(upd.data.tokenHash).toBe(resumoDoTokenDoDispositivo(res.token));
+    expect(JSON.stringify(upd.data)).not.toContain(res.token);
     expect(upd.data.pareado).toBe(true);
     expect(upd.data.codigoPareamento).toBe(null);
     expect(upd.data.codigoExpiraEm).toBe(null);

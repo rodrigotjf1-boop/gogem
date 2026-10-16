@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
+import { resumoDoTokenDoDispositivo } from './token-do-dispositivo';
 
 /** Header do token de dispositivo (totem). */
 export const DEVICE_TOKEN_HEADER = 'x-device-token';
@@ -50,8 +51,12 @@ export class DeviceTokenGuard implements CanActivate {
     // `await` dentro do runAsSystem mantém o contexto de sistema (ALS) vivo
     // durante a query + middleware (callback síncrono descartaria o contexto
     // antes do Prisma rodar → 403 fail-closed).
+    // O banco só tem o resumo do token (quem lê o banco não vira um totem).
+    const tokenHash = resumoDoTokenDoDispositivo(token);
     const dispositivo = await TenantContext.runAsSystem(async () => {
-      const dev = await this.prisma.dispositivo.findFirst({ where: { token } });
+      const dev = await this.prisma.dispositivo.findFirst({
+        where: { tokenHash },
+      });
       return dev;
     });
 

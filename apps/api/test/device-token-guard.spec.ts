@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeviceTokenGuard, DeviceUser } from '../src/auth/device-token.guard';
+import { resumoDoTokenDoDispositivo } from '../src/auth/token-do-dispositivo';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 interface FakeReq {
@@ -45,7 +46,7 @@ describe('DeviceTokenGuard', () => {
     });
     // lookup feito pelo token do header.
     expect(prisma.dispositivo.findFirst).toHaveBeenCalledWith({
-      where: { token: 'tok-abc' },
+      where: { tokenHash: resumoDoTokenDoDispositivo('tok-abc') },
     });
   });
 
