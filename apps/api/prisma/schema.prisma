@@ -609,7 +609,8 @@ model Dispositivo {
   tipo             String    @default("totem")
   // RESUMO do token de dispositivo (`sha256:<hex>`, ver auth/token-do-dispositivo.ts):
   // o token em si só existe no totem. Único global; nulo até o pareamento.
-  // A coluna no banco segue chamada "token" (a migration converteu os valores).
+  // A coluna no banco segue chamada "token". Totem pareado antes do resumo ainda tem
+  // o token puro aqui até a migration de conversão (PR seguinte).
   tokenHash        String?   @unique @map("token")
   pareado          Boolean   @default(false)
   codigoPareamento String?
