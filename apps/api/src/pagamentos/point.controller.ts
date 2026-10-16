@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Param,
   Post,
@@ -65,9 +66,15 @@ export class PointController {
     return this.service.cancelar(id);
   }
 
+  // Público (o MP chama): assinatura conferida antes de consultar o MP (401).
   @Post('webhook')
   @HttpCode(200)
-  webhook(@Body() body: unknown, @Query() query: Record<string, unknown>) {
-    return this.service.webhook(body, query);
+  webhook(
+    @Body() body: unknown,
+    @Query() query: Record<string, unknown>,
+    @Headers('x-signature') xSignature?: string,
+    @Headers('x-request-id') xRequestId?: string,
+  ) {
+    return this.service.webhook(body, query, { xSignature, xRequestId });
   }
 }

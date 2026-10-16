@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Param,
   Post,
@@ -87,11 +88,17 @@ export class PagamentosController {
     return this.service.statusPix(id);
   }
 
-  // Webhook do PSP — público (o PSP não manda X-Device-Token). Não confia no
-  // corpo: só extrai a referência e re-consulta o status no PSP.
+  // Webhook do PSP — público (o PSP não manda X-Device-Token). Confere a
+  // assinatura do Mercado Pago (x-signature) com a assinatura secreta da loja e
+  // só então re-consulta o status no PSP; sem assinatura válida → 401.
   @Post('pix/webhook')
   @HttpCode(200)
-  webhook(@Body() body: unknown, @Query() query: Record<string, unknown>) {
-    return this.service.webhook(body, query);
+  webhook(
+    @Body() body: unknown,
+    @Query() query: Record<string, unknown>,
+    @Headers('x-signature') xSignature?: string,
+    @Headers('x-request-id') xRequestId?: string,
+  ) {
+    return this.service.webhook(body, query, { xSignature, xRequestId });
   }
 }

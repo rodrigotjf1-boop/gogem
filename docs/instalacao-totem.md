@@ -108,6 +108,11 @@ Para importar o cardápio e mandar as vendas do totem ao Regem.
 2. **Testar conexão** → "Conexão ok — conta X".
 3. **Webhook (recomendado):** no painel do Mercado Pago, aponte as notificações
    de `payment` para `https://api.gogem.com.br/api/v1/pagamentos/pix/webhook`.
+   Ao salvar, o Mercado Pago mostra a **assinatura secreta** da aplicação: copie
+   assim que ela aparecer e cole em **Admin → Integrações → Mercado Pago →
+   Assinatura secreta dos avisos** → **Salvar**. O GoGeM confere essa assinatura
+   em todo aviso; **sem ela, os avisos são recusados (401)** e o totem confirma o
+   pagamento só pela consulta que faz enquanto espera (funciona, só não acelera).
 4. **Confirmação:** no totem, escolha PIX → aparece o QR; pague → o totem detecta
    a aprovação (polling + webhook) e conclui o pedido.
 

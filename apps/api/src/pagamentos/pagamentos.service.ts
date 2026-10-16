@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { CriarPixDto } from './dto/criar-pix.dto';
 import { PspGateway } from './psp/psp-gateway';
-import { PspResolver } from './psp/psp-resolver';
+import { PspResolver, type AvisoMercadoPago } from './psp/psp-resolver';
 import { parseMercadoPagoWebhook } from './psp/mercadopago-psp.gateway';
 
 /** Cobrança PIX como o totem enxerga (nunca expõe credencial/pspRef). */
@@ -112,6 +112,7 @@ export class PagamentosService {
   async webhook(
     body: unknown,
     query: Record<string, unknown>,
+    cabecalhos: Omit<AvisoMercadoPago, 'query'> = {},
   ): Promise<{ ok: true }> {
     const parsed = parseMercadoPagoWebhook(body, query);
     if (parsed) {
@@ -121,6 +122,11 @@ export class PagamentosService {
         });
         if (!charge) return;
         await TenantContext.run({ tenantId: charge.tenantId }, async () => {
+          // Assinatura ANTES de qualquer consulta ao Mercado Pago (401 se falhar).
+          await this.pspResolver.conferirAviso(
+            { ...cabecalhos, query },
+            parsed.pspRef,
+          );
           const psp = await this.pspResolver.resolver();
           await this._reconciliar(charge, psp);
         });

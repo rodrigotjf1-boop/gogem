@@ -118,6 +118,16 @@ export const CONECTORES: Record<string, Conector> = {
           'Só para cobrar CARTÃO na Point Smart. ID do dispositivo pareado na ' +
           'conta (ex.: PAX_A910__SMARTPOS…). Vazio = só PIX por QR.',
       },
+      {
+        key: 'segredoDosAvisos',
+        label: 'Assinatura secreta dos avisos',
+        secret: true,
+        opcional: true,
+        ajuda:
+          'Mercado Pago → Suas integrações → Webhooks → Configurar notificações: ' +
+          'a assinatura secreta que aparece ao salvar. Sem ela, os avisos do ' +
+          'Mercado Pago são recusados e o totem confirma o pagamento só pela consulta.',
+      },
     ],
   },
   open_delivery: {
