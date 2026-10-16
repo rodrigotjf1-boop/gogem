@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
-import {
-  PREFIXO_DO_RESUMO,
-  resumoDoTokenDoDispositivo,
-} from './token-do-dispositivo';
+import { resumoDoTokenDoDispositivo } from './token-do-dispositivo';
 
 /** Header do token de dispositivo (totem). */
 export const DEVICE_TOKEN_HEADER = 'x-device-token';
@@ -54,19 +51,14 @@ export class DeviceTokenGuard implements CanActivate {
     // `await` dentro do runAsSystem mantém o contexto de sistema (ALS) vivo
     // durante a query + middleware (callback síncrono descartaria o contexto
     // antes do Prisma rodar → 403 fail-closed).
-    // O banco guarda o resumo do token (quem lê o banco não vira um totem).
-    // Transição: o totem pareado antes do resumo ainda tem o token puro na
-    // coluna até a migration converter (PR seguinte, depois deste no ar — assim
-    // nenhum container antigo recusa um totem no meio do deploy, e o app não se
-    // despareia). Um valor que já tem a forma do resumo nunca casa como token puro:
-    // quem copia o resumo do banco não entra.
+    // O banco guarda só o resumo do token (quem lê o banco não vira um totem).
+    // Os tokens de antes do resumo foram convertidos pela migration
+    // 20261015010000 (etapa 2; a etapa 1, #147, aceitava os dois formatos para
+    // que nenhum container recusasse um totem no meio do deploy — ERR-033).
     const tokenHash = resumoDoTokenDoDispositivo(token);
-    const ehResumo = token.startsWith(PREFIXO_DO_RESUMO);
     const dispositivo = await TenantContext.runAsSystem(async () => {
       const dev = await this.prisma.dispositivo.findFirst({
-        where: ehResumo
-          ? { tokenHash }
-          : { OR: [{ tokenHash }, { tokenHash: token }] },
+        where: { tokenHash },
       });
       return dev;
     });

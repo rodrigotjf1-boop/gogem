@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { TenantContext } from '../src/tenant/tenant-context';
@@ -7,16 +9,19 @@ import { resumoDoTokenDoDispositivo } from '../src/auth/token-do-dispositivo';
 import { DispositivoService } from '../src/dispositivo/dispositivo.service';
 
 /**
- * Prova contra um Postgres DE VERDADE (opt-in): na transição, o totem pareado
- * antes (token puro na coluna) e o pareado agora (só o resumo) entram, e o
- * resumo copiado do banco não serve de token.
+ * Prova contra um Postgres DE VERDADE (opt-in): a migration que troca os tokens
+ * dos totens pelo resumo e o guarda aceitando o mesmo token depois dela.
  * Rodar num banco DESCARTÁVEL já migrado (`prisma migrate deploy`):
  *   TOKEN_TOTEM_PG_URL=postgresql://…/banco_descartavel?schema=public npx vitest run test/token-totem.pg.spec.ts
  * Apaga os dispositivos e os tenants "totem-…" desse banco.
  */
 const URL = process.env.TOKEN_TOTEM_PG_URL;
+const MIGRATION = join(
+  __dirname,
+  '../prisma/migrations/20261015010000_dispositivo_token_resumo/migration.sql',
+);
 
-describe.skipIf(!URL)('token do totem como resumo — Postgres real', () => {
+describe.skipIf(!URL)('token do totem só como resumo — Postgres real', () => {
   let prisma: PrismaService;
   let tenantId = '';
   // Callback async: com o síncrono a consulta roda fora do contexto (ERR-031).
@@ -35,13 +40,6 @@ describe.skipIf(!URL)('token do totem como resumo — Postgres real', () => {
     await new DeviceTokenGuard(prisma).canActivate(ctx);
     return req.user;
   };
-  const colunaToken = async (nome: string) => {
-    const linhas = await prisma.$queryRawUnsafe<{ token: string }[]>(
-      `select "token" from "dispositivos" where "nome" = $1`,
-      nome,
-    );
-    return linhas[0]!.token;
-  };
 
   beforeAll(async () => {
     process.env.DATABASE_URL = URL;
@@ -53,7 +51,7 @@ describe.skipIf(!URL)('token do totem como resumo — Postgres real', () => {
         where: { nome: { startsWith: 'totem-' } },
       });
       tenantId = (await prisma.tenant.create({ data: { nome: 'totem-a' } })).id;
-      // Como está hoje em produção: o token puro na coluna "token".
+      // Como está hoje em produção: o token em claro na coluna "token".
       await prisma.dispositivo.create({
         data: {
           tenantId,
@@ -70,9 +68,27 @@ describe.skipIf(!URL)('token do totem como resumo — Postgres real', () => {
     await prisma?.$disconnect();
   });
 
-  it('o totem pareado antes entra com o MESMO token, sem parear de novo', async () => {
+  it('a migration troca o token pelo resumo, uma vez só', async () => {
+    const sql = readFileSync(MIGRATION, 'utf8');
+    await prisma.$executeRawUnsafe(sql);
+    await prisma.$executeRawUnsafe(sql); // segunda vez: não converte de novo
+    const linhas = await prisma.$queryRawUnsafe<{ token: string }[]>(
+      `select "token" from "dispositivos" where "nome" = 'Totem antigo'`,
+    );
+    expect(linhas).toEqual([
+      { token: resumoDoTokenDoDispositivo('token-antigo-do-totem') },
+    ]);
+  });
+
+  it('o totem já pareado entra com o MESMO token, sem parear de novo', async () => {
     const user = await entrar('token-antigo-do-totem');
     expect(user.tenantId).toBe(tenantId);
+  });
+
+  it('o resumo guardado no banco não serve de token', async () => {
+    await expect(
+      entrar(resumoDoTokenDoDispositivo('token-antigo-do-totem')),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('pareamento novo grava só o resumo e o token devolvido entra', async () => {
@@ -88,16 +104,11 @@ describe.skipIf(!URL)('token do totem como resumo — Postgres real', () => {
       }),
     );
     const r = await svc.parear('482913');
-    const guardado = await colunaToken('Totem novo');
-    expect(guardado).toBe(resumoDoTokenDoDispositivo(r.token));
-    expect(guardado).not.toContain(r.token);
-    expect((await entrar(r.token)).tenantId).toBe(tenantId);
-  });
-
-  it('o resumo copiado do banco não serve de token', async () => {
-    const guardado = await colunaToken('Totem novo');
-    await expect(entrar(guardado)).rejects.toBeInstanceOf(
-      UnauthorizedException,
+    const linhas = await prisma.$queryRawUnsafe<{ token: string }[]>(
+      `select "token" from "dispositivos" where "nome" = 'Totem novo'`,
     );
+    expect(linhas[0]!.token).toBe(resumoDoTokenDoDispositivo(r.token));
+    expect(linhas[0]!.token).not.toContain(r.token);
+    expect((await entrar(r.token)).tenantId).toBe(tenantId);
   });
 });
