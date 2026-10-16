@@ -44,15 +44,9 @@ describe('DeviceTokenGuard', () => {
       deviceId: 'd-1',
       unidadeId: 'u-2',
     });
-    // Procura pelo resumo do token do header — ou, na transição, pelo token
-    // puro de um totem pareado antes do resumo.
+    // Procura só pelo resumo do token do header (nunca pelo valor recebido).
     expect(prisma.dispositivo.findFirst).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { tokenHash: resumoDoTokenDoDispositivo('tok-abc') },
-          { tokenHash: 'tok-abc' },
-        ],
-      },
+      where: { tokenHash: resumoDoTokenDoDispositivo('tok-abc') },
     });
   });
 
