@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
@@ -8,6 +13,13 @@ import {
   chaveDosSegredos,
   selarConfig,
 } from './segredos';
+
+/**
+ * Espera depois de subir: durante o deploy o container anterior ainda atende por
+ * alguns segundos e lê os segredos em claro — cifrar antes de ele sair faria esse
+ * container mandar texto cifrado ao Regem e ao Mercado Pago.
+ */
+export const ATRASO_DA_MIGRACAO_MS = 3 * 60_000;
 
 /** O que uma passada da migração fez (só contagens — nunca valores). */
 export interface ResumoDaMigracaoDeSegredos {
@@ -31,16 +43,26 @@ export interface ResumoDaMigracaoDeSegredos {
  * - Sem a chave: preenche só o resumo (a entrada do Regem passa a achar a
  *   empresa por ele) e avisa no log quantos segredos seguem em claro.
  * - Não trava a subida e nunca rejeita: a falha fica no log.
+ * - Começa `ATRASO_DA_MIGRACAO_MS` depois de subir (o container anterior sai antes).
  */
 @Injectable()
-export class SegredosMigracao implements OnApplicationBootstrap {
+export class SegredosMigracao
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(SegredosMigracao.name);
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private timer?: ReturnType<typeof setTimeout>;
+
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test') return;
-    void this.migrar();
+    this.timer = setTimeout(() => void this.migrar(), ATRASO_DA_MIGRACAO_MS);
+    this.timer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.timer) clearTimeout(this.timer);
   }
 
   async migrar(
