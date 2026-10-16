@@ -7,6 +7,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { Prisma, type Dispositivo } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
+import { resumoDoTokenDoDispositivo } from '../auth/token-do-dispositivo';
 import { CreateDispositivoDto } from './dto/create-dispositivo.dto';
 import {
   EnderecoInvalido,
@@ -204,7 +205,7 @@ export class DispositivoService {
     await this.prisma.dispositivo.update({
       where: { id },
       data: {
-        token: null,
+        tokenHash: null,
         pareado: false,
         codigoPareamento,
         codigoExpiraEm,
@@ -265,7 +266,8 @@ export class DispositivoService {
       await this.prisma.dispositivo.updateMany({
         where: { id: dispositivo.id, pareado: false, ativo: true },
         data: {
-          token,
+          // Só o resumo vai para o banco; o token sai daqui uma vez, para o totem.
+          tokenHash: resumoDoTokenDoDispositivo(token),
           pareado: true,
           codigoPareamento: null,
           codigoExpiraEm: null,

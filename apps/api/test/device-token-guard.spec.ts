@@ -1,6 +1,7 @@
 import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeviceTokenGuard, DeviceUser } from '../src/auth/device-token.guard';
+import { resumoDoTokenDoDispositivo } from '../src/auth/token-do-dispositivo';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 interface FakeReq {
@@ -43,9 +44,29 @@ describe('DeviceTokenGuard', () => {
       deviceId: 'd-1',
       unidadeId: 'u-2',
     });
-    // lookup feito pelo token do header.
+    // Procura pelo resumo do token do header — ou, na transição, pelo token
+    // puro de um totem pareado antes do resumo.
     expect(prisma.dispositivo.findFirst).toHaveBeenCalledWith({
-      where: { token: 'tok-abc' },
+      where: {
+        OR: [
+          { tokenHash: resumoDoTokenDoDispositivo('tok-abc') },
+          { tokenHash: 'tok-abc' },
+        ],
+      },
+    });
+  });
+
+  it('o resumo copiado do banco não casa como token puro', async () => {
+    const { guard, prisma } = makeGuard();
+    prisma.dispositivo.findFirst.mockResolvedValue(null);
+    const copiado = resumoDoTokenDoDispositivo('tok-abc');
+    const req: FakeReq = { headers: { 'x-device-token': copiado } };
+    await expect(guard.canActivate(makeCtx(req))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    // Só o resumo DO valor recebido — nunca o valor recebido como está.
+    expect(prisma.dispositivo.findFirst).toHaveBeenCalledWith({
+      where: { tokenHash: resumoDoTokenDoDispositivo(copiado) },
     });
   });
 
