@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { segredoDa } from '../../integracao/segredos';
+import { TenantContext } from '../../tenant/tenant-context';
+import { avisoAutentico, dataIdDaQuery } from './assinatura-mp';
 import { MercadoPagoPspGateway } from './mercadopago-psp.gateway';
 import { MercadoPagoPointGateway } from './mercadopago-point.gateway';
 import { SandboxPspGateway } from './sandbox-psp.gateway';
@@ -16,8 +18,17 @@ import { PspGateway } from './psp-gateway';
  * O access token vem cifrado do banco (`segredoDa`). Cifrado que não abre é
  * erro (503), nunca "sem integração": cair no fallback trocaria a conta.
  */
+/** O que o aviso (webhook) do Mercado Pago traz para conferir a origem. */
+export interface AvisoMercadoPago {
+  xSignature?: string;
+  xRequestId?: string;
+  query: Record<string, unknown>;
+}
+
 @Injectable()
 export class PspResolver {
+  private readonly logger = new Logger(PspResolver.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /** Resolve o gateway do tenant do CONTEXTO atual (device/JWT já autenticado). */
@@ -55,6 +66,48 @@ export class PspResolver {
       where: { tipo: 'mercadopago', ativo: true },
     });
     return segredoDa(integ, 'accessToken') || null;
+  }
+
+  /**
+   * Confere se o aviso veio do Mercado Pago, com a assinatura secreta dos
+   * avisos da loja do contexto. Recusa (401) sem consultar o Mercado Pago quando
+   * a loja não tem a assinatura configurada, quando o id assinado não é o do
+   * aviso ou quando a assinatura não confere. `idDoAviso` = o id pelo qual o
+   * aviso achou o pagamento.
+   */
+  async conferirAviso(
+    aviso: AvisoMercadoPago,
+    idDoAviso: string,
+  ): Promise<void> {
+    const integ = await this.prisma.integracao.findFirst({
+      where: { tipo: 'mercadopago', ativo: true },
+    });
+    const segredo = segredoDa(integ, 'segredoDosAvisos');
+    const dataId = dataIdDaQuery(aviso.query);
+    let motivo: string | null = null;
+    if (!segredo) {
+      motivo = 'a loja não tem a assinatura secreta dos avisos configurada';
+    } else if (dataId && dataId.toLowerCase() !== idDoAviso.toLowerCase()) {
+      motivo = 'o id assinado não é o do aviso';
+    } else if (
+      !avisoAutentico({
+        xSignature: aviso.xSignature,
+        xRequestId: aviso.xRequestId,
+        dataId,
+        segredo,
+      })
+    ) {
+      motivo = aviso.xSignature
+        ? 'a assinatura não confere'
+        : 'o aviso veio sem assinatura';
+    }
+    if (motivo) {
+      // Só o motivo e a empresa — nunca o segredo nem a assinatura.
+      this.logger.warn(
+        `Aviso do Mercado Pago recusado (empresa ${TenantContext.getTenantId()}): ${motivo}.`,
+      );
+      throw new UnauthorizedException('Aviso sem assinatura válida.');
+    }
   }
 
   private fallbackEnv(): PspGateway {

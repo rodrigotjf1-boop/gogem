@@ -13,7 +13,7 @@ import {
   parsePointWebhook,
   type PointDevice,
 } from './psp/mercadopago-point.gateway';
-import { PspResolver } from './psp/psp-resolver';
+import { PspResolver, type AvisoMercadoPago } from './psp/psp-resolver';
 
 /** Cobrança Point como o totem enxerga (nunca expõe token/intentId). */
 export interface PointView {
@@ -193,6 +193,7 @@ export class PointService {
   async webhook(
     body: unknown,
     query: Record<string, unknown>,
+    cabecalhos: Omit<AvisoMercadoPago, 'query'> = {},
   ): Promise<{ ok: true }> {
     const parsed = parsePointWebhook(body, query);
     if (parsed) {
@@ -202,6 +203,11 @@ export class PointService {
         });
         if (!p) return;
         await TenantContext.run({ tenantId: p.tenantId }, async () => {
+          // Assinatura ANTES de qualquer consulta ao Mercado Pago (401 se falhar).
+          await this.pspResolver.conferirAviso(
+            { ...cabecalhos, query },
+            parsed.intentId,
+          );
           const gw = await this.pspResolver.resolverPoint(p.deviceId);
           await this._reconciliar(p, gw);
         });
