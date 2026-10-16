@@ -1,10 +1,28 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IntegracaoService } from '../src/integracao/integracao.service';
 import { SECRET_MASK } from '../src/integracao/conectores';
+import {
+  ENV_CHAVE_DOS_SEGREDOS,
+  buscaDoSegredo,
+  segredoDa,
+} from '../src/integracao/segredos';
+import { TenantContext } from '../src/tenant/tenant-context';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { RegemConfigResolver } from '../src/integracoes/regem/regem-config.resolver';
 import type { RegemCatalogClient } from '../src/integracoes/regem/regem-catalog.client';
 import type { RegemImportService } from '../src/integracoes/regem/regem-import.service';
+
+// Chave de teste de baixa entropia (32 bytes iguais): só vale aqui.
+const CHAVE_DE_TESTE = Buffer.alloc(32, 7).toString('base64');
+const TOKEN_NOVO = 'token-de-teste-do-regem';
+
+/** O segredo guardado na linha, aberto com a chave de teste. */
+const aberto = (row: any, campo: string) =>
+  segredoDa(
+    { tenantId: 't1', unidadeId: null, tipo: row.tipo, config: row.config },
+    campo,
+    Buffer.alloc(32, 7),
+  );
 
 function makeService(rows: any[] = []) {
   const store = [...rows];
@@ -73,12 +91,20 @@ describe('IntegracaoService.list — máscara de segredos', () => {
 });
 
 describe('IntegracaoService.upsert — merge de segredos', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(TenantContext, 'getTenantId').mockReturnValue('t1');
+    process.env[ENV_CHAVE_DOS_SEGREDOS] = CHAVE_DE_TESTE;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env[ENV_CHAVE_DOS_SEGREDOS];
+  });
 
   it('cria quando não existe (tenantId omitido — vem do middleware)', async () => {
     const { service, prisma } = makeService();
     await service.upsert('regem', {
-      config: { apiBase: 'https://a/api/v1', token: 'T1' },
+      config: { apiBase: 'https://a/api/v1', token: TOKEN_NOVO },
       ativo: true,
     });
     expect(prisma.integracao.create).toHaveBeenCalledTimes(1);
@@ -87,10 +113,72 @@ describe('IntegracaoService.upsert — merge de segredos', () => {
     expect(JSON.stringify(data)).not.toContain('tenantId');
   });
 
+  it('token novo vai cifrado para o banco, com o resumo de busca', async () => {
+    const { service, prisma } = makeService();
+    await service.upsert('regem', {
+      config: { apiBase: 'https://a/api/v1', token: TOKEN_NOVO },
+      ativo: true,
+    });
+    const data = prisma.integracao.create.mock.calls[0][0].data;
+    expect(JSON.stringify(data)).not.toContain(TOKEN_NOVO);
+    expect(data.config.token).toMatch(/^v1\./);
+    expect(data.config.apiBase).toBe('https://a/api/v1'); // não-segredo: claro
+    expect(data.segredoBusca).toBe(buscaDoSegredo(TOKEN_NOVO));
+    expect(aberto(data, 'token')).toBe(TOKEN_NOVO);
+  });
+
+  it('access token do Mercado Pago também vai cifrado (sem resumo)', async () => {
+    const { service, prisma } = makeService();
+    await service.upsert('mercadopago', {
+      config: { accessToken: 'mp-token-de-teste' },
+    });
+    const data = prisma.integracao.create.mock.calls[0][0].data;
+    expect(JSON.stringify(data)).not.toContain('mp-token-de-teste');
+    expect(aberto(data, 'accessToken')).toBe('mp-token-de-teste');
+    expect(data.segredoBusca).toBeNull();
+  });
+
+  it('sem a chave no servidor, token novo é recusado e nada é gravado', async () => {
+    delete process.env[ENV_CHAVE_DOS_SEGREDOS];
+    const { service, prisma } = makeService();
+    await expect(
+      service.upsert('regem', {
+        config: { apiBase: 'https://a/api/v1', token: TOKEN_NOVO },
+      }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(prisma.integracao.create).not.toHaveBeenCalled();
+    expect(prisma.integracao.update).not.toHaveBeenCalled();
+  });
+
+  it('sem a chave, editar só a URL mantém o token antigo e preenche o resumo', async () => {
+    delete process.env[ENV_CHAVE_DOS_SEGREDOS];
+    const { service, store } = makeService([
+      {
+        id: 'i1',
+        tenantId: 't1',
+        unidadeId: null,
+        tipo: 'regem',
+        ativo: true,
+        nome: null,
+        config: { apiBase: 'https://old/api/v1', token: 'GUARDADO' },
+        segredoBusca: null,
+        ultimoTeste: null,
+      },
+    ]);
+    await service.upsert('regem', {
+      config: { apiBase: 'https://novo/api/v1', token: '' },
+    });
+    expect(store[0].config.apiBase).toBe('https://novo/api/v1');
+    expect(store[0].config.token).toBe('GUARDADO');
+    expect(store[0].segredoBusca).toBe(buscaDoSegredo('GUARDADO'));
+  });
+
   it('token em branco mantém o guardado (não apaga ao reeditar)', async () => {
     const { service, store } = makeService([
       {
         id: 'i1',
+        tenantId: 't1',
+        unidadeId: null,
         tipo: 'regem',
         ativo: true,
         nome: null,
@@ -103,13 +191,17 @@ describe('IntegracaoService.upsert — merge de segredos', () => {
       config: { apiBase: 'https://novo/api/v1', token: '' },
     });
     expect(store[0].config.apiBase).toBe('https://novo/api/v1');
-    expect(store[0].config.token).toBe('GUARDADO'); // preservado
+    // Preservado — e, como estava em claro, sai cifrado nesta gravação.
+    expect(store[0].config.token).toMatch(/^v1\./);
+    expect(aberto(store[0], 'token')).toBe('GUARDADO');
   });
 
   it('a máscara como token também mantém o guardado', async () => {
     const { service, store } = makeService([
       {
         id: 'i1',
+        tenantId: 't1',
+        unidadeId: null,
         tipo: 'regem',
         ativo: false,
         nome: null,
@@ -118,7 +210,7 @@ describe('IntegracaoService.upsert — merge de segredos', () => {
       },
     ]);
     await service.upsert('regem', { config: { token: SECRET_MASK } });
-    expect(store[0].config.token).toBe('GUARDADO');
+    expect(aberto(store[0], 'token')).toBe('GUARDADO');
   });
 
   it('ativar com config incompleta → 400', async () => {

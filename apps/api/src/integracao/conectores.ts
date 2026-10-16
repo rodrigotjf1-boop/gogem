@@ -9,8 +9,16 @@
 export interface ConectorCampo {
   key: string;
   label: string;
-  /** Segredo: mascarado nas respostas; em branco no upsert = mantém o guardado. */
+  /**
+   * Segredo: guardado cifrado, mascarado nas respostas; em branco no upsert =
+   * mantém o guardado.
+   */
   secret: boolean;
+  /**
+   * Segredo pelo qual o sistema externo se apresenta (o token do Regem): guarda
+   * também o SHA-256 em `Integracao.segredoBusca` para achar a empresa.
+   */
+  busca?: boolean;
   /** Dica de UI (placeholder/ajuda). */
   ajuda?: string;
   /** true = validação de URL no front. */
@@ -56,6 +64,7 @@ export const CONECTORES: Record<string, Conector> = {
         key: 'token',
         label: 'Token de sincronização',
         secret: true,
+        busca: true,
         ajuda: 'Token do equipamento "servidor local" no Regem (X-Sync-Token).',
       },
       {

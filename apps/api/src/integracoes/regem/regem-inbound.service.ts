@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../tenant/tenant-context';
+import { buscaDoSegredo } from '../../integracao/segredos';
 import { CatalogoPublicacaoService } from '../../catalogo/catalogo-publicacao.service';
 import {
   CancelamentoService,
@@ -58,6 +59,9 @@ export class RegemInboundService {
 
   /**
    * Acha o tenant pela token da integração `regem` (cross-tenant via runAsSystem).
+   * O token fica cifrado no banco: a busca é pelo SHA-256 dele (`segredoBusca`).
+   * A linha antiga ainda sem resumo (antes da migração do boot passar) é achada
+   * pelo valor em claro — só casa enquanto o token não foi cifrado.
    * O `await` dentro do runAsSystem mantém o contexto de sistema vivo até o Prisma
    * rodar (callback síncrono → ForbiddenException). Ver DeviceTokenGuard.
    */
@@ -69,7 +73,13 @@ export class RegemInboundService {
         where: {
           tipo: 'regem',
           ativo: true,
-          config: { path: ['token'], equals: t } as Prisma.JsonFilter,
+          OR: [
+            { segredoBusca: buscaDoSegredo(t) },
+            {
+              segredoBusca: null,
+              config: { path: ['token'], equals: t } as Prisma.JsonFilter,
+            },
+          ],
         },
         select: { tenantId: true },
       });

@@ -48,6 +48,7 @@ Use o `env.staging.example` deste pacote como base. Resumo:
 DATABASE_URL=postgresql://gogem:SENHA@gogem-db:5432/gogem?schema=public
 REDIS_URL=redis://gogem-redis:6379
 JWT_SECRET=<64+ chars aleatórios — gere com: openssl rand -hex 48>
+GOGEM_CHAVE_DOS_SEGREDOS=<32 bytes em base64 — gere com: openssl rand -base64 32; uma por ambiente>
 PORT=3000
 S3_ENDPOINT=http://gogem-media:9000
 S3_ACCESS_KEY=...  S3_SECRET_KEY=...  S3_BUCKET=gogem

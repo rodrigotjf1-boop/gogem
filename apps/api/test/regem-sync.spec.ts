@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RegemImportService } from '../src/integracoes/regem/regem-import.service';
 import { RegemSyncPoller } from '../src/integracoes/regem/regem-sync.poller';
+import { buscaDoSegredo } from '../src/integracao/segredos';
 import { RegemInboundService } from '../src/integracoes/regem/regem-inbound.service';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { CardapioService } from '../src/cardapio/cardapio.service';
@@ -425,11 +426,15 @@ describe('RegemInboundService.publicar (botão "Publicar no GoGeM")', () => {
     const r = await service.publicar('tok-abc');
 
     expect(r).toEqual({ alterados: 2 });
-    // Casou pelo token dentro do config (cross-tenant, só regem ativo).
+    // Casou pelo resumo do token (cross-tenant, só regem ativo); a linha antiga
+    // ainda sem resumo casa pelo valor em claro.
     const where = prisma.integracao.findFirst.mock.calls[0][0].where;
     expect(where.tipo).toBe('regem');
     expect(where.ativo).toBe(true);
-    expect(where.config).toEqual({ path: ['token'], equals: 'tok-abc' });
+    expect(where.OR).toEqual([
+      { segredoBusca: buscaDoSegredo('tok-abc') },
+      { segredoBusca: null, config: { path: ['token'], equals: 'tok-abc' } },
+    ]);
     expect(publicacao.publicar).toHaveBeenCalledWith(null);
   });
 

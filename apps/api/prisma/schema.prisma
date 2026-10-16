@@ -700,22 +700,26 @@ model Pedido {
 // fallback para envs globais (ERR-012): sem integração, a empresa não fala com o
 // Regem. Cada loja pareia a sua.
 model Integracao {
-  id          String   @id @default(uuid())
-  tenantId    String
+  id           String   @id @default(uuid())
+  tenantId     String
   // Loja (Unidade) desta integração. NULL = config no nível da EMPRESA (piloto
   // 1-loja / fallback). Preenchido = integração dedicada da loja (token por loja).
-  unidadeId   String?
+  unidadeId    String?
   // Discriminador do conector: 'regem' | 'open_delivery' | ...
-  tipo        String
+  tipo         String
   // Rótulo amigável opcional (ex.: "Regem — Loja Centro").
-  nome        String?
-  ativo       Boolean  @default(false)
-  // Credenciais/parâmetros do conector. Ex. regem: { apiBase, token }.
-  config      Json     @default("{}")
+  nome         String?
+  ativo        Boolean  @default(false)
+  // Credenciais/parâmetros do conector. Ex. regem: { apiBase, token }. Os campos-
+  // segredo vão CIFRADOS (`v1.…`, chave na env GOGEM_CHAVE_DOS_SEGREDOS).
+  config       Json     @default("{}")
+  // SHA-256 do segredo de apresentação (token do Regem): a entrada do Regem acha
+  // a empresa por ele, sem abrir a cifra. NULL = conector sem esse segredo.
+  segredoBusca String?
   // Resultado do último teste de conexão: { ok, em, detalhe? }.
-  ultimoTeste Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  ultimoTeste  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant  Tenant   @relation(fields: [tenantId], references: [id])
   unidade Unidade? @relation(fields: [unidadeId], references: [id])
@@ -724,5 +728,6 @@ model Integracao {
   @@unique([tenantId, unidadeId, tipo])
   @@index([tenantId])
   @@index([unidadeId])
+  @@index([tipo, segredoBusca])
   @@map("integracoes")
 }
