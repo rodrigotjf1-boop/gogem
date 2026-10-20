@@ -10,6 +10,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../tenant/tenant-context';
 import { CatalogoPublicacaoService } from '../../catalogo/catalogo-publicacao.service';
 import { RegemImportService } from './regem-import.service';
+import { RegemAvisosService } from './regem-avisos.service';
+import { RegemConfigResolver } from './regem-config.resolver';
 
 const INTERVALO_PADRAO_MIN = 5;
 const ATRASO_INICIAL_MS = 30_000;
@@ -34,6 +36,8 @@ export class RegemSyncPoller implements OnModuleInit, OnModuleDestroy {
     private readonly config: ConfigService,
     private readonly imports: RegemImportService,
     private readonly publicacao: CatalogoPublicacaoService,
+    private readonly avisos?: RegemAvisosService,
+    private readonly resolver?: RegemConfigResolver,
   ) {}
 
   onModuleInit(): void {
@@ -106,6 +110,17 @@ export class RegemSyncPoller implements OnModuleInit, OnModuleDestroy {
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             this.logger.warn(`Sync Regem falhou (tenant ${tenantId}): ${msg}`);
+          }
+          // Avisos assinados: religa uma vez por dia o que já está LIGADO com o token atual
+          // (o Regem pausa depois de falhas seguidas; um PUT novo religa). Ligar pela primeira
+          // vez é só pelo "Testar conexão". Nunca derruba a passada.
+          if (this.avisos && this.resolver) {
+            try {
+              const cfg = await this.resolver.resolve();
+              await this.avisos.garantirRegistro(cfg, { soReativar: true });
+            } catch {
+              /* sem integração completa: nada a religar */
+            }
           }
         });
       }

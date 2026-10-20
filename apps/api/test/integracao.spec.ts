@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
 import { IntegracaoService } from '../src/integracao/integracao.service';
 import { RegemCredencialRecusadaError } from '../src/integracoes/regem/chamada-regem';
+import { RegemAvisosService } from '../src/integracoes/regem/regem-avisos.service';
 import { SECRET_MASK } from '../src/integracao/conectores';
 import {
   ENV_CHAVE_DOS_SEGREDOS,
@@ -52,14 +53,39 @@ function makeService(rows: any[] = []) {
   const catalog = { fetchCatalogoWith: vi.fn() };
   const regemImport = { importar: vi.fn() };
   const auditoria = { registrar: vi.fn() };
+  // A situação dos avisos é pura (lê a coluna); o registro e o desligamento são simulados.
+  const real = new RegemAvisosService(
+    {} as unknown as PrismaService,
+    {} as unknown as RegemConfigResolver,
+  );
+  const avisos = {
+    situacao: vi.fn((a: unknown) => real.situacao(a)),
+    garantirRegistro: vi.fn().mockResolvedValue({
+      ligados: true,
+      registradoEm: '2026-10-20T03:00:00.000Z',
+      erro: null,
+      detalhe: 'Avisos do Regem: ligados (assinados).',
+    }),
+    desligar: vi.fn(),
+  };
   const service = new IntegracaoService(
     prisma as unknown as PrismaService,
     resolver as unknown as RegemConfigResolver,
     catalog as unknown as RegemCatalogClient,
     regemImport as unknown as RegemImportService,
     auditoria as unknown as import('../src/auditoria/auditoria.service').AuditoriaService,
+    avisos as unknown as RegemAvisosService,
   );
-  return { service, prisma, resolver, catalog, regemImport, store, auditoria };
+  return {
+    service,
+    prisma,
+    resolver,
+    catalog,
+    regemImport,
+    store,
+    auditoria,
+    avisos,
+  };
 }
 
 describe('IntegracaoService.list — máscara de segredos', () => {
@@ -405,5 +431,135 @@ describe('Regem — token de integração (rgm_it_), fase 3 da credencial própr
       status: 401,
       detalhe: 'Token revogado.',
     });
+  });
+});
+
+describe('Regem — avisos assinados (contrato 1), ligar pelo "Testar conexão"', () => {
+  const TOKEN_INTEGRACAO = `rgm_it_${'d'.repeat(43)}`;
+  const linhaRegem = (extra: Record<string, unknown> = {}) => ({
+    id: 'i1',
+    tenantId: 't1',
+    unidadeId: null,
+    tipo: 'regem',
+    ativo: true,
+    nome: null,
+    segredoBusca: null,
+    config: { apiBase: 'https://x/api/v1', token: 'GUARDADO' },
+    ultimoTeste: null,
+    avisos: null,
+    ...extra,
+  });
+  const cfgComToken = {
+    base: 'https://x/api/v1',
+    token: 'GUARDADO',
+    tokenIntegracao: TOKEN_INTEGRACAO,
+    integracaoId: 'i1',
+    credencialRecusada: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(TenantContext, 'getTenantId').mockReturnValue('t1');
+    process.env[ENV_CHAVE_DOS_SEGREDOS] = CHAVE_DE_TESTE;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env[ENV_CHAVE_DOS_SEGREDOS];
+  });
+
+  it('conexão ok com o token novo → liga os avisos e diz no resultado', async () => {
+    const { service, resolver, catalog, avisos } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue(cfgComToken);
+    catalog.fetchCatalogoWith.mockResolvedValue({ produtos: [{}] });
+    const res = await service.testar('regem');
+    expect(avisos.garantirRegistro).toHaveBeenCalledWith(cfgComToken, {
+      forcar: true,
+    });
+    expect(res.detalhe).toContain('Avisos do Regem: ligados (assinados).');
+  });
+
+  it('sem o token novo, o teste não mexe nos avisos', async () => {
+    const { service, resolver, catalog, avisos } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue({
+      base: 'https://x/api/v1',
+      token: 'GUARDADO',
+    });
+    catalog.fetchCatalogoWith.mockResolvedValue({ produtos: [] });
+    await service.testar('regem');
+    expect(avisos.garantirRegistro).not.toHaveBeenCalled();
+  });
+
+  it('conexão que falha não liga avisos', async () => {
+    const { service, resolver, catalog, avisos } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue(cfgComToken);
+    catalog.fetchCatalogoWith.mockRejectedValue(new Error('caiu'));
+    await service.testar('regem');
+    expect(avisos.garantirRegistro).not.toHaveBeenCalled();
+  });
+
+  it('token novo salvo: o registro dos avisos morre no Regem — fica "não ligado", e o segredo vira o anterior no próximo teste', async () => {
+    const ligado = {
+      segredo: 'v1.aaa.bbb.ccc',
+      anterior: null,
+      trocadoEm: null,
+      resumoDoToken: 'resumo-velho',
+      registradoEm: '2026-10-20T03:00:00.000Z',
+      tentadoEm: '2026-10-20T03:00:00.000Z',
+      erro: null,
+    };
+    const { service, store } = makeService([linhaRegem({ avisos: ligado })]);
+    await service.upsert('regem', {
+      config: { tokenIntegracao: TOKEN_INTEGRACAO },
+    });
+    expect(store[0].avisos).toMatchObject({
+      segredo: 'v1.aaa.bbb.ccc',
+      resumoDoToken: 'resumo-velho',
+      registradoEm: null,
+    });
+    const view = (await service.list()).find((i) => i.tipo === 'regem')!;
+    expect(view.avisos?.ligados).toBe(false);
+  });
+
+  it('a tela recebe a situação dos avisos (sem segredo) só no Regem', async () => {
+    const { service } = makeService([
+      linhaRegem({
+        avisos: {
+          segredo: 'v1.segredo.cifrado.aqui',
+          resumoDoToken: 'r',
+          registradoEm: '2026-10-20T03:00:00.000Z',
+        },
+      }),
+    ]);
+    const lista = await service.list();
+    const r = lista.find((i) => i.tipo === 'regem')!;
+    expect(r.avisos).toMatchObject({ ligados: true, erro: null });
+    expect(JSON.stringify(r)).not.toContain('v1.segredo.cifrado.aqui');
+    expect(lista.find((i) => i.tipo === 'mercadopago')!.avisos).toBeNull();
+  });
+
+  it('desligar → chama o Regem pelo serviço dos avisos e audita', async () => {
+    const { service, resolver, avisos, auditoria } = makeService([
+      linhaRegem(),
+    ]);
+    resolver.resolve.mockResolvedValue(cfgComToken);
+    avisos.desligar.mockResolvedValue({
+      ligados: false,
+      registradoEm: null,
+      erro: null,
+      detalhe: 'Avisos do Regem desligados: o Regem voltou ao caminho antigo.',
+    });
+    const s = await service.desligarAvisos('regem');
+    expect(avisos.desligar).toHaveBeenCalledWith(cfgComToken);
+    expect(s.ligados).toBe(false);
+    expect(auditoria.registrar).toHaveBeenCalledWith(
+      expect.objectContaining({ acao: 'integracao.avisos.desligar' }),
+    );
+  });
+
+  it('desligar em conector sem avisos → 400', async () => {
+    const { service } = makeService([]);
+    await expect(service.desligarAvisos('mercadopago')).rejects.toThrow(
+      /não tem avisos assinados/,
+    );
   });
 });

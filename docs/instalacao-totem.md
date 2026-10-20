@@ -99,7 +99,11 @@ Para importar o cardápio e mandar as vendas do totem ao Regem.
      pela API de integração; o token de sincronização continua (é por ele que o
      Regem avisa o GoGeM, até a troca dos avisos).
    - marque **Integração ativa** → **Salvar**.
-3. **Testar conexão** → "Conexão ok — N produto(s) … (pelo token de integração)".
+3. **Testar conexão** → "Conexão ok — N produto(s) … (pelo token de integração).
+   Avisos do Regem: ligados (assinados)." — com o token de integração, o teste
+   também liga os **avisos assinados** do Regem (cancelamento com estorno e o
+   "Publicar no GoGeM" chegam assinados). Para voltar ao caminho antigo, use
+   **Desligar avisos** no cartão do Regem; para religar, **Testar conexão** de novo.
    Depois **Importar catálogo** (traz produtos + imagens).
    - Se aparecer "O Regem recusou o token de integração…" ou "…não tem
      permissão…": o token foi revogado, venceu ou não tem os escopos do totem.

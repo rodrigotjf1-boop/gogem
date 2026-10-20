@@ -6,7 +6,9 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // `rawBody`: o corpo EXATO fica em `req.rawBody` — a assinatura dos avisos do Regem
+  // (`POST /sync/regem/avisos/:id`) é conferida sobre ele, nunca sobre o JSON remontado.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Atrás do proxy do EasyPanel (1 hop): confia no X-Forwarded-For para o
   // rate-limit enxergar o IP real do cliente (senão todos compartilham o IP do

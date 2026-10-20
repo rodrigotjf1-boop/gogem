@@ -721,6 +721,11 @@ model Integracao {
   segredoBusca String?
   // Resultado do último teste de conexão: { ok, em, detalhe? }.
   ultimoTeste  Json?
+  // Avisos assinados que o sistema externo manda ao GoGeM (Regem, contrato 1 dos
+  // AVISOS-ASSINADOS): o segredo `whsec_` (CIFRADO, gerado pelo GoGeM), o anterior
+  // durante a troca e o estado do registro. É da distribuição: não vai ao painel
+  // nem entra na `config` que o lojista edita. NULL = avisos não ligados.
+  avisos       Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

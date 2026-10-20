@@ -30,6 +30,14 @@ export interface TesteResultado {
   em: string;
 }
 
+/** Avisos assinados que o sistema externo manda ao GoGeM (o Regem, hoje). */
+export interface SituacaoAvisos {
+  ligados: boolean;
+  registradoEm: string | null;
+  erro: string | null;
+  detalhe: string;
+}
+
 export interface Integracao {
   tipo: string;
   nome: string;
@@ -41,6 +49,8 @@ export interface Integracao {
   campos: IntegracaoCampo[];
   nomePersonalizado: string | null;
   ultimoTeste: TesteResultado | null;
+  /** `null` = o conector não tem avisos assinados. */
+  avisos?: SituacaoAvisos | null;
 }
 
 export interface SalvarIntegracaoInput {
@@ -79,6 +89,16 @@ export function useTestarIntegracao() {
   return useMutation({
     mutationFn: (tipo: string) =>
       apiPost<TesteResultado>(`/integracoes/${tipo}/testar`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: integracoesKeys.all }),
+  });
+}
+
+/** Desliga os avisos assinados (o Regem volta ao caminho antigo); religar = "Testar conexão". */
+export function useDesligarAvisos() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tipo: string) =>
+      apiPost<SituacaoAvisos>(`/integracoes/${tipo}/avisos/desligar`),
     onSuccess: () => qc.invalidateQueries({ queryKey: integracoesKeys.all }),
   });
 }
