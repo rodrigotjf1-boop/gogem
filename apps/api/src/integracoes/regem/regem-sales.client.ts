@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { RegemConfigResolver } from './regem-config.resolver';
-import { CABECALHO_INTEGRADOR } from './integrador';
+import { RegemConfigResolver, type RegemConfig } from './regem-config.resolver';
+import { chamarRegem, mensagemDoRegem } from './chamada-regem';
+
+export { mensagemDoRegem };
 
 /**
  * Cliente HTTP de venda do Regem (issue #12.2).
  *
  * Lança a venda de totem no Regem via `POST {apiBase}/vendas/externa-pdv`
- * (endpoint L-VEN-1, PR #226 do Regem), autenticado por `X-Sync-Token`. Base e
- * token vêm da integração da loja/empresa (`RegemConfigResolver`) — NUNCA
- * hardcoded (CLAUDE.md §8). Espelha o `RegemCatalogClient`: `fetch` global
- * (Node 20+) com timeout via AbortController.
+ * (endpoint L-VEN-1, PR #226 do Regem). A credencial (token de integração
+ * `Bearer rgm_it_…` ou o `X-Sync-Token` de sempre), o prazo e as respostas de
+ * erro moram em `chamada-regem.ts`. Base e tokens vêm da integração da
+ * loja/empresa (`RegemConfigResolver`) — NUNCA hardcoded (CLAUDE.md §8).
  *
  * O endpoint do Regem é idempotente por `idempotencyKey` (replay devolve
  * `{ comandaId, idempotente: true }`), somando-se à idempotência local do GoGeM
@@ -130,19 +132,6 @@ export class RegemRecusouError extends Error {
 /** Status do Regem que significam recusa DEFINITIVA da venda (o resto é passageiro). */
 const STATUS_RECUSA_DEFINITIVA = new Set([400, 422]);
 
-/** Extrai a `message` do erro do Nest (string ou lista) do corpo de resposta do Regem. */
-export function mensagemDoRegem(corpo: string): string {
-  try {
-    const b = JSON.parse(corpo) as { message?: unknown };
-    const m = b?.message;
-    if (Array.isArray(m)) return m.map(String).join('; ');
-    if (typeof m === 'string' && m.trim()) return m.trim();
-  } catch {
-    /* corpo não é JSON */
-  }
-  return corpo.trim().slice(0, 300) || 'sem detalhe';
-}
-
 export interface RegemVendaExternaResposta {
   comandaId: string;
   senha?: number;
@@ -202,36 +191,19 @@ export class RegemSalesClient {
   async lancarVendaExterna(
     body: RegemVendaExternaBody,
   ): Promise<RegemVendaExternaResposta> {
-    const { base, token } = await this.resolver.resolve();
-
-    const url = `${base.replace(/\/$/, '')}/vendas/externa-pdv`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), VENDA_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Token': token,
-          'X-Loja-Token': token,
-          ...CABECALHO_INTEGRADOR,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      const motivo = err instanceof Error ? err.message : String(err);
-      throw new Error(`Falha ao lançar venda no Regem (${url}): ${motivo}`);
-    } finally {
-      clearTimeout(timer);
-    }
+    const cfg = await this.resolver.resolve();
+    const res = await chamarRegem(this.resolver, cfg, {
+      caminho: '/vendas/externa-pdv',
+      metodo: 'POST',
+      corpo: body,
+      prazoMs: VENDA_TIMEOUT_MS,
+      rotulo: 'a venda',
+    });
 
     if (!res.ok) {
       // Inclui o corpo do erro para diagnóstico (best-effort).
       const corpo = await res.text().catch(() => '');
-      const mensagem = `Venda no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`;
+      const mensagem = `Venda no Regem respondeu ${res.status} ${res.statusText} (${cfg.base}/vendas/externa-pdv): ${corpo}`;
       if (STATUS_RECUSA_DEFINITIVA.has(res.status)) {
         throw new RegemRecusouError(
           res.status,
@@ -247,40 +219,24 @@ export class RegemSalesClient {
 
   /**
    * Lança um pedido em DINHEIRO no Regem como RETIRADA a receber
-   * (`POST /delivery/totem-dinheiro`). Auth = `X-Sync-Token` (igual ao
-   * `/delivery/ingest`). Idempotente por `idempotencyKey`. Lança erro em falha —
+   * (`POST /delivery/totem-dinheiro`). Credencial como nas outras rotas
+   * (`chamada-regem.ts`). Idempotente por `idempotencyKey`. Lança erro em falha —
    * o VendasService decide o tratamento (best-effort para o totem).
    */
   async lancarTotemDinheiro(
     body: RegemTotemDinheiroBody,
   ): Promise<RegemVendaExternaResposta> {
-    const { base, token } = await this.resolver.resolve();
-    const url = `${base.replace(/\/$/, '')}/delivery/totem-dinheiro`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Token': token,
-          'X-Loja-Token': token,
-          ...CABECALHO_INTEGRADOR,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      const motivo = err instanceof Error ? err.message : String(err);
-      throw new Error(`Falha no pedido dinheiro no Regem (${url}): ${motivo}`);
-    } finally {
-      clearTimeout(timer);
-    }
+    const cfg = await this.resolver.resolve();
+    const res = await chamarRegem(this.resolver, cfg, {
+      caminho: '/delivery/totem-dinheiro',
+      metodo: 'POST',
+      corpo: body,
+      prazoMs: FETCH_TIMEOUT_MS,
+      rotulo: 'o pedido em dinheiro',
+    });
     if (!res.ok) {
       const corpo = await res.text().catch(() => '');
-      const mensagem = `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${url}): ${corpo}`;
+      const mensagem = `Pedido dinheiro no Regem respondeu ${res.status} ${res.statusText} (${cfg.base}/delivery/totem-dinheiro): ${corpo}`;
       if (STATUS_RECUSA_DEFINITIVA.has(res.status)) {
         throw new RegemRecusouError(
           res.status,
@@ -316,33 +272,24 @@ export class RegemSalesClient {
    * no Regem) ou erro de rede são silenciosos. Nada de venda/caixa é registrado.
    */
   async relatarFalha(body: RegemVendaFalhaBody): Promise<void> {
-    let cfg: { base: string; token: string };
+    let cfg: RegemConfig;
     try {
       cfg = await this.resolver.resolve();
     } catch {
       return; // sem integração Regem → nada a reportar
     }
-    const url = `${cfg.base.replace(/\/$/, '')}/vendas/externa-pdv/falha`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
-      await fetch(url, {
-        method: 'POST',
-        headers: {
-          'X-Sync-Token': cfg.token,
-          'X-Loja-Token': cfg.token,
-          ...CABECALHO_INTEGRADOR,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
+      await chamarRegem(this.resolver, cfg, {
+        caminho: '/vendas/externa-pdv/falha',
+        metodo: 'POST',
+        corpo: body,
+        prazoMs: FETCH_TIMEOUT_MS,
+        rotulo: 'a falha do pagamento',
       });
       // best-effort: não checamos res.ok nem lançamos.
     } catch {
-      // rede/timeout — silencioso (o cliente já viu o erro na tela do totem).
-    } finally {
-      clearTimeout(timer);
+      // rede/timeout/recusa — silencioso (o cliente já viu o erro na tela do
+      // totem; a recusa do token novo já ficou marcada no painel).
     }
   }
 }

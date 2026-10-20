@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 import { IntegracaoService } from '../src/integracao/integracao.service';
+import { RegemCredencialRecusadaError } from '../src/integracoes/regem/chamada-regem';
 import { SECRET_MASK } from '../src/integracao/conectores';
 import {
   ENV_CHAVE_DOS_SEGREDOS,
@@ -288,5 +290,120 @@ describe('IntegracaoService.importar', () => {
     regemImport.importar.mockResolvedValue({ geradoEm: 'x' });
     await service.importar('regem');
     expect(regemImport.importar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Regem — token de integração (rgm_it_), fase 3 da credencial própria', () => {
+  // Valor de teste de baixa entropia (não é um token de verdade).
+  const TOKEN_INTEGRACAO = `rgm_it_${'b'.repeat(43)}`;
+  const linhaRegem = (extra: Record<string, unknown> = {}) => ({
+    id: 'i1',
+    tenantId: 't1',
+    unidadeId: null,
+    tipo: 'regem',
+    ativo: true,
+    nome: null,
+    segredoBusca: null,
+    config: { apiBase: 'https://x/api/v1', token: 'GUARDADO' },
+    ultimoTeste: null,
+    ...extra,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(TenantContext, 'getTenantId').mockReturnValue('t1');
+    process.env[ENV_CHAVE_DOS_SEGREDOS] = CHAVE_DE_TESTE;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env[ENV_CHAVE_DOS_SEGREDOS];
+  });
+
+  it('token fora do formato é recusado no salvar, com o que fazer, e nada é gravado', async () => {
+    const { service, prisma } = makeService([linhaRegem()]);
+    await expect(
+      service.upsert('regem', { config: { tokenIntegracao: 'rgm_it_curto' } }),
+    ).rejects.toThrow(/começa com "rgm_it_" e tem 50/);
+    expect(prisma.integracao.update).not.toHaveBeenCalled();
+  });
+
+  it('token no formato vai cifrado e limpa a recusa marcada (reconectou)', async () => {
+    const recusa = {
+      ok: false,
+      detalhe: 'recusado',
+      em: '2026-10-19T22:00:00.000Z',
+      credencialRecusada: { status: 401, detalhe: 'revogado', em: 'x' },
+    };
+    const { service, store } = makeService([
+      linhaRegem({ ultimoTeste: recusa }),
+    ]);
+    await service.upsert('regem', {
+      config: { tokenIntegracao: TOKEN_INTEGRACAO },
+    });
+    expect(store[0].config.tokenIntegracao).toMatch(/^v1\./);
+    expect(JSON.stringify(store[0].config)).not.toContain(TOKEN_INTEGRACAO);
+    expect(aberto(store[0], 'tokenIntegracao')).toBe(TOKEN_INTEGRACAO);
+    expect(store[0].ultimoTeste).toBe(Prisma.DbNull);
+  });
+
+  it('salvar sem mexer no token novo não limpa o último teste', async () => {
+    const teste = { ok: true, detalhe: 'ok', em: 'x' };
+    const { service, store } = makeService([
+      linhaRegem({ ultimoTeste: teste }),
+    ]);
+    await service.upsert('regem', { config: { apiBase: 'https://y/api/v1' } });
+    expect(store[0].ultimoTeste).toEqual(teste);
+  });
+
+  it('"Testar conexão" diz por qual token passou e chama mesmo com a recusa marcada', async () => {
+    const { service, resolver, catalog, store } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue({
+      base: 'https://x/api/v1',
+      token: 'GUARDADO',
+      tokenIntegracao: TOKEN_INTEGRACAO,
+      integracaoId: 'i1',
+      credencialRecusada: { status: 401, detalhe: 'revogado', em: 'x' },
+    });
+    catalog.fetchCatalogoWith.mockResolvedValue({ produtos: [{}, {}] });
+    const res = await service.testar('regem');
+    expect(catalog.fetchCatalogoWith).toHaveBeenCalledWith(expect.anything(), {
+      ignorarRecusa: true,
+    });
+    expect(res.ok).toBe(true);
+    expect(res.detalhe).toContain('pelo token de integração');
+    // O teste que passou substitui a recusa: as chamadas voltam a ir ao Regem.
+    expect(store[0].ultimoTeste.credencialRecusada).toBeUndefined();
+  });
+
+  it('sem token novo, o teste diz que passou pelo token de sincronização', async () => {
+    const { service, resolver, catalog } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue({
+      base: 'https://x/api/v1',
+      token: 'GUARDADO',
+    });
+    catalog.fetchCatalogoWith.mockResolvedValue({ produtos: [] });
+    const res = await service.testar('regem');
+    expect(res.detalhe).toContain('pelo token de sincronização');
+  });
+
+  it('"Testar conexão" recusado de novo mantém a recusa marcada, com o que fazer', async () => {
+    const { service, resolver, catalog, store } = makeService([linhaRegem()]);
+    resolver.resolve.mockResolvedValue({
+      base: 'https://x/api/v1',
+      token: 'GUARDADO',
+      tokenIntegracao: TOKEN_INTEGRACAO,
+      integracaoId: 'i1',
+      credencialRecusada: null,
+    });
+    catalog.fetchCatalogoWith.mockRejectedValue(
+      new RegemCredencialRecusadaError(401, 'Token revogado.'),
+    );
+    const res = await service.testar('regem');
+    expect(res.ok).toBe(false);
+    expect(res.detalhe).toContain('Emita outro token no Regem');
+    expect(store[0].ultimoTeste.credencialRecusada).toMatchObject({
+      status: 401,
+      detalhe: 'Token revogado.',
+    });
   });
 });

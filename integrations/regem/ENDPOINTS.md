@@ -26,7 +26,24 @@
 
 ## 1. Autenticação de serviço (máquina-a-máquina)
 
-**Não existe grant `client_credentials` / OAuth de aplicativo terceiro.** Há quatro mecanismos não-humanos; o adequado para o GoGeM é o **sync token de dispositivo**.
+### 1.0 Token de integração da loja — `Authorization: Bearer rgm_it_…` (GoGeM, fase 3 da credencial própria, 20/10/2026)
+
+O caminho NOVO, e o que um produto de fora do grupo DMS usaria: a **API de integração** do Regem
+(Regem #658/#659, mig 323). O GoGeM a consome só pelo contrato público, sem atalho.
+
+| Item | Valor |
+|---|---|
+| **Emissão** | Regem → Distribuição › Tokens de integração › "Para quem": **GoGeM**. Um token **por loja**, mostrado uma vez; o Regem guarda só o SHA-256. Formato `rgm_it_` + 43 caracteres base64url (50 no total). |
+| **No GoGeM** | Integrações → Regem → campo **"Token de integração (rgm_it_…)"** (`tokenIntegracao`, opcional, cifrado `v1.` como os outros segredos — ver V24; o formato é conferido no salvar). |
+| **Cabeçalho** | Com o token: **só** `Authorization: Bearer rgm_it_…` (sem `X-Sync-Token`, sem `X-Integrador`). Sem ele: o caminho de sempre (abaixo). Um lugar só monta isso: `apps/api/src/integracoes/regem/chamada-regem.ts` (`chamarRegem`). |
+| **As 5 rotas e os escopos** | `GET /sync/catalogo` (`totem.catalogo.ler`) · `POST /sync/produtos/pausa` (`totem.produtos.pausar`) · `POST /vendas/externa-pdv`, `POST /vendas/externa-pdv/falha` e `POST /delivery/totem-dinheiro` (`totem.vendas.lancar`). A loja é a do token; a venda sai igual à de hoje (origem = o equipamento marcado como do GoGeM). |
+| **Erros (problem+json)** | **401** `token-invalido` (inválido, vencido, revogado) e **403** `escopo-insuficiente`: o GoGeM **NÃO volta para o `X-Sync-Token`** (revogar tem de valer — decisão do dono, 19/10/2026); marca a recusa no "último teste" da integração (o painel mostra o "reconecte"), e as chamadas seguintes nem vão ao Regem até salvar um token novo ou o "Testar conexão" passar. A venda volta ao totem como "indisponível agora" (503) e espera na fila. **429** `limite-de-chamadas` (60/min por token): espera o `Retry-After` antes de chamar de novo. |
+| **Rede da loja** | Não muda: o servidor da loja nem aceita o token de integração — o totem que fala com ele segue como sempre. |
+| **Provas** | `apps/api/test/regem-credencial-integracao.spec.ts` (cabeçalhos, 401/403 sem volta, chamadas seguradas, 429) e `test/regem-bearer.e2e.spec.ts` (contra o Regem de verdade, opt-in por `REGEM_E2E_URL`: as 5 rotas, revogado → 401, sem escopo → 403, 61ª chamada → 429). |
+
+### 1.1 Token de sincronização — `X-Sync-Token` (o caminho de sempre, até a fase 4)
+
+**Não existe grant `client_credentials` / OAuth de aplicativo terceiro** *(levantamento original; a API de integração do §1.0 fechou essa lacuna)*. Há quatro mecanismos não-humanos; o que o GoGeM usava era o **sync token de dispositivo**.
 
 | Item | Valor |
 |---|---|

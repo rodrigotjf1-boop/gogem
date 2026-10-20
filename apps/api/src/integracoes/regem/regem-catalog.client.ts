@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { RegemConfigResolver, type RegemConfig } from './regem-config.resolver';
-import { CABECALHO_INTEGRADOR } from './integrador';
+import { chamarRegem } from './chamada-regem';
 
 /**
  * Cliente HTTP do catálogo do Regem (fatia 3).
  *
  * Puxa o catálogo publicado do Regem por `codigo_pdv` (contrato real do
- * endpoint `GET {apiBase}/sync/catalogo`, autenticado por
- * `X-Sync-Token`). Base e token são resolvidos POR TENANT pelo
- * `RegemConfigResolver` (loja → empresa; sem Regem padrão). Usa o `fetch`
- * global (Node 20+) com timeout via AbortController.
+ * endpoint `GET {apiBase}/sync/catalogo`). A credencial (token de integração
+ * `Bearer rgm_it_…` ou o `X-Sync-Token` de sempre), o prazo e as respostas de
+ * erro moram em `chamada-regem.ts`. Base e tokens são resolvidos POR TENANT pelo
+ * `RegemConfigResolver` (loja → empresa; sem Regem padrão).
  *
  * IMPORTANTE (contrato do Regem): `precoVenda`/`precoDelta` chegam como
  * DECIMAL em reais serializado como string (numeric do Postgres), ex.
@@ -98,37 +98,21 @@ export class RegemCatalogClient {
    * conexão" (que valida credenciais AINDA não ativadas, sem passar pelo
    * resolver, que só considera integrações ativas).
    */
-  async fetchCatalogoWith({
-    base,
-    token,
-  }: RegemConfig): Promise<RegemCatalogo> {
-    const url = `${base.replace(/\/$/, '')}/sync/catalogo`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'X-Sync-Token': token,
-          'X-Loja-Token': token,
-          ...CABECALHO_INTEGRADOR,
-          Accept: 'application/json',
-        },
-        signal: controller.signal,
-      });
-    } catch (err) {
-      const motivo = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Falha ao chamar o catálogo do Regem (${url}): ${motivo}`,
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+  async fetchCatalogoWith(
+    cfg: RegemConfig,
+    opts?: { ignorarRecusa?: boolean },
+  ): Promise<RegemCatalogo> {
+    const res = await chamarRegem(this.resolver, cfg, {
+      caminho: '/sync/catalogo',
+      metodo: 'GET',
+      prazoMs: FETCH_TIMEOUT_MS,
+      rotulo: 'o catálogo',
+      ignorarRecusa: opts?.ignorarRecusa,
+    });
 
     if (!res.ok) {
       throw new Error(
-        `Catálogo do Regem respondeu ${res.status} ${res.statusText} (${url}).`,
+        `Catálogo do Regem respondeu ${res.status} ${res.statusText} (${res.url || cfg.base}).`,
       );
     }
 
