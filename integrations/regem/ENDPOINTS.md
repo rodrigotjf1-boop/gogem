@@ -41,6 +41,22 @@ O caminho NOVO, e o que um produto de fora do grupo DMS usaria: a **API de integ
 | **Rede da loja** | Não muda: o servidor da loja nem aceita o token de integração — o totem que fala com ele segue como sempre. |
 | **Provas** | `apps/api/test/regem-credencial-integracao.spec.ts` (cabeçalhos, 401/403 sem volta, chamadas seguradas, 429) e `test/regem-bearer.e2e.spec.ts` (contra o Regem de verdade, opt-in por `REGEM_E2E_URL`: as 5 rotas, revogado → 401, sem escopo → 403, 61ª chamada → 429). |
 
+### 1.0b Avisos assinados do Regem ao GoGeM — contrato 1 (GoGeM, fase 3 da credencial própria, 20/10/2026)
+
+O contrato é o `docs/integracao-gogem/AVISOS-ASSINADOS.md` do Regem (Regem #680, fase 2), no padrão
+**Standard Webhooks** (o mesmo do Regem com o Liame e o Farol). Substitui, loja por loja, a volta pelo
+`X-Sync-Token` (`/sync/regem/pedido-cancelado` e `/sync/regem/publicar`, que seguem vivas até a fase 4).
+
+| Item | Valor |
+|---|---|
+| **Ligar** (§2) | Sozinho, no **"Testar conexão"** que passa com o token de integração (decisão do dono, 19/10/2026): o GoGeM gera o segredo `whsec_` + 32 bytes, guarda **cifrado** na coluna `integracoes.avisos` **antes** de ir ao Regem (ao registrar, o cancelamento parado sai na hora) e faz `PUT /integracao/webhook` com o `Bearer rgm_it_…` da loja e `url = {GOGEM_URL_PUBLICA_API}/sync/regem/avisos/<id da integração>` (padrão `https://api.gogem.com.br/api/v1`). A rotina de 5 min só **religa** uma vez a cada 20 h o que já está ligado com o mesmo token (o Regem pausa depois de falhas; um PUT novo religa). Token novo salvo = registro apagado no Regem (o registro é preso ao token): o segredo vira o anterior e o próximo teste religa. |
+| **Desligar** | Painel → Integrações → Regem → **"Desligar avisos"** (`POST /integracoes/regem/avisos/desligar` → `DELETE /integracao/webhook`). Só apaga daqui se o Regem confirmar (204/404): o Regem volta na hora ao caminho antigo. |
+| **Receber** (§3) | `POST /sync/regem/avisos/:id`, pública. Confere, nesta ordem: integração (existe, ligada, com avisos) → relógio (±5 min) → assinatura (`v1,` + base64 do HMAC-SHA256 de `id.timestamp.corpo`, chave = o segredo decodificado, sobre o **corpo exato** — `rawBody: true` no `main.ts`; várias assinaturas separadas por espaço; o segredo anterior vale 10 min depois da troca) → `contrato` = 1. Falhou → **401** (contrato → **422** `contrato-nao-suportado`). O `X-Sync-Token` que ainda chega junto não autentica nada. A loja do Regem (§3.5) não é conferida: a integração do GoGeM não a guarda, e a assinatura já prende o aviso a ela. |
+| **`pedido.cancelado`** (§4) | O mesmo `cancelarPorChave` de hoje; resposta `{ status, pedidoId, estorno: { feito, meio, valorCentavos, refundId, mensagem } }`. **Repetido roda de novo** e devolve o resultado atual (o Regem só repete quando não teve resposta ou o estorno eletrônico falhou). Pedido não encontrado → **422** `{ code: "pedido-nao-encontrado" }`, nunca 404 (na rota nova o Regem lê 404 como "endereço errado" e espera 6 h). |
+| **`catalogo.publicar`** (§5) | Sincroniza os linkados e republica: `200 { alterados }`. |
+| **Código** | `apps/api/src/integracoes/regem/avisos-regem.ts` (segredo, conferência), `regem-avisos.service.ts` (ligar, desligar, conferir), `regem-inbound.service.ts` (`tratarAviso`). |
+| **Provas** | `apps/api/test/regem-avisos.spec.ts` (o **vetor do §3** bate; a ordem da conferência; ligar/religar/trocar/desligar; repetido roda de novo; 422) e o roteiro de ponta a ponta com o Regem real da fase 2 e o GoGeM compilado (18 de 18: ligar pelo "Testar conexão", assinatura feita pela função do próprio Regem, estorno PIX, repetido, 422, 401 de corpo mexido e de relógio, desligar). Em produção: o roteiro do §6 do contrato. |
+
 ### 1.1 Token de sincronização — `X-Sync-Token` (o caminho de sempre, até a fase 4)
 
 **Não existe grant `client_credentials` / OAuth de aplicativo terceiro** *(levantamento original; a API de integração do §1.0 fechou essa lacuna)*. Há quatro mecanismos não-humanos; o que o GoGeM usava era o **sync token de dispositivo**.

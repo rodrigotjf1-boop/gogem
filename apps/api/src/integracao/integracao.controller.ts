@@ -19,6 +19,7 @@ import {
 } from './integracao.service';
 import { UpsertIntegracaoDto } from './dto/upsert-integracao.dto';
 import type { RegemImportResumo } from '../integracoes/regem/regem-import.service';
+import type { SituacaoDosAvisos } from '../integracoes/regem/regem-avisos.service';
 
 /**
  * Integrações (Fase 2). Área de conectores do GoGeM — API aberta. Escrita e
@@ -51,6 +52,15 @@ export class IntegracaoController {
   @Post(':tipo/testar')
   testar(@Param('tipo') tipo: string): Promise<TesteResultado> {
     return this.service.testar(tipo);
+  }
+
+  /**
+   * Desliga os avisos assinados do Regem (o Regem volta na hora ao caminho antigo).
+   * Religar = "Testar conexão".
+   */
+  @Post(':tipo/avisos/desligar')
+  desligarAvisos(@Param('tipo') tipo: string): Promise<SituacaoDosAvisos> {
+    return this.service.desligarAvisos(tipo);
   }
 
   /** Importa o catálogo do sistema externo para o cardápio-alvo (ou o ativo). */

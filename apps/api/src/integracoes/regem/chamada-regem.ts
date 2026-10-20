@@ -162,13 +162,19 @@ export function esquecerEsperasDoRegem(): void {
 export interface PedidoAoRegem {
   /** Caminho depois da base, ex.: `/sync/catalogo`. */
   caminho: string;
-  metodo: 'GET' | 'POST';
+  metodo: 'GET' | 'POST' | 'PUT' | 'DELETE';
   corpo?: unknown;
   prazoMs: number;
   /** O que é, para a mensagem de erro (ex.: "catálogo"). */
   rotulo: string;
   /** "Testar conexão": chama mesmo com a recusa marcada (é o jeito de reconectar). */
   ignorarRecusa?: boolean;
+  /**
+   * `false` = 401/403 NÃO marcam a recusa do token: voltam para quem chamou, como resposta.
+   * Para rota fora das 5 do totem (o registro dos avisos), onde um 403 quer dizer "esta rota
+   * ainda não está liberada", não "o token caiu" — bloquear as vendas por isso seria errado.
+   */
+  marcarRecusa?: boolean;
 }
 
 /**
@@ -230,7 +236,11 @@ export async function chamarRegem(
     throw new RegemLimiteError(seg);
   }
 
-  if (comTokenNovo && (res.status === 401 || res.status === 403)) {
+  if (
+    comTokenNovo &&
+    p.marcarRecusa !== false &&
+    (res.status === 401 || res.status === 403)
+  ) {
     const detalhe = mensagemDoRegem(await res.text().catch(() => ''));
     logger.warn(
       `Regem recusou o token de integração (${res.status}, ${p.rotulo}): ${detalhe}`,

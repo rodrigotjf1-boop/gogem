@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  BellRing,
   CheckCircle2,
   Download,
   Loader2,
@@ -18,6 +19,7 @@ import { usePodeEscrever } from '@/auth/auth-context';
 import { useCardapios } from '@/lib/cardapios';
 import { mensagemDeErro, type ImportResumo } from '@/lib/publicacao';
 import {
+  useDesligarAvisos,
   useImportarConector,
   useIntegracoes,
   useSalvarIntegracao,
@@ -79,6 +81,22 @@ function ConectorCard({
   const [destino, setDestino] = React.useState('');
   const [resumo, setResumo] = React.useState<ImportResumo | null>(null);
   const [erro, setErro] = React.useState<string | null>(null);
+  const desligarAvisos = useDesligarAvisos();
+  const [avisoMsg, setAvisoMsg] = React.useState<string | null>(null);
+
+  async function onDesligarAvisos() {
+    const ok = window.confirm(
+      'Desligar os avisos assinados do Regem? O Regem volta na hora a avisar pelo caminho antigo. Para religar, use "Testar conexão".',
+    );
+    if (!ok) return;
+    setAvisoMsg(null);
+    try {
+      const s = await desligarAvisos.mutateAsync(integracao.tipo);
+      setAvisoMsg(s.detalhe);
+    } catch (e) {
+      setAvisoMsg(mensagemDeErro(e));
+    }
+  }
 
   const podeImportar =
     integracao.disponivel && integracao.importaCatalogo && integracao.ativo;
@@ -126,6 +144,40 @@ function ConectorCard({
               <XCircle className="size-3.5" aria-hidden />
             )}
             {integracao.ultimoTeste.detalhe}
+          </p>
+        )}
+
+        {integracao.avisos &&
+          (integracao.avisos.ligados || integracao.avisos.erro) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <p
+                className={`flex items-center gap-1.5 ${
+                  integracao.avisos.ligados
+                    ? 'text-success'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                <BellRing className="size-3.5" aria-hidden />
+                {integracao.avisos.detalhe}
+              </p>
+              {integracao.avisos.ligados && podeEscrever && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onDesligarAvisos}
+                  disabled={desligarAvisos.isPending}
+                >
+                  {desligarAvisos.isPending && (
+                    <Loader2 className="animate-spin" aria-hidden />
+                  )}
+                  Desligar avisos
+                </Button>
+              )}
+            </div>
+          )}
+        {avisoMsg && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {avisoMsg}
           </p>
         )}
 

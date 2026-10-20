@@ -10,6 +10,7 @@ import {
 } from '../src/integracao/segredos';
 import { RegemConfigResolver } from '../src/integracoes/regem/regem-config.resolver';
 import { RegemInboundService } from '../src/integracoes/regem/regem-inbound.service';
+import { RegemAvisosService } from '../src/integracoes/regem/regem-avisos.service';
 
 /**
  * Prova contra um Postgres DE VERDADE (opt-in): o filtro por resumo, o `OR` da
@@ -146,7 +147,7 @@ describe.skipIf(!URL)('segredos das integrações — Postgres real', () => {
     const resolver = new RegemConfigResolver(prisma);
     await expect(
       TenantContext.run({ tenantId: tA }, () => resolver.resolve()),
-    ).resolves.toEqual({ base: 'https://a', token: 'token-antigo-a' });
+    ).resolves.toMatchObject({ base: 'https://a', token: 'token-antigo-a' });
   });
 
   it('token novo salvo pelo painel vai cifrado e a entrada acha por ele', async () => {
@@ -157,6 +158,7 @@ describe.skipIf(!URL)('segredos das integrações — Postgres real', () => {
       {} as any,
       {} as any,
       { registrar: vi.fn() } as any,
+      new RegemAvisosService(prisma, new RegemConfigResolver(prisma)),
     );
     await TenantContext.run({ tenantId: tB }, () =>
       svc.upsert('regem', { config: { token: 'token-novo-b' } }),

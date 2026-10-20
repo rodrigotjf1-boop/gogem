@@ -8,8 +8,16 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContext } from '../tenant/tenant-context';
 import { AuditoriaService } from '../auditoria/auditoria.service';
-import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
+import {
+  RegemConfigResolver,
+  type RegemConfig,
+} from '../integracoes/regem/regem-config.resolver';
 import { RegemCatalogClient } from '../integracoes/regem/regem-catalog.client';
+import {
+  RegemAvisosService,
+  type SituacaoDosAvisos,
+} from '../integracoes/regem/regem-avisos.service';
+import { lerEstadoDosAvisos } from '../integracoes/regem/avisos-regem';
 import {
   RegemCredencialRecusadaError,
   ultimoTesteDaRecusa,
@@ -50,6 +58,11 @@ export interface IntegracaoView {
   campos: IntegracaoCampoView[];
   nomePersonalizado: string | null;
   ultimoTeste: unknown;
+  /**
+   * Avisos assinados que o sistema externo manda ao GoGeM (só o Regem, hoje). `null` = o
+   * conector não tem avisos assinados. Nunca leva o segredo.
+   */
+  avisos: SituacaoDosAvisos | null;
 }
 
 /** Resultado de um teste de conexão. */
@@ -76,6 +89,7 @@ export class IntegracaoService {
     private readonly catalog: RegemCatalogClient,
     private readonly regemImport: RegemImportService,
     private readonly auditoria: AuditoriaService,
+    private readonly avisos: RegemAvisosService,
   ) {}
 
   /** Lista todos os conectores conhecidos, com o estado do tenant (mascarado). */
@@ -140,6 +154,9 @@ export class IntegracaoService {
     const config = selada.config;
 
     const nome = dto.nome ?? existente?.nome ?? null;
+    // Token novo também desfaz o registro dos avisos no Regem (o registro é preso ao token,
+    // contrato §2): o segredo fica como "anterior" e o próximo "Testar conexão" religa.
+    const avisosAntes = lerEstadoDosAvisos(existente?.avisos);
     const data = {
       config: config as Prisma.InputJsonValue,
       segredoBusca: selada.segredoBusca,
@@ -148,6 +165,15 @@ export class IntegracaoService {
       // Token de integração novo = reconectou: some a recusa marcada (e o teste antigo, que
       // era de outra credencial) e as chamadas voltam a ir ao Regem.
       ...(novos.has('tokenIntegracao') ? { ultimoTeste: Prisma.DbNull } : {}),
+      ...(novos.has('tokenIntegracao') && avisosAntes
+        ? {
+            avisos: {
+              ...avisosAntes,
+              registradoEm: null,
+              erro: null,
+            } as unknown as Prisma.InputJsonValue,
+          }
+        : {}),
     };
 
     if (existente) {
@@ -200,6 +226,14 @@ export class IntegracaoService {
         detalhe: `Conexão ok — ${n} produto(s) no catálogo do Regem (${via}).`,
         em: new Date().toISOString(),
       };
+      // Conexão ok com o token novo: liga (ou religa) os avisos assinados — decisão do dono
+      // (19/10/2026): sozinho, logo depois de salvar o token e o teste passar.
+      if (cfg.tokenIntegracao) {
+        const avisos = await this.avisos.garantirRegistro(cfg, {
+          forcar: true,
+        });
+        resultado.detalhe += ` ${avisos.detalhe}`;
+      }
     } catch (err) {
       // Recusa do token novo segue marcada (o painel mostra o que fazer).
       resultado =
@@ -221,6 +255,33 @@ export class IntegracaoService {
       });
     }
     return resultado;
+  }
+
+  /**
+   * Desliga os avisos assinados do Regem desta empresa (`DELETE /integracao/webhook`): o Regem
+   * volta na hora ao caminho antigo. Religar = "Testar conexão".
+   */
+  async desligarAvisos(tipo: string): Promise<SituacaoDosAvisos> {
+    this.conectorDisponivel(tipo);
+    if (tipo !== 'regem') {
+      throw new BadRequestException('Este conector não tem avisos assinados.');
+    }
+    let cfg: RegemConfig;
+    try {
+      cfg = await this.resolver.resolve({ ignoreActive: true });
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    const situacao = await this.avisos.desligar(cfg);
+    await this.auditoria.registrar({
+      acao: 'integracao.avisos.desligar',
+      recurso: 'integracao',
+      recursoId: tipo,
+      detalhe: { ligados: situacao.ligados },
+    });
+    return situacao;
   }
 
   /**
@@ -343,6 +404,7 @@ export class IntegracaoService {
       nome: string | null;
       config: unknown;
       ultimoTeste: unknown;
+      avisos?: unknown;
     },
   ): IntegracaoView {
     const config = (row?.config ?? {}) as Record<string, string>;
@@ -382,6 +444,10 @@ export class IntegracaoService {
       campos,
       nomePersonalizado: row?.nome ?? null,
       ultimoTeste: row?.ultimoTeste ?? null,
+      avisos:
+        conector.tipo === 'regem'
+          ? this.avisos.situacao(row?.avisos ?? null)
+          : null,
     };
   }
 }

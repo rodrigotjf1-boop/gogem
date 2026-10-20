@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantContext } from '../../tenant/tenant-context';
@@ -9,6 +15,7 @@ import {
   CancelamentoResultado,
 } from '../../pagamentos/cancelamento.service';
 import { RegemImportService } from './regem-import.service';
+import type { AvisoConferido } from './regem-avisos.service';
 
 /**
  * Entrada PUSH do Regem: o botão "Publicar no GoGeM" (no Regem) chama isto para
@@ -28,10 +35,72 @@ export class RegemInboundService {
 
   async publicar(token: string): Promise<{ alterados: number }> {
     const tenantId = await this.tenantPorToken(token);
+    return this.publicarNoTenant(tenantId);
+  }
+
+  /** Sincroniza os linkados e republica se mudou (o "Publicar no GoGeM"). */
+  private publicarNoTenant(tenantId: string): Promise<{ alterados: number }> {
     return TenantContext.run({ tenantId }, async () => {
       const { alterados } = await this.imports.sincronizarLinkados();
       if (alterados > 0) await this.publicacao.publicar(null);
       return { alterados };
+    });
+  }
+
+  /**
+   * Um aviso ASSINADO que já passou na conferência (`RegemAvisosService.conferir`): os dois
+   * `tipo` do contrato 1.
+   *  • `pedido.cancelado` — o mesmo cancelamento de hoje (`cancelarPorChave`, idempotente). Um
+   *    aviso REPETIDO roda de novo e devolve o resultado atual: o Regem só repete quando não
+   *    recebeu resposta ou quando o estorno eletrônico falhou (contrato §4).
+   *    Pedido não encontrado → 422 `pedido-nao-encontrado` (não 404: na rota nova o Regem lê 404
+   *    como "endereço errado" e esperaria 6 h);
+   *  • `catalogo.publicar` — `{ alterados }` (§5).
+   */
+  async tratarAviso(aviso: AvisoConferido): Promise<unknown> {
+    const { tenantId, corpo } = aviso;
+    if (corpo.tipo === 'catalogo.publicar')
+      return this.publicarNoTenant(tenantId);
+    if (corpo.tipo !== 'pedido.cancelado') {
+      throw new UnprocessableEntityException({
+        code: 'tipo-desconhecido',
+        message: `O GoGeM não trata o aviso "${String(corpo.tipo).slice(0, 60)}".`,
+      });
+    }
+    const pedido = (corpo.pedido ?? {}) as Record<string, unknown>;
+    const texto = (
+      v: unknown,
+      max: number,
+      campo: string,
+    ): string | undefined => {
+      if (v === undefined || v === null) return undefined;
+      if (typeof v !== 'string' || v.length > max) {
+        throw new BadRequestException(
+          `pedido.${campo} precisa ser texto de até ${max} caracteres.`,
+        );
+      }
+      return v;
+    };
+    const idempotencyKey = texto(pedido.idempotencyKey, 120, 'idempotencyKey');
+    const regemComandaId = texto(pedido.regemComandaId, 120, 'regemComandaId');
+    const motivo = texto(pedido.motivo, 500, 'motivo');
+    return TenantContext.run({ tenantId }, async () => {
+      try {
+        const r = await this.cancelamento.cancelarPorChave(
+          { idempotencyKey, regemComandaId },
+          motivo ?? 'Cancelado no Regem',
+          'regem',
+        );
+        return r;
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          throw new UnprocessableEntityException({
+            code: 'pedido-nao-encontrado',
+            message: err.message,
+          });
+        }
+        throw err;
+      }
     });
   }
 
