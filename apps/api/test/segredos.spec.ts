@@ -335,9 +335,10 @@ describe('leitores abrem o segredo cifrado', () => {
     const resolver = new RegemConfigResolver(
       prisma as unknown as PrismaService,
     );
-    await expect(resolver.resolve()).resolves.toEqual({
+    await expect(resolver.resolve()).resolves.toMatchObject({
       base: 'https://r',
       token: 'token-de-teste',
+      tokenIntegracao: null,
     });
   });
 

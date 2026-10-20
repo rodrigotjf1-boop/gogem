@@ -24,7 +24,13 @@ describe('RegemConfigResolver — cascata loja → empresa (sem Regem padrão)',
     );
 
     const out = await resolver.resolve({ unidadeId: 'u1' });
-    expect(out).toEqual({ base: 'https://loja', token: 'tok-loja' });
+    // Sem token de integração guardado: vale o de sincronização (e nada de recusa).
+    expect(out).toMatchObject({
+      base: 'https://loja',
+      token: 'tok-loja',
+      tokenIntegracao: null,
+      credencialRecusada: null,
+    });
     expect(prisma.integracao.findFirst.mock.calls[0][0].where).toEqual({
       tipo: 'regem',
       unidadeId: 'u1',
@@ -38,7 +44,7 @@ describe('RegemConfigResolver — cascata loja → empresa (sem Regem padrão)',
       .mockResolvedValueOnce(cfg('https://empresa', 'tok-emp')); // empresa
 
     const out = await resolver.resolve({ unidadeId: 'u1' });
-    expect(out).toEqual({ base: 'https://empresa', token: 'tok-emp' });
+    expect(out).toMatchObject({ base: 'https://empresa', token: 'tok-emp' });
     expect(prisma.integracao.findFirst.mock.calls[1][0].where).toEqual({
       tipo: 'regem',
       unidadeId: null,
@@ -52,7 +58,7 @@ describe('RegemConfigResolver — cascata loja → empresa (sem Regem padrão)',
     );
 
     const out = await resolver.resolve();
-    expect(out).toEqual({ base: 'https://empresa', token: 'tok-emp' });
+    expect(out).toMatchObject({ base: 'https://empresa', token: 'tok-emp' });
     expect(prisma.integracao.findFirst).toHaveBeenCalledTimes(1);
     expect(prisma.integracao.findFirst.mock.calls[0][0].where).toEqual({
       tipo: 'regem',

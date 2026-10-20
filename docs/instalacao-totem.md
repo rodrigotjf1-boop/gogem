@@ -93,9 +93,18 @@ Para importar o cardápio e mandar as vendas do totem ao Regem.
 2. No **admin GoGeM → Integrações → Regem → Configurar**:
    - URL da API: `https://api.dmsregem.com/api/v1`
    - Token de sincronização: o token do servidor_local
+   - **Token de integração (recomendado):** o `rgm_it_…` da loja, emitido pela
+     distribuição no Regem (Distribuição › Tokens de integração › "Para quem":
+     GoGeM). Aparece uma vez só: copie na hora. Com ele, o GoGeM chama o Regem
+     pela API de integração; o token de sincronização continua (é por ele que o
+     Regem avisa o GoGeM, até a troca dos avisos).
    - marque **Integração ativa** → **Salvar**.
-3. **Testar conexão** → "Conexão ok — N produto(s)". Depois **Importar catálogo**
-   (traz produtos + imagens).
+3. **Testar conexão** → "Conexão ok — N produto(s) … (pelo token de integração)".
+   Depois **Importar catálogo** (traz produtos + imagens).
+   - Se aparecer "O Regem recusou o token de integração…" ou "…não tem
+     permissão…": o token foi revogado, venceu ou não tem os escopos do totem.
+     Emita outro no Regem, cole aqui e teste de novo — enquanto isso, as vendas
+     esperam na fila do totem.
 4. **Confirmação:** os produtos (com foto) aparecem no Catálogo do totem.
 
 ---

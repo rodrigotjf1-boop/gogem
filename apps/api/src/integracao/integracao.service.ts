@@ -11,6 +11,10 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 import { RegemConfigResolver } from '../integracoes/regem/regem-config.resolver';
 import { RegemCatalogClient } from '../integracoes/regem/regem-catalog.client';
 import {
+  RegemCredencialRecusadaError,
+  ultimoTesteDaRecusa,
+} from '../integracoes/regem/chamada-regem';
+import {
   RegemImportService,
   type RegemImportResumo,
 } from '../integracoes/regem/regem-import.service';
@@ -96,6 +100,16 @@ export class IntegracaoService {
     const atual = (existente?.config ?? {}) as Record<string, string>;
     const mesclado = this.mesclarConfig(conector, atual, dto.config ?? {});
 
+    // Formato do segredo NOVO, antes de cifrar (ex.: o token de integração do Regem): o que
+    // não tem a cara dele volta aqui, com o que fazer — não vira uma recusa do outro sistema.
+    for (const campo of conector.campos) {
+      const valor = mesclado[campo.key];
+      if (!campo.formato || !valor || valor === atual[campo.key]) continue;
+      if (!campo.formato.regex.test(valor)) {
+        throw new BadRequestException(campo.formato.mensagem);
+      }
+    }
+
     const configurado = conector.campos
       .filter((f) => !f.opcional)
       .every((f) => (mesclado[f.key] ?? '').trim().length > 0);
@@ -131,6 +145,9 @@ export class IntegracaoService {
       segredoBusca: selada.segredoBusca,
       ativo,
       nome,
+      // Token de integração novo = reconectou: some a recusa marcada (e o teste antigo, que
+      // era de outra credencial) e as chamadas voltam a ir ao Regem.
+      ...(novos.has('tokenIntegracao') ? { ultimoTeste: Prisma.DbNull } : {}),
     };
 
     if (existente) {
@@ -170,19 +187,29 @@ export class IntegracaoService {
     let resultado: TesteResultado;
     try {
       const cfg = await this.resolver.resolve({ ignoreActive: true });
-      const catalogo = await this.catalog.fetchCatalogoWith(cfg);
+      // O teste chama mesmo com a recusa marcada: é o jeito de reconectar.
+      const catalogo = await this.catalog.fetchCatalogoWith(cfg, {
+        ignorarRecusa: true,
+      });
       const n = catalogo.produtos?.length ?? 0;
+      const via = cfg.tokenIntegracao
+        ? 'pelo token de integração'
+        : 'pelo token de sincronização';
       resultado = {
         ok: true,
-        detalhe: `Conexão ok — ${n} produto(s) no catálogo do Regem.`,
+        detalhe: `Conexão ok — ${n} produto(s) no catálogo do Regem (${via}).`,
         em: new Date().toISOString(),
       };
     } catch (err) {
-      resultado = {
-        ok: false,
-        detalhe: err instanceof Error ? err.message : String(err),
-        em: new Date().toISOString(),
-      };
+      // Recusa do token novo segue marcada (o painel mostra o que fazer).
+      resultado =
+        err instanceof RegemCredencialRecusadaError
+          ? ultimoTesteDaRecusa(err.status, err.detalhe)
+          : {
+              ok: false,
+              detalhe: err instanceof Error ? err.message : String(err),
+              em: new Date().toISOString(),
+            };
     }
 
     // Persiste o último teste (best-effort; escopado por tenant).

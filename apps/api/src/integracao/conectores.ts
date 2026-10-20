@@ -1,3 +1,5 @@
+import { FORMATO_TOKEN_INTEGRACAO } from '../integracoes/regem/chamada-regem';
+
 /**
  * Catálogo de conectores do GoGeM (Fase 2). O GoGeM é uma API aberta de
  * integrações: cada conector declara seus campos de configuração e quais são
@@ -29,6 +31,11 @@ export interface ConectorCampo {
   tipo?: 'texto' | 'toggle';
   /** Valor padrão de um toggle quando ainda não foi salvo ('true'/'false'). */
   padrao?: string;
+  /**
+   * Formato que o valor novo tem de ter (conferido no salvar, antes de cifrar): o que não tem
+   * a cara do segredo é recusado com a mensagem, em vez de virar uma recusa do outro sistema.
+   */
+  formato?: { regex: RegExp; mensagem: string };
 }
 
 /** Metadados de um conector. */
@@ -49,7 +56,8 @@ export const CONECTORES: Record<string, Conector> = {
     nome: 'Regem',
     descricao:
       'ERP da família DMS. Importa o catálogo por código PDV e recebe as ' +
-      'vendas do totem (autenticação por token de sincronização).',
+      'vendas do totem (pelo token de integração da loja ou, sem ele, pelo ' +
+      'token de sincronização).',
     disponivel: true,
     importaCatalogo: true,
     campos: [
@@ -66,6 +74,22 @@ export const CONECTORES: Record<string, Conector> = {
         secret: true,
         busca: true,
         ajuda: 'Token do equipamento "servidor local" no Regem (X-Sync-Token).',
+      },
+      {
+        key: 'tokenIntegracao',
+        label: 'Token de integração (rgm_it_…)',
+        secret: true,
+        opcional: true,
+        ajuda:
+          'Regem → Distribuição › Tokens de integração › "Para quem": GoGeM. ' +
+          'Com ele, o GoGeM chama o Regem pela API de integração; sem ele, ' +
+          'segue pelo token de sincronização.',
+        formato: {
+          regex: FORMATO_TOKEN_INTEGRACAO,
+          mensagem:
+            'O token de integração do Regem começa com "rgm_it_" e tem 50 ' +
+            'caracteres. Copie de novo do Regem (Distribuição › Tokens de integração).',
+        },
       },
       {
         key: 'precoSegueRegem',
