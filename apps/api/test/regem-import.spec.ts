@@ -163,8 +163,9 @@ describe('RegemImportService.importar — catálogo novo (tudo criado)', () => {
     expect(xburger.precoCentavos).toBe(2990); // "29.90" → 2990
     expect(xburger.disponivel).toBe(true); // disponivelCardapio
     expect(xburger.categoriaId).toBe('gc-Lanches'); // mapeado da categoria criada
+    // O vínculo leva o id do produto no Regem (ERR-035): segue a troca de código.
     expect(xburger.externalRefs).toEqual([
-      { sistema: 'regem', codigo_pdv: 'PROD-1' },
+      { sistema: 'regem', codigo_pdv: 'PROD-1', regem_id: 'rp-1' },
     ]);
 
     const refri = criados.find((d: any) => d.nome === 'Refrigerante');
@@ -251,7 +252,7 @@ describe('RegemImportService.importar — idempotência (refresh)', () => {
     const data = prisma.produto.update.mock.calls[0][0].data;
     expect(data.externalRefs).toEqual([
       { sistema: 'ifood', codigo_pdv: 'IF-9' },
-      { sistema: 'regem', codigo_pdv: 'PROD-1' },
+      { sistema: 'regem', codigo_pdv: 'PROD-1', regem_id: 'rp-1' },
     ]);
   });
 

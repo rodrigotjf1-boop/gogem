@@ -30,6 +30,13 @@ import { CONECTORES, SECRET_MASK, type Conector } from './conectores';
 import { segredoDa, selarConfig } from './segredos';
 import { UpsertIntegracaoDto } from './dto/upsert-integracao.dto';
 
+/**
+ * Chaves que o próprio servidor grava na `config` (fora dos campos da tela):
+ * salvar a integração as mantém como estavam e nunca as aceita da entrada.
+ * `ignorados` = códigos do Regem que a loja mandou ignorar nas novidades.
+ */
+const CHAVES_INTERNAS_DA_CONFIG = ['ignorados'] as const;
+
 /** Campo de config já resolvido para exibição (segredo nunca vaza cru). */
 export interface IntegracaoCampoView {
   key: string;
@@ -390,9 +397,15 @@ export class IntegracaoService {
         out[campo.key] = recebido.trim();
       }
     }
-    // Descarta chaves fora do whitelist do conector.
+    // Descarta chaves fora do whitelist do conector — menos as que o próprio
+    // servidor grava na config (a lista "ignorar" das novidades do Regem), que
+    // vêm SÓ do que já estava gravado, nunca da entrada (ERR-036: salvar o token
+    // apagava a lista).
     for (const k of Object.keys(out)) {
       if (!conector.campos.some((f) => f.key === k)) delete out[k];
+    }
+    for (const k of CHAVES_INTERNAS_DA_CONFIG) {
+      if (k in atual) out[k] = atual[k];
     }
     return out;
   }

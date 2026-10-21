@@ -102,6 +102,7 @@ Controller `@Controller('produtos')` sob `JwtAuthGuard + RolesGuard` (`produto.c
   - Tipo `text` (string livre, **não** UUID); **nullable**.
   - **Único por tenant**, índice parcial: `create unique index idx_produto_codigo on produto (tenant_id, codigo) where codigo is not null and deleted_at is null` (`database/migrations/021_produtos.sql:44`). Não é único por unidade.
   - **De-para recomendado: casar por `(tenantId, codigo)`.** Tratar `codigo` nulo como produto sem PDV (não casável). Existe `produto.unidadeId` (`schema.ts:1143`) mas **não** entra na chave e é opcional.
+  - ⚠️ **O `codigo` muda e é reaproveitado** (Regem PR #692, migration 331, 20/10/2026: 61 produtos ganharam o código do iFood/Anota Aí, e o código antigo de uns virou o novo de outros). Por isso o GoGeM guarda também o **`id`** do produto (vem em `/sync/catalogo`) no ref — `{ sistema: 'regem', codigo_pdv, regem_id }` — e casa por ele; o `codigo_pdv` acompanha a troca e continua sendo o que vai na venda e na pausa (ERR-035).
 
 ### 2.2 Categorias ✅
 - Tabela **`categoria_produto`** (`schema.ts:1120`) — *é a própria tabela de categorias* (nome enganoso; não é uma N:N). Campos: `id, tenantId, nome, parentId (subcategoria), ordem, ativo, imagemRef, descricao, disponibilidade (jsonb de janelas), timestamps, deletedAt`.
