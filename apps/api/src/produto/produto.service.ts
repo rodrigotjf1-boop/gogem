@@ -70,7 +70,7 @@ export class ProdutoService {
       selo: dto.selo ?? null,
       categoriaId: dto.categoriaId,
       cardapioId,
-      externalRefs: normalizeRefs(dto.externalRefs),
+      externalRefs: normalizeRefs(dto.externalRefs) as Prisma.InputJsonValue,
     } satisfies Omit<Prisma.ProdutoUncheckedCreateInput, 'tenantId'>;
     return this.prisma.produto.create({
       data: data as Prisma.ProdutoUncheckedCreateInput,
@@ -79,7 +79,7 @@ export class ProdutoService {
 
   /** Atualização parcial (404 se não existir; valida categoria se trocada). */
   async update(id: string, dto: UpdateProdutoDto): Promise<Produto> {
-    await this.getOne(id);
+    const atual = await this.getOne(id);
     if (dto.categoriaId) {
       await this.assertCategoria(dto.categoriaId);
     }
@@ -96,7 +96,10 @@ export class ProdutoService {
         externalRefs:
           dto.externalRefs === undefined
             ? undefined
-            : normalizeRefs(dto.externalRefs),
+            : manterIdDoRegem(
+                normalizeRefs(dto.externalRefs),
+                atual.externalRefs,
+              ),
       },
     });
   }
@@ -195,10 +198,12 @@ export class ProdutoService {
 
   /** Substitui o de-para PDV inteiro do produto (§4). */
   async setExternalRefs(id: string, refs: ExternalRefDto[]): Promise<Produto> {
-    await this.getOne(id);
+    const atual = await this.getOne(id);
     return this.prisma.produto.update({
       where: { id },
-      data: { externalRefs: normalizeRefs(refs) },
+      data: {
+        externalRefs: manterIdDoRegem(normalizeRefs(refs), atual.externalRefs),
+      },
     });
   }
 
@@ -215,11 +220,12 @@ export class ProdutoService {
 
 /**
  * Normaliza os refs para valor JSON puro persistível no Json do Prisma
- * (`undefined` → array vazio; descarta `loja` ausente).
+ * (`undefined` → array vazio; descarta `loja` ausente). O `regem_id` enviado
+ * é descartado: quem o define é o GoGeM (`manterIdDoRegem` e a sincronização).
  */
 function normalizeRefs(
   refs: ExternalRefDto[] | undefined,
-): Prisma.InputJsonValue {
+): Record<string, string>[] {
   return (refs ?? []).map((r) => {
     const ref: Record<string, string> = {
       sistema: r.sistema,
@@ -228,4 +234,34 @@ function normalizeRefs(
     if (r.loja !== undefined) ref.loja = r.loja;
     return ref;
   });
+}
+
+/**
+ * O painel remonta o de-para a cada edição (`[{ sistema, codigo_pdv }]`): se o
+ * código regem não mudou, o `regem_id` gravado continua (a sincronização segue
+ * o produto pelo id quando o Regem troca o código — ERR-035). Código trocado à
+ * mão = vínculo novo: o id sai, e a sincronização casa pelo código escolhido.
+ */
+function manterIdDoRegem(
+  novos: Record<string, string>[],
+  atuais: unknown,
+): Prisma.InputJsonValue {
+  const antigo = (Array.isArray(atuais) ? atuais : []).find(
+    (r): r is Record<string, unknown> =>
+      !!r &&
+      typeof r === 'object' &&
+      (r as Record<string, unknown>).sistema === 'regem',
+  );
+  const idAntigo =
+    antigo && typeof antigo.regem_id === 'string' ? antigo.regem_id : '';
+  const codigoAntigo =
+    antigo && typeof antigo.codigo_pdv === 'string'
+      ? antigo.codigo_pdv.trim()
+      : '';
+  if (!idAntigo) return novos;
+  return novos.map((r) =>
+    r.sistema === 'regem' && (r.codigo_pdv ?? '').trim() === codigoAntigo
+      ? { ...r, regem_id: idAntigo }
+      : r,
+  );
 }

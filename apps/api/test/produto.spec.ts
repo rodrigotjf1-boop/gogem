@@ -210,6 +210,44 @@ describe('ProdutoService', () => {
     prisma.produto.delete.mockResolvedValue({ id: 'p-1' });
     await expect(service.remove('p-1')).resolves.toEqual({ id: 'p-1' });
   });
+
+  // ERR-035: o painel remonta o de-para a cada edição; o id do Regem não pode se perder nisso.
+  it('editar com o MESMO código regem mantém o regem_id gravado (o enviado é ignorado)', async () => {
+    const { service, prisma } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({
+      id: 'p-1',
+      externalRefs: [
+        { sistema: 'regem', codigo_pdv: '85', regem_id: 'id-combo' },
+      ],
+    });
+    prisma.produto.update.mockResolvedValue({ id: 'p-1' });
+    await service.update('p-1', {
+      nome: 'Combo',
+      externalRefs: [
+        { sistema: 'regem', codigo_pdv: '85', regem_id: 'id-falso' },
+      ],
+    });
+    expect(prisma.produto.update.mock.calls[0][0].data.externalRefs).toEqual([
+      { sistema: 'regem', codigo_pdv: '85', regem_id: 'id-combo' },
+    ]);
+  });
+
+  it('trocar o código regem à mão é vínculo novo: o regem_id sai', async () => {
+    const { service, prisma } = makeService();
+    prisma.produto.findFirst.mockResolvedValue({
+      id: 'p-1',
+      externalRefs: [
+        { sistema: 'regem', codigo_pdv: '85', regem_id: 'id-combo' },
+      ],
+    });
+    prisma.produto.update.mockResolvedValue({ id: 'p-1' });
+    await service.setExternalRefs('p-1', [
+      { sistema: 'regem', codigo_pdv: '90' },
+    ]);
+    expect(prisma.produto.update.mock.calls[0][0].data.externalRefs).toEqual([
+      { sistema: 'regem', codigo_pdv: '90' },
+    ]);
+  });
 });
 
 describe('externalRefs — validação no DTO (class-validator)', () => {

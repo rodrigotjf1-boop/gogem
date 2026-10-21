@@ -19,9 +19,13 @@ import { reaisToCentavos } from './reais-to-centavos';
  * import é JWT-guarded, então o contexto sempre existe). Todos os
  * reads/writes são chamadas Prisma normais.
  *
- * De-para PDV (§4): a idempotência de produto usa a chave
- * `(sistema='regem', codigo_pdv=produto.codigo)`; grupos e opções casam por
- * `(produtoId, nome)` e `(grupoId, nome)`.
+ * De-para PDV (§4): o ref `regem` guarda o `codigo_pdv` (com que a venda e a
+ * pausa chegam ao Regem) e o `regem_id` (id do produto no Regem, que o catálogo
+ * manda). O produto casa PELO ID quando o ref já o tem — se o Regem trocar o
+ * código, o ref acompanha (ERR-035: a troca de códigos do Regem em 20/10/2026
+ * soltou 57 produtos e fez 4 espelharem OUTRO produto, porque o código antigo
+ * deles virou o novo de outro). Ref antigo, sem id, casa pelo código e ganha o
+ * id. Grupos e opções casam por `(produtoId, nome)` e `(grupoId, nome)`.
  *
  * Semântica v1: **aditivo/refresh** — cria o que falta e atualiza o que já
  * existe; NÃO deleta itens do GoGeM ausentes no Regem.
@@ -32,7 +36,25 @@ interface ExternalRef {
   sistema: string;
   codigo_pdv: string;
   loja?: string;
+  /** Id do produto no Regem (só no ref `regem` de produto). */
+  regem_id?: string;
   [k: string]: unknown;
+}
+
+/** Vínculo de um produto GoGeM indexado para o import. */
+interface Vinculo {
+  id: string;
+  externalRefs: ExternalRef[];
+}
+
+/** O que o Regem diz de um produto, para a sincronização. */
+interface Desejado {
+  codigo: string;
+  regemId: string | null;
+  precoCentavos: number;
+  disponivel: boolean;
+  nome: string;
+  descricao: string | null;
 }
 
 /** Resumo do que o import criou/atualizou. */
@@ -78,7 +100,12 @@ export class RegemImportService {
       resumo,
       alvo,
     );
-    const produtoPorCodigo = await this.carregarProdutosPorCodigo(alvo);
+    const idsNoCatalogo = new Set(
+      catalogo.produtos
+        .map(idDoRegem)
+        .filter((id): id is string => id !== null),
+    );
+    const vinculos = await this.carregarVinculos(alvo, idsNoCatalogo);
 
     for (const rp of catalogo.produtos) {
       const codigo = (rp.codigo ?? '').trim();
@@ -90,7 +117,7 @@ export class RegemImportService {
         rp,
         codigo,
         categoriaMap,
-        produtoPorCodigo,
+        vinculos,
         resumo,
         alvo,
       );
@@ -101,12 +128,17 @@ export class RegemImportService {
   }
 
   /**
-   * Sincroniza do Regem apenas os produtos JÁ LINKADOS (mesmo código PDV) — o
-   * Regem age como "segundo admin": edições de preço, nome, descrição e
-   * pausa/disponibilidade propagam ao GoGeM. NÃO cria produtos novos (isso é o
-   * `importar`) nem toca campos só-GoGeM (selo, upsell, imagem, categoria).
-   * Atualiza apenas o que mudou; devolve quantos foram alterados (o chamador
-   * republica só se `alterados > 0`).
+   * Sincroniza do Regem apenas os produtos JÁ LINKADOS — o Regem age como
+   * "segundo admin": edições de preço, nome, descrição e pausa/disponibilidade
+   * propagam ao GoGeM. NÃO cria produtos novos (isso é o `importar`) nem toca
+   * campos só-GoGeM (selo, upsell, imagem, categoria). Atualiza apenas o que
+   * mudou; devolve quantos foram alterados (o chamador republica só se
+   * `alterados > 0`).
+   *
+   * Vínculo com `regem_id` casa pelo id: se o Regem trocou o código, o ref passa
+   * ao código novo (conta como alterado — o cardápio publicado leva o código com
+   * que o totem vende). Vínculo antigo, sem id, casa pelo código e ganha o id
+   * (sem contar como alterado: nada muda para o totem).
    */
   async sincronizarLinkados(
     cardapioId?: string,
@@ -126,25 +158,22 @@ export class RegemImportService {
     const precoSegue = cfg.precoSegueRegem !== 'false'; // default: espelha
     const dispSegue = cfg.dispSegueRegem !== 'false';
 
-    // Estado desejado por código PDV (a partir do Regem).
-    const desejado = new Map<
-      string,
-      {
-        precoCentavos: number;
-        disponivel: boolean;
-        nome: string;
-        descricao: string | null;
-      }
-    >();
+    // Estado desejado (a partir do Regem), por id do produto e por código PDV.
+    const porId = new Map<string, Desejado>();
+    const porCodigo = new Map<string, Desejado>();
     for (const rp of catalogo.produtos) {
       const codigo = (rp.codigo ?? '').trim();
       if (!codigo) continue;
-      desejado.set(codigo, {
+      const d: Desejado = {
+        codigo,
+        regemId: idDoRegem(rp),
         precoCentavos: reaisToCentavos(rp.precoVenda),
         disponivel: disponivelNoGogem(rp),
         nome: rp.nome,
         descricao: rp.descricao ?? null,
-      });
+      };
+      porCodigo.set(codigo, d);
+      if (d.regemId) porId.set(d.regemId, d);
     }
 
     // Produtos GoGeM do cardápio-alvo, com os campos que podem mudar.
@@ -176,9 +205,9 @@ export class RegemImportService {
     let verificados = 0;
     let alterados = 0;
     for (const p of produtos) {
-      const codigo = codigoRegem(p.externalRefs);
-      if (!codigo) continue;
-      const alvoRegem = desejado.get(codigo);
+      const ref = refDoRegem(p.externalRefs);
+      if (!ref) continue;
+      const alvoRegem = casarNoRegem(ref, porId, porCodigo);
       if (!alvoRegem) continue; // produto não veio no catálogo do Regem
       verificados += 1;
 
@@ -190,17 +219,29 @@ export class RegemImportService {
       if (alvoRegem.nome !== p.nome) patch.nome = alvoRegem.nome;
       if ((alvoRegem.descricao ?? null) !== (p.descricao ?? null))
         patch.descricao = alvoRegem.descricao;
+      const visivel = Object.keys(patch).length > 0;
+
+      // O vínculo acompanha o Regem: código novo e/ou o id que faltava.
+      const codigoMudou = alvoRegem.codigo !== ref.codigo;
+      const regemId = alvoRegem.regemId ?? ref.regemId;
+      if (codigoMudou || regemId !== ref.regemId) {
+        patch.externalRefs = comRefDoRegem(
+          lerRefs(p.externalRefs),
+          alvoRegem.codigo,
+          regemId,
+        ) as unknown as Prisma.InputJsonValue;
+      }
 
       if (Object.keys(patch).length) {
         await this.prisma.produto.update({ where: { id: p.id }, data: patch });
-        alterados += 1;
+        if (visivel || codigoMudou) alterados += 1;
       }
 
       // F3 — quando a loja é a fonte de um campo e o Regem diverge, vira fila.
       await this.conciliar(
         conflitoMap,
         p.id,
-        codigo,
+        alvoRegem.codigo,
         'preco',
         String(alvoRegem.precoCentavos),
         String(p.precoCentavos),
@@ -209,7 +250,7 @@ export class RegemImportService {
       await this.conciliar(
         conflitoMap,
         p.id,
-        codigo,
+        alvoRegem.codigo,
         'disponivel',
         String(alvoRegem.disponivel),
         String(p.disponivel),
@@ -265,8 +306,9 @@ export class RegemImportService {
    * F2 do espelho — diferenças entre o Regem e o GoGeM (sem escrever nada):
    * - `novos`: produtos do Regem SEM par no GoGeM (candidatos a importar), fora
    *   os que a loja marcou "ignorar" (`config.ignorados`).
-   * - `orfaos`: produtos GoGeM linkados cujo código sumiu do catálogo do Regem
-   *   (candidatos a pausar/excluir).
+   * - `orfaos`: produtos GoGeM linkados sem par no catálogo do Regem — pelo id,
+   *   quando o vínculo o tem; senão pelo código (candidatos a pausar/excluir).
+   *   Produto cujo código o Regem trocou NÃO é órfão: o id ainda casa.
    */
   async novidades(cardapioId?: string): Promise<{
     novos: { codigo: string; nome: string; precoCentavos: number }[];
@@ -285,29 +327,34 @@ export class RegemImportService {
     );
 
     const regemPorCodigo = new Map<string, RegemProduto>();
+    const porId = new Map<string, { codigo: string }>();
+    const porCodigo = new Map<string, { codigo: string }>();
     for (const rp of catalogo.produtos) {
       const c = (rp.codigo ?? '').trim();
-      if (c) regemPorCodigo.set(c, rp);
+      if (!c) continue;
+      regemPorCodigo.set(c, rp);
+      porCodigo.set(c, { codigo: c });
+      const id = idDoRegem(rp);
+      if (id) porId.set(id, { codigo: c });
     }
 
     const produtos = await this.prisma.produto.findMany({
       where: { cardapioId: alvo },
       select: { id: true, nome: true, externalRefs: true },
     });
-    const gogemCodigos = new Set<string>();
+    const vinculados = new Set<string>();
     const orfaos: { id: string; nome: string; codigo: string }[] = [];
     for (const p of produtos) {
-      const c = codigoRegem(p.externalRefs);
-      if (!c) continue;
-      gogemCodigos.add(c);
-      if (!regemPorCodigo.has(c)) {
-        orfaos.push({ id: p.id, nome: p.nome, codigo: c });
-      }
+      const ref = refDoRegem(p.externalRefs);
+      if (!ref) continue;
+      const casado = casarNoRegem(ref, porId, porCodigo);
+      if (casado) vinculados.add(casado.codigo);
+      else orfaos.push({ id: p.id, nome: p.nome, codigo: ref.codigo });
     }
 
     const novos: { codigo: string; nome: string; precoCentavos: number }[] = [];
     for (const [codigo, rp] of regemPorCodigo) {
-      if (gogemCodigos.has(codigo) || ignorados.has(codigo)) continue;
+      if (vinculados.has(codigo) || ignorados.has(codigo)) continue;
       novos.push({
         codigo,
         nome: rp.nome,
@@ -445,33 +492,42 @@ export class RegemImportService {
     return map;
   }
 
-  /** Carrega os produtos do cardápio-alvo e indexa por `codigo_pdv` (de-para regem). */
-  private async carregarProdutosPorCodigo(
+  /**
+   * Carrega os produtos do cardápio-alvo e indexa o vínculo regem: pelo
+   * `regem_id` quando ele ainda está no catálogo do Regem; senão (ref antigo sem
+   * id, ou id que sumiu do Regem) pelo `codigo_pdv` — só esses podem ser
+   * religados por código, para um produto do Regem nunca tomar o par de outro.
+   */
+  private async carregarVinculos(
     cardapioId: string,
-  ): Promise<Map<string, { id: string; externalRefs: ExternalRef[] }>> {
+    idsNoCatalogo: Set<string>,
+  ): Promise<{ porId: Map<string, Vinculo>; porCodigo: Map<string, Vinculo> }> {
     const produtos = await this.prisma.produto.findMany({
       where: { cardapioId },
     });
-    const map = new Map<string, { id: string; externalRefs: ExternalRef[] }>();
+    const porId = new Map<string, Vinculo>();
+    const porCodigo = new Map<string, Vinculo>();
     for (const p of produtos) {
-      const refs = lerRefs(p.externalRefs);
-      const regemRef = refs.find((r) => r.sistema === 'regem' && r.codigo_pdv);
-      if (regemRef) {
-        map.set(regemRef.codigo_pdv, { id: p.id, externalRefs: refs });
-      }
+      const ref = refDoRegem(p.externalRefs);
+      if (!ref) continue;
+      const v = { id: p.id, externalRefs: lerRefs(p.externalRefs) };
+      if (ref.regemId && idsNoCatalogo.has(ref.regemId))
+        porId.set(ref.regemId, v);
+      else porCodigo.set(ref.codigo, v);
     }
-    return map;
+    return { porId, porCodigo };
   }
 
   /**
-   * Upsert de um produto pela chave de-para `(regem, codigo)`. Cria se ausente,
-   * senão atualiza. Preserva refs não-regem ao atualizar. Retorna o id GoGeM.
+   * Upsert de um produto pelo vínculo regem (id; senão código). Cria se
+   * ausente, senão atualiza — o ref fica com o código atual e o id do Regem.
+   * Preserva refs não-regem ao atualizar. Retorna o id GoGeM.
    */
   private async upsertProduto(
     rp: RegemProduto,
     codigo: string,
     categoriaMap: Map<string, string>,
-    produtoPorCodigo: Map<string, { id: string; externalRefs: ExternalRef[] }>,
+    vinculos: { porId: Map<string, Vinculo>; porCodigo: Map<string, Vinculo> },
     resumo: RegemImportResumo,
     cardapioId: string,
   ): Promise<string> {
@@ -484,9 +540,19 @@ export class RegemImportService {
     // apagamos uma imagem custom já enviada no GoGeM (só grava quando há uma).
     const imagemUrl = urlPublicaOuNull(rp.imagem);
 
-    const existente = produtoPorCodigo.get(codigo);
+    const regemId = idDoRegem(rp);
+    const existente =
+      (regemId ? vinculos.porId.get(regemId) : undefined) ??
+      vinculos.porCodigo.get(codigo);
     if (existente) {
-      const externalRefs = upsertRegemRef(existente.externalRefs, codigo);
+      const externalRefs = comRefDoRegem(
+        existente.externalRefs,
+        codigo,
+        regemId,
+      );
+      if (regemId) {
+        vinculos.porId.set(regemId, { id: existente.id, externalRefs });
+      }
       await this.prisma.produto.update({
         where: { id: existente.id },
         data: {
@@ -503,7 +569,7 @@ export class RegemImportService {
       return existente.id;
     }
 
-    const externalRefs = upsertRegemRef([], codigo);
+    const externalRefs = comRefDoRegem([], codigo, regemId);
     const data = {
       nome: rp.nome,
       descricao: rp.descricao ?? null,
@@ -518,8 +584,10 @@ export class RegemImportService {
       data: data as Prisma.ProdutoUncheckedCreateInput,
     });
     resumo.produtos.criados += 1;
-    // Indexa para não recriar caso o mesmo codigo apareça duplicado no payload.
-    produtoPorCodigo.set(codigo, { id: criado.id, externalRefs });
+    // Indexa para não recriar caso o mesmo produto apareça duplicado no payload.
+    const novo = { id: criado.id, externalRefs };
+    if (regemId) vinculos.porId.set(regemId, novo);
+    else vinculos.porCodigo.set(codigo, novo);
     return criado.id;
   }
 
@@ -677,10 +745,38 @@ function urlPublicaOuNull(raw: string | null | undefined): string | null {
   return /^https?:\/\//i.test(s) ? s : null;
 }
 
-/** Código PDV do de-para regem (ou null) a partir do Json de externalRefs. */
-function codigoRegem(raw: unknown): string | null {
+/**
+ * O vínculo regem do produto (código PDV + id no Regem, quando já gravado), ou
+ * null se o produto não tem ref regem com código.
+ */
+function refDoRegem(
+  raw: unknown,
+): { codigo: string; regemId: string | null } | null {
   const ref = lerRefs(raw).find((r) => r.sistema === 'regem' && r.codigo_pdv);
-  return ref ? ref.codigo_pdv.trim() || null : null;
+  const codigo = ref ? ref.codigo_pdv.trim() : '';
+  if (!ref || !codigo) return null;
+  const id = typeof ref.regem_id === 'string' ? ref.regem_id.trim() : '';
+  return { codigo, regemId: id || null };
+}
+
+/** Id do produto no catálogo do Regem (null se o Regem não mandou). */
+function idDoRegem(rp: RegemProduto): string | null {
+  const id = typeof rp.id === 'string' ? rp.id.trim() : '';
+  return id || null;
+}
+
+/**
+ * Acha no catálogo do Regem o par de um vínculo: pelo id quando o vínculo o tem
+ * (acompanha a troca de código; id que sumiu = sem par), senão pelo código. Se o
+ * catálogo veio SEM nenhum id (Regem antigo), o vínculo com id cai para o código.
+ */
+function casarNoRegem<T>(
+  ref: { codigo: string; regemId: string | null },
+  porId: Map<string, T>,
+  porCodigo: Map<string, T>,
+): T | undefined {
+  if (ref.regemId && porId.size > 0) return porId.get(ref.regemId);
+  return porCodigo.get(ref.codigo);
 }
 
 /** Lê o Json de `externalRefs` como array de refs (defensivo). */
@@ -696,13 +792,17 @@ function lerRefs(raw: unknown): ExternalRef[] {
 }
 
 /**
- * Garante um único ref regem com o `codigo_pdv` informado, preservando os refs
- * de outros sistemas (não duplica; não clobbera não-regem).
+ * Garante um único ref regem com o `codigo_pdv` (e o `regem_id`, quando
+ * conhecido) informados, preservando os refs de outros sistemas (não duplica;
+ * não clobbera não-regem).
  */
-function upsertRegemRef(
+function comRefDoRegem(
   existing: ExternalRef[],
   codigoPdv: string,
+  regemId: string | null,
 ): ExternalRef[] {
   const naoRegem = existing.filter((r) => r.sistema !== 'regem');
-  return [...naoRegem, { sistema: 'regem', codigo_pdv: codigoPdv }];
+  const ref: ExternalRef = { sistema: 'regem', codigo_pdv: codigoPdv };
+  if (regemId) ref.regem_id = regemId;
+  return [...naoRegem, ref];
 }

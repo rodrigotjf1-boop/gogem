@@ -6,8 +6,9 @@
 //   §3 Catálogo versionado: publicar gera uma linha em MenuVersion; o totem
 //      sincroniza por versão (delta).
 //   §4 De-para PDV: Produto carrega `externalRefs` (Json) =
-//      [{ sistema, codigo_pdv, loja }]. A integração com o Regem SEMPRE
-//      referencia `codigo_pdv`, nunca o id interno.
+//      [{ sistema, codigo_pdv, loja, regem_id? }]. As chamadas ao Regem SEMPRE
+//      referenciam `codigo_pdv`, nunca o id interno; o `regem_id` (id do
+//      produto no Regem) só mantém o vínculo quando o Regem troca o código.
 //
 // S1: skeleton mínimo e coerente — NÃO é o CRUD completo (entra no S1–S2).
 
@@ -457,7 +458,7 @@ model Produto {
   selo          String?
   // URL pública da foto do produto (Supabase Storage). Nulo = sem foto.
   imagemUrl     String?
-  // De-para PDV (§4): array de { sistema, codigo_pdv, loja }.
+  // De-para PDV (§4): array de { sistema, codigo_pdv, loja, regem_id? }.
   externalRefs  Json     @default("[]")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

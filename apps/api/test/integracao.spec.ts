@@ -381,6 +381,27 @@ describe('Regem — token de integração (rgm_it_), fase 3 da credencial própr
     expect(store[0].ultimoTeste).toEqual(teste);
   });
 
+  // ERR-036: salvar o token (20/10) apagou a lista "ignorar" das novidades — ela não é campo da tela.
+  it('salvar a integração mantém a lista "ignorar" das novidades, e não a aceita da entrada', async () => {
+    const { service, store } = makeService([
+      linhaRegem({
+        config: {
+          apiBase: 'https://x/api/v1',
+          token: 'GUARDADO',
+          ignorados: ['cw1', '45'],
+        },
+      }),
+    ]);
+    await service.upsert('regem', {
+      config: {
+        tokenIntegracao: TOKEN_INTEGRACAO,
+        ignorados: 'tudo',
+      } as unknown as Record<string, string>,
+    });
+    expect(store[0].config.ignorados).toEqual(['cw1', '45']);
+    expect(store[0].config.tokenIntegracao).toMatch(/^v1\./);
+  });
+
   it('"Testar conexão" diz por qual token passou e chama mesmo com a recusa marcada', async () => {
     const { service, resolver, catalog, store } = makeService([linhaRegem()]);
     resolver.resolve.mockResolvedValue({

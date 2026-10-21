@@ -30,7 +30,7 @@ pnpm lint && pnpm typecheck    # obrigatórios antes de commit
 1. **Idempotência primeiro**: todo pedido/pagamento nasce com UUID gerado no totem; endpoints de escrita aceitam `Idempotency-Key` e reenvio jamais duplica venda.
 2. **Multi-tenant por `tenant_id`** em todas as tabelas de negócio + escopo automático no Prisma middleware. Nunca query sem tenant.
 3. **Catálogo versionado**: alterações vão para rascunho; publicar gera `menu_versions`; o totem sincroniza por versão (delta).
-4. **De-para PDV**: produtos carregam `external_refs[] {sistema, codigo_pdv, loja}`. Integração com Regem SEMPRE referencia `codigo_pdv`, nunca id interno.
+4. **De-para PDV**: produtos carregam `external_refs[] {sistema, codigo_pdv, loja, regem_id?}`. As chamadas ao Regem (venda, pausa) SEMPRE referenciam `codigo_pdv`, nunca id interno. O `regem_id` (id do produto no Regem, que o catálogo manda) só mantém o vínculo: o produto casa por ele e, se o Regem trocar o código, o `codigo_pdv` acompanha (ERR-035). Código é chave mutável — nunca a única chave de um vínculo.
 5. **Impressora**: nunca iniciar pagamento sem `DLE EOT` OK; ASB ligado sempre; papel/tampa mudam estado do totem e geram evento de telemetria.
 6. **TEF**: nenhuma confirmação sem cupom persistido; resolução de pendências no boot é obrigatória e testada (teste "tomada arrancada").
 7. **Offline-first no totem**: SQLite é a verdade local; fila de sync com backoff; app funciona sem rede exceto TEF.
