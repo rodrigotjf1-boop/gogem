@@ -4,7 +4,7 @@
   "private": true,
   "description": "GoGeM by DMS — plataforma white-label de autoatendimento para food service",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.22.1"
   },
   "scripts": {
     "lint": "pnpm -r --if-present run lint",

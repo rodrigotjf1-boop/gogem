@@ -16,10 +16,15 @@ jobs:
         with:
           version: 9
 
+      # Versão EXATA (a mesma do Dockerfile e do .nvmrc): "20"/"24" pode pegar uma
+      # versão antiga guardada no executor (boletim do Node de 21/10/2026, ERR-037).
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.22.1
           cache: pnpm
+
+      - name: Versão do Node
+        run: node -v
 
       - name: Install
         run: pnpm install --frozen-lockfile=false
@@ -45,8 +50,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24.22.1
           cache: pnpm
+
+      - name: Versão do Node
+        run: node -v
 
       - name: Install
         run: pnpm install --frozen-lockfile=false
