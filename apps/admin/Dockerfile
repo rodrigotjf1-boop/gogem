@@ -4,8 +4,11 @@
 #
 # ATENÇÃO: o Vite bakeia VITE_API_URL em BUILD-TIME. Para trocar a URL da API,
 # rebuild a imagem com o novo --build-arg.
+#
+# Node na versão EXATA (boletim do Node de 21/10/2026; a linha 20 está fora de
+# suporte — ERR-037). Mesma versão no CI e no .nvmrc. O nginx do final não roda Node.
 
-FROM node:20-alpine AS build
+FROM node:24.22.1-alpine AS build
 RUN corepack enable && corepack prepare pnpm@9 --activate
 WORKDIR /repo
 # Repo inteiro ANTES do install (o .dockerignore da RAIZ exclui node_modules/

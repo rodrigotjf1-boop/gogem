@@ -1,0 +1,39 @@
+name: Imagens Docker
+
+# Prova as imagens de produção ANTES do merge quando a base delas muda (versão do
+# Node, Dockerfile, dependências): constrói a imagem da API e a etapa de build do
+# painel e confere, DENTRO de cada uma, a versão do Node e o Prisma (ERR-037). Só
+# roda quando esses arquivos mudam, para não gastar a cota do Actions à toa.
+on:
+  pull_request:
+    paths:
+      - 'apps/api/Dockerfile'
+      - 'apps/admin/Dockerfile'
+      - '.nvmrc'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/imagens.yml'
+
+jobs:
+  imagens:
+    name: Imagens Docker — build + versão do Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Imagem da API
+        run: docker build -f apps/api/Dockerfile -t gogem-api:prova .
+
+      - name: Node e Prisma dentro da imagem da API
+        run: |
+          docker run --rm gogem-api:prova node -v
+          test "$(docker run --rm gogem-api:prova node -v)" = "v$(cat .nvmrc)"
+          docker run --rm gogem-api:prova npx prisma --version
+
+      - name: Etapa de build do painel
+        run: docker build -f apps/admin/Dockerfile --target build -t gogem-admin-build:prova .
+
+      - name: Node na etapa de build do painel
+        run: |
+          docker run --rm gogem-admin-build:prova node -v
+          test "$(docker run --rm gogem-admin-build:prova node -v)" = "v$(cat .nvmrc)"

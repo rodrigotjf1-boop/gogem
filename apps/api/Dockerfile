@@ -4,7 +4,12 @@
 # Base Debian (slim), NÃO Alpine: no Alpine o Prisma não detecta a libssl e o
 # schema/migration engine quebra ("Could not parse schema engine response").
 # Debian tem OpenSSL 3.0 e o Prisma funciona out-of-the-box (+ openssl explícito).
-FROM node:20-slim AS base
+#
+# Node na versão EXATA, na mesma variante (Debian bookworm): tag flutuante deixa o
+# construtor reaproveitar camada velha em cache. 24.22.1 = boletim do Node de
+# 21/10/2026 (Brotli CVE-2026-111497 e as autoridades da eMudhra); a linha 20 está
+# fora de suporte desde abril/2026 (ERR-037). Mesma versão no CI e no .nvmrc.
+FROM node:24.22.1-bookworm-slim AS base
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
@@ -22,7 +27,7 @@ RUN pnpm install --frozen-lockfile --filter @gogem/api... \
  && pnpm -F @gogem/api run build \
  && pnpm prune --prod
 
-FROM node:20-slim AS runner
+FROM node:24.22.1-bookworm-slim AS runner
 # openssl também no runtime: o `prisma migrate deploy` do CMD roda aqui.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates \
