@@ -108,9 +108,14 @@ jobs:
         working-directory: apps/kiosk
     steps:
       - uses: actions/checkout@v4
+      # Versão EXATA (ERR-038): o "stable" solto trocou para a 3.50.0 em nov/2026, que marca o
+      # `material.dart` como obsoleto, e o `--fatal-infos` derrubou o CI sem mudança no totem. A
+      # mesma versão nos dois builds (build-apk.yml, build-play-aab.yml): testado = empacotado.
+      # Subir de versão é tarefa própria (migrar para o `material_ui`), com o CI provando.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.7
       # Testes de widget/unidade não exigem as pastas de plataforma
       # (android/windows são geradas com `flutter create .` na máquina do dev).
       - name: Pub get
