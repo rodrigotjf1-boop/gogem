@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { QUEM_CANCELOU, type QuemCancelou } from '../estorno-sem-aprovacao';
 
 /**
  * Corpo do cancelamento vindo do Regem (`POST /sync/regem/pedido-cancelado`).
@@ -28,4 +29,15 @@ export class CancelarTotemDto {
   @IsString()
   @MaxLength(500)
   motivo?: string;
+
+  @ApiPropertyOptional({
+    enum: QUEM_CANCELOU,
+    description:
+      'Quem cancelou no Regem: `pessoa` (o gestor/atendente) ou `agente` (um agente de IA). Só o cancelamento de uma ' +
+      'pessoa estorna sem aprovação aqui (Padrão DMS, F5-10); `agente` → 422 `regra-invalida`. Ausente: o Regem de ' +
+      'antes desta versão — aceito como antes.',
+  })
+  @IsOptional()
+  @IsIn(QUEM_CANCELOU)
+  canceladoPor?: QuemCancelou;
 }

@@ -52,7 +52,7 @@ O contrato é o `docs/integracao-gogem/AVISOS-ASSINADOS.md` do Regem (Regem #680
 | **Ligar** (§2) | Sozinho, no **"Testar conexão"** que passa com o token de integração (decisão do dono, 19/10/2026): o GoGeM gera o segredo `whsec_` + 32 bytes, guarda **cifrado** na coluna `integracoes.avisos` **antes** de ir ao Regem (ao registrar, o cancelamento parado sai na hora) e faz `PUT /integracao/webhook` com o `Bearer rgm_it_…` da loja e `url = {GOGEM_URL_PUBLICA_API}/sync/regem/avisos/<id da integração>` (padrão `https://api.gogem.com.br/api/v1`). A rotina de 5 min só **religa** uma vez a cada 20 h o que já está ligado com o mesmo token (o Regem pausa depois de falhas; um PUT novo religa). Token novo salvo = registro apagado no Regem (o registro é preso ao token): o segredo vira o anterior e o próximo teste religa. |
 | **Desligar** | Painel → Integrações → Regem → **"Desligar avisos"** (`POST /integracoes/regem/avisos/desligar` → `DELETE /integracao/webhook`). Só apaga daqui se o Regem confirmar (204/404): o Regem volta na hora ao caminho antigo. |
 | **Receber** (§3) | `POST /sync/regem/avisos/:id`, pública. Confere, nesta ordem: integração (existe, ligada, com avisos) → relógio (±5 min) → assinatura (`v1,` + base64 do HMAC-SHA256 de `id.timestamp.corpo`, chave = o segredo decodificado, sobre o **corpo exato** — `rawBody: true` no `main.ts`; várias assinaturas separadas por espaço; o segredo anterior vale 10 min depois da troca) → `contrato` = 1. Falhou → **401** (contrato → **422** `contrato-nao-suportado`). O `X-Sync-Token` que ainda chega junto não autentica nada. A loja do Regem (§3.5) não é conferida: a integração do GoGeM não a guarda, e a assinatura já prende o aviso a ela. |
-| **`pedido.cancelado`** (§4) | O mesmo `cancelarPorChave` de hoje; resposta `{ status, pedidoId, estorno: { feito, meio, valorCentavos, refundId, mensagem } }`. **Repetido roda de novo** e devolve o resultado atual (o Regem só repete quando não teve resposta ou o estorno eletrônico falhou). Pedido não encontrado → **422** `{ code: "pedido-nao-encontrado" }`, nunca 404 (na rota nova o Regem lê 404 como "endereço errado" e espera 6 h). |
+| **`pedido.cancelado`** (§4) | O mesmo `cancelarPorChave` de hoje; resposta `{ status, pedidoId, estorno: { feito, meio, valorCentavos, refundId, mensagem } }`. **Repetido roda de novo** e devolve o resultado atual (o Regem só repete quando não teve resposta ou o estorno eletrônico falhou). Pedido não encontrado → **422** `{ code: "pedido-nao-encontrado" }`, nunca 404 (na rota nova o Regem lê 404 como "endereço errado" e espera 6 h). `pedido.canceladoPor` (opcional, desde 13/11/2026): `"pessoa"` estorna; `"agente"` → **422** `{ code: "regra-invalida" }`, sem cancelar nem estornar (a exceção do estorno, abaixo); outro valor → **400**; ausente → como antes. |
 | **`catalogo.publicar`** (§5) | Sincroniza os linkados e republica: `200 { alterados }`. |
 | **Código** | `apps/api/src/integracoes/regem/avisos-regem.ts` (segredo, conferência), `regem-avisos.service.ts` (ligar, desligar, conferir), `regem-inbound.service.ts` (`tratarAviso`). |
 | **Provas** | `apps/api/test/regem-avisos.spec.ts` (o **vetor do §3** bate; a ordem da conferência; ligar/religar/trocar/desligar; repetido roda de novo; 422) e o roteiro de ponta a ponta com o Regem real da fase 2 e o GoGeM compilado (18 de 18: ligar pelo "Testar conexão", assinatura feita pela função do próprio Regem, estorno PIX, repetido, 422, 401 de corpo mexido e de relógio, desligar). Em produção: o roteiro do §6 do contrato. |
@@ -309,6 +309,17 @@ No totem **a compra só termina com o cupom fiscal na mão do cliente**. A venda
   dois modos: na nuvem cancela o pedido; no servidor da loja (a nuvem só tem o pagamento) estorna
   pelo `idempotencyKey` e cria o pedido cancelado para o relatório. Idempotente. Sem
   `idempotencyKey` e sem pedido na nuvem → 404 (não há como achar o pagamento).
+- **A exceção do estorno (Padrão DMS do hub, decisão F5-10; 13/11/2026):** devolver o dinheiro
+  sem aprovação no GoGeM só vale para o cancelamento que uma **pessoa** fez no Regem. O corpo leva
+  `canceladoPor`: `"pessoa"` estorna; `"agente"` (um agente de IA) → **422**
+  `{code:"regra-invalida"}` e nada muda — o agente precisa de um pedido com aprovação, que ainda
+  não existe para o estorno; outro valor → **400**; ausente (o Regem de antes desta versão e os
+  avisos que já estavam na fila dele) → aceito como antes. O token vem primeiro: sem token válido,
+  401, antes da regra. As outras duas condições da regra (`conferirEstornoSemAprovacao` do pacote
+  comum) valem pela construção: a venda é procurada só na empresa do token, e o estorno é sempre o
+  TOTAL do próprio pagamento, uma vez só (`refunded` segura a segunda). Código:
+  `apps/api/src/integracoes/regem/estorno-sem-aprovacao.ts`; provas:
+  `apps/api/test/estorno-sem-aprovacao.spec.ts`.
 - **Recusa definitiva** (400/422: código PDV que não existe, soma que não fecha) → o totem
   estorna e tira a venda da fila; **falha passageira** (rede, 5xx, 503) → reenvia.
 
