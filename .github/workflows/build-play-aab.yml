@@ -34,9 +34,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # A mesma versão exata do ci.yml (ERR-038): o pacote da Play sai com o SDK que o CI testou.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.47.7
 
       - name: Pub get
         run: flutter pub get

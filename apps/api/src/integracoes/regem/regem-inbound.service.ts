@@ -16,6 +16,23 @@ import {
 } from '../../pagamentos/cancelamento.service';
 import { RegemImportService } from './regem-import.service';
 import type { AvisoConferido } from './regem-avisos.service';
+import { conferirQuemCancelou } from './estorno-sem-aprovacao';
+
+/**
+ * A recusa do estorno pela regra F5-10 (`conferirQuemCancelou`), já na resposta HTTP (V1): `regra-invalida` → 422,
+ * `parametro-invalido` → 400. Nada muda no pedido nem no pagamento.
+ */
+function recusarSeNaoForPessoa(canceladoPor: unknown): void {
+  const recusa = conferirQuemCancelou(canceladoPor);
+  if (!recusa) return;
+  if (recusa.tipo === 'regra-invalida') {
+    throw new UnprocessableEntityException({
+      code: recusa.tipo,
+      message: recusa.mensagem,
+    });
+  }
+  throw new BadRequestException(recusa.mensagem);
+}
 
 /**
  * Entrada PUSH do Regem: o botão "Publicar no GoGeM" (no Regem) chama isto para
@@ -84,6 +101,8 @@ export class RegemInboundService {
     const idempotencyKey = texto(pedido.idempotencyKey, 120, 'idempotencyKey');
     const regemComandaId = texto(pedido.regemComandaId, 120, 'regemComandaId');
     const motivo = texto(pedido.motivo, 500, 'motivo');
+    // F5-10: sem aprovação aqui, só o estorno do cancelamento feito por uma pessoa no Regem.
+    recusarSeNaoForPessoa(pedido.canceladoPor);
     return TenantContext.run({ tenantId }, async () => {
       try {
         const r = await this.cancelamento.cancelarPorChave(
@@ -111,9 +130,16 @@ export class RegemInboundService {
    */
   async cancelarPedido(
     token: string,
-    body: { idempotencyKey?: string; regemComandaId?: string; motivo?: string },
+    body: {
+      idempotencyKey?: string;
+      regemComandaId?: string;
+      motivo?: string;
+      canceladoPor?: string;
+    },
   ): Promise<CancelamentoResultado> {
     const tenantId = await this.tenantPorToken(token);
+    // F5-10, depois do token (quem não se identificou não fica sabendo da regra).
+    recusarSeNaoForPessoa(body.canceladoPor);
     return TenantContext.run({ tenantId }, () =>
       this.cancelamento.cancelarPorChave(
         {
