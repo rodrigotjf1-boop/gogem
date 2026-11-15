@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { segredoDa, type LinhaComSegredo } from '../../integracao/segredos';
+import {
+  chaveDosSegredos,
+  segredoDa,
+  type LinhaComSegredo,
+} from '../../integracao/segredos';
 import { ultimoTesteDaRecusa } from './chamada-regem';
+import { ligacaoEmUso } from './clique-guardado';
 
 /** O Regem recusou o token de integração da loja e ninguém reconectou ainda. */
 export interface CredencialRecusada {
@@ -18,6 +23,11 @@ export interface RegemConfig {
   token: string;
   /** Token de integração (`rgm_it_…`): com ele, só `Authorization: Bearer`. */
   tokenIntegracao?: string | null;
+  /**
+   * A LIGAÇÃO do "Conectar pelo Regem" (`dms_lg_regem_…`, Hub DMS F6): com ela, o token do DMS ID
+   * do GoGeM + `DMS-Ligacao`, sem o token colado nem o `X-Sync-Token`. Vence o token colado.
+   */
+  ligacao?: string | null;
   /** A linha da integração (marca a recusa do token novo). */
   integracaoId?: string | null;
   /** Recusa do token novo ainda não resolvida (as chamadas não vão ao Regem). */
@@ -58,24 +68,33 @@ export class RegemConfigResolver {
             id: string;
             ativo: boolean;
             ultimoTeste: Prisma.JsonValue | null;
+            clique?: Prisma.JsonValue | null;
           })
         | null,
     ): RegemConfig | null => {
       if (!row || !(ignoreActive || row.ativo)) return null;
+      // A conexão pelo clique vence o token colado: é o presidente que autorizou no Regem.
+      const clique = ligacaoEmUso(row, chaveDosSegredos());
       const cfg = (row.config ?? {}) as { apiBase?: string };
-      const base = (cfg.apiBase ?? '').trim();
+      // Com a ligação, a base é a do Regem que a emitiu: ela não vale em outro endereço (o
+      // servidor da loja, outro ambiente), e o `apiBase` colado antes daria 401 e marcaria a recusa.
+      const base = clique?.base || (cfg.apiBase ?? '').trim() || '';
       if (!base) return null;
       const token = segredoDa(row, 'token');
-      if (!token) return null;
-      const tokenIntegracao = segredoDa(row, 'tokenIntegracao') || null;
+      if (!token && !clique) return null;
+      const tokenIntegracao = clique
+        ? null
+        : segredoDa(row, 'tokenIntegracao') || null;
       return {
         base,
         token,
         tokenIntegracao,
+        ligacao: clique?.ligacao ?? null,
         integracaoId: row.id,
-        credencialRecusada: tokenIntegracao
-          ? recusaDoUltimoTeste(row.ultimoTeste)
-          : null,
+        credencialRecusada:
+          tokenIntegracao || clique
+            ? recusaDoUltimoTeste(row.ultimoTeste)
+            : null,
       };
     };
 
@@ -117,6 +136,8 @@ export class RegemConfigResolver {
         ultimoTeste: ultimoTesteDaRecusa(
           status,
           detalhe,
+          new Date(),
+          cfg.ligacao ? 'ligacao' : 'token',
         ) as unknown as Prisma.InputJsonValue,
       },
     });

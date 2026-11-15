@@ -51,7 +51,23 @@ export interface Integracao {
   ultimoTeste: TesteResultado | null;
   /** `null` = o conector não tem avisos assinados. */
   avisos?: SituacaoAvisos | null;
+  /** "Conectar pelo Regem" (só o Regem): `null` = o conector não tem o clique. */
+  clique?: SituacaoClique | null;
 }
+
+/** A conexão pelo Regem: o presidente autoriza no Regem, loja por loja. Nunca leva a ligação. */
+export interface SituacaoClique {
+  /** O botão aparece: o servidor está configurado para o clique. */
+  disponivel: boolean;
+  conectado: boolean;
+  emUso: { id: string; nome: string } | null;
+  lojas: { id: string; nome: string }[];
+  conectadoEm: string | null;
+}
+
+export type VoltaDoRegem =
+  | { situacao: 'conectado'; clique: SituacaoClique; avisos: string }
+  | { situacao: 'recusado' };
 
 export interface SalvarIntegracaoInput {
   nome?: string;
@@ -99,6 +115,59 @@ export function useDesligarAvisos() {
   return useMutation({
     mutationFn: (tipo: string) =>
       apiPost<SituacaoAvisos>(`/integracoes/${tipo}/avisos/desligar`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: integracoesKeys.all }),
+  });
+}
+
+/** Só a página do Regem em https (ou o Regem local de quem desenvolve): nada de outro esquema. */
+export function enderecoDoRegem(url: unknown): boolean {
+  if (typeof url !== 'string') return false;
+  try {
+    const u = new URL(url);
+    if (u.protocol === 'https:') return true;
+    return (
+      u.protocol === 'http:' &&
+      (u.hostname === 'localhost' || u.hostname === '127.0.0.1')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** "Conectar pelo Regem": o servidor abre o pedido no Regem e devolve a página de lá. */
+export function useConectarPeloRegem() {
+  return useMutation({
+    mutationFn: () => apiPost<{ url: string }>('/integracoes/regem/clique'),
+  });
+}
+
+/** A volta do Regem: o que veio na barra de endereço, tal como veio. */
+export function useConcluirClique() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (volta: {
+      code?: string;
+      state?: string;
+      iss?: string;
+      error?: string;
+    }) =>
+      apiPost<VoltaDoRegem, typeof volta>(
+        '/integracoes/regem/clique/volta',
+        volta,
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: integracoesKeys.all }),
+  });
+}
+
+/** Troca a loja do Regem em uso (entre as que o presidente ligou). */
+export function useEscolherLojaDoRegem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (lojaId: string) =>
+      apiPost<SituacaoClique, { lojaId: string }>(
+        '/integracoes/regem/clique/loja',
+        { lojaId },
+      ),
     onSuccess: () => qc.invalidateQueries({ queryKey: integracoesKeys.all }),
   });
 }

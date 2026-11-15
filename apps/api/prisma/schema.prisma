@@ -727,6 +727,10 @@ model Integracao {
   // durante a troca e o estado do registro. É da distribuição: não vai ao painel
   // nem entra na `config` que o lojista edita. NULL = avisos não ligados.
   avisos       Json?
+  // "Conectar pelo Regem" (Hub DMS F6, migration 20261115000000): a ligação de cada loja que o
+  // presidente marcou no Regem, CIFRADA, e a loja em uso. É da distribuição, como os avisos: não
+  // vai ao painel nem entra na `config`. NULL = sem clique (vale o token colado).
+  clique       Json?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -739,4 +743,20 @@ model Integracao {
   @@index([unidadeId])
   @@index([tipo, segredoBusca])
   @@map("integracoes")
+}
+
+// "Conectar pelo Regem" (Hub DMS F6): o pedido em andamento. O `state` só pelo resumo, o
+// verificador do PKCE cifrado, preso a quem começou (empresa e usuário). Vale 10 minutos e uma vez.
+model RegemCliquePedido {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  usuarioId          String
+  estadoHash         String    @unique
+  verificadorCifrado String
+  criadoEm           DateTime  @default(now())
+  venceEm            DateTime
+  usadoEm            DateTime?
+
+  @@index([venceEm])
+  @@map("regem_clique_pedidos")
 }

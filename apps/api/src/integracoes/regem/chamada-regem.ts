@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { causaDeRede } from '../../common/causa-de-rede';
+import { clienteDmsIdDoGogem } from './dms-id.cliente';
 import { CABECALHO_INTEGRADOR } from './integrador';
 import type {
   CredencialRecusada,
@@ -36,6 +37,37 @@ export const FORMATO_TOKEN_INTEGRACAO = /^rgm_it_[A-Za-z0-9_-]{43}$/;
 const ESPERA_PADRAO_S = 60;
 const ESPERA_MAXIMA_S = 24 * 60 * 60;
 
+/**
+ * Os cabeçalhos da chamada: pela LIGAÇÃO (Hub DMS F6), o token do DMS ID do GoGeM + `DMS-Ligacao`;
+ * senão os de sempre (`cabecalhosDoRegem`). Sem o cliente do DMS ID configurado (o "Conectar pelo
+ * Regem" desligado neste servidor) ou com o DMS ID fora, a chamada não sai: erro passageiro, a
+ * venda espera na fila.
+ */
+async function cabecalhosDaChamada(
+  cfg: RegemConfig,
+): Promise<Record<string, string>> {
+  if (!cfg.ligacao) return cabecalhosDoRegem(cfg);
+  const dmsId = clienteDmsIdDoGogem();
+  if (!dmsId) {
+    throw new Error(
+      'A conexão pelo Regem está guardada, mas este servidor não tem o "Conectar pelo Regem" ' +
+        'configurado (o aplicativo do GoGeM no DMS ID). Avise o suporte do GoGeM.',
+    );
+  }
+  let token: string;
+  try {
+    token = await dmsId.token();
+  } catch (err) {
+    logger.error(
+      `O DMS ID não deu o token para o Regem: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    throw new Error(
+      'O DMS ID não respondeu agora (o token para falar com o Regem). Tentamos de novo em instantes.',
+    );
+  }
+  return { Authorization: `Bearer ${token}`, 'DMS-Ligacao': cfg.ligacao };
+}
+
 /** Os cabeçalhos da credencial: o token novo sozinho, ou o caminho de sempre. */
 export function cabecalhosDoRegem(
   cfg: Pick<RegemConfig, 'token' | 'tokenIntegracao'>,
@@ -58,11 +90,15 @@ export class RegemCredencialRecusadaError extends Error {
   constructor(
     readonly status: number,
     readonly detalhe: string,
+    via: ViaDaCredencial = 'token',
   ) {
-    super(mensagemDaRecusa(status, detalhe));
+    super(mensagemDaRecusa(status, detalhe, via));
     this.name = 'RegemCredencialRecusadaError';
   }
 }
+
+/** Por onde o GoGeM fala com o Regem: o token colado ou a ligação do "Conectar pelo Regem". */
+export type ViaDaCredencial = 'token' | 'ligacao';
 
 /** O Regem pediu para esperar (429). Passageiro: a venda volta para a fila do totem. */
 export class RegemLimiteError extends Error {
@@ -75,8 +111,19 @@ export class RegemLimiteError extends Error {
 }
 
 /** O texto que vai para o painel e para o log, com o que fazer. */
-export function mensagemDaRecusa(status: number, detalhe: string): string {
+export function mensagemDaRecusa(
+  status: number,
+  detalhe: string,
+  via: ViaDaCredencial = 'token',
+): string {
   const o = detalhe ? ` ${detalhe.replace(/\s*\.?\s*$/, '.')}` : '';
+  if (via === 'ligacao') {
+    const deNovo =
+      'Conecte de novo pelo Regem, em Integrações › Regem › "Conectar pelo Regem".';
+    return status === 403
+      ? `A autorização desta loja no Regem não libera isso.${o} ${deNovo}`
+      : `O Regem recusou a conexão desta loja (a autorização foi revogada ou trocada no Regem).${o} ${deNovo}`;
+  }
   const comoReconectar =
     'Emita outro token no Regem (Distribuição › Tokens de integração, para o GoGeM) e ' +
     'salve na integração Regem do GoGeM.';
@@ -85,11 +132,12 @@ export function mensagemDaRecusa(status: number, detalhe: string): string {
     : `O Regem recusou o token de integração desta loja (inválido, vencido ou revogado).${o} ${comoReconectar}`;
 }
 
-/** O que vai no "último teste" da integração quando o Regem recusa o token novo. */
+/** O que vai no "último teste" da integração quando o Regem recusa o token novo (ou a ligação). */
 export function ultimoTesteDaRecusa(
   status: number,
   detalhe: string,
   em: Date = new Date(),
+  via: ViaDaCredencial = 'token',
 ): {
   ok: false;
   detalhe: string;
@@ -99,7 +147,7 @@ export function ultimoTesteDaRecusa(
   const quando = em.toISOString();
   return {
     ok: false,
-    detalhe: mensagemDaRecusa(status, detalhe),
+    detalhe: mensagemDaRecusa(status, detalhe, via),
     em: quando,
     credencialRecusada: { status, detalhe, em: quando },
   };
@@ -189,11 +237,15 @@ export async function chamarRegem(
   cfg: RegemConfig,
   p: PedidoAoRegem,
 ): Promise<Response> {
-  const comTokenNovo = Boolean(cfg.tokenIntegracao);
+  // A ligação do "Conectar pelo Regem" (Hub DMS F6) e o token colado são as duas credenciais
+  // "novas": a recusa delas fica marcada e segura as chamadas; o `X-Sync-Token` não tem isso.
+  const via: ViaDaCredencial = cfg.ligacao ? 'ligacao' : 'token';
+  const comTokenNovo = Boolean(cfg.tokenIntegracao || cfg.ligacao);
   if (comTokenNovo && cfg.credencialRecusada && !p.ignorarRecusa) {
     throw new RegemCredencialRecusadaError(
       cfg.credencialRecusada.status,
       cfg.credencialRecusada.detalhe,
+      via,
     );
   }
   const chave = chaveDaEspera(cfg);
@@ -205,28 +257,39 @@ export async function chamarRegem(
   }
 
   const url = `${cfg.base.replace(/\/$/, '')}${p.caminho}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), p.prazoMs);
   let res: Response;
-  try {
-    res = await fetch(url, {
-      method: p.metodo,
-      headers: {
-        ...cabecalhosDoRegem(cfg),
-        ...(p.corpo !== undefined
-          ? { 'Content-Type': 'application/json' }
-          : {}),
-        Accept: 'application/json',
-      },
-      body: p.corpo !== undefined ? JSON.stringify(p.corpo) : undefined,
-      signal: controller.signal,
-    });
-  } catch (err) {
-    const motivo =
-      causaDeRede(err) ?? (err instanceof Error ? err.message : String(err));
-    throw new Error(`Falha ao chamar ${p.rotulo} no Regem (${url}): ${motivo}`);
-  } finally {
-    clearTimeout(timer);
+  // Pela ligação, o 401 pode ser só o token do DMS ID vencido: pede outro e tenta uma vez mais.
+  for (let vez = 0; ; vez++) {
+    const credencial = await cabecalhosDaChamada(cfg);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), p.prazoMs);
+    try {
+      res = await fetch(url, {
+        method: p.metodo,
+        headers: {
+          ...credencial,
+          ...(p.corpo !== undefined
+            ? { 'Content-Type': 'application/json' }
+            : {}),
+          Accept: 'application/json',
+        },
+        body: p.corpo !== undefined ? JSON.stringify(p.corpo) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const motivo =
+        causaDeRede(err) ?? (err instanceof Error ? err.message : String(err));
+      throw new Error(
+        `Falha ao chamar ${p.rotulo} no Regem (${url}): ${motivo}`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status === 401 && cfg.ligacao && vez === 0) {
+      clienteDmsIdDoGogem()?.esquecer();
+      continue;
+    }
+    break;
   }
 
   if (res.status === 429) {
@@ -243,7 +306,7 @@ export async function chamarRegem(
   ) {
     const detalhe = mensagemDoRegem(await res.text().catch(() => ''));
     logger.warn(
-      `Regem recusou o token de integração (${res.status}, ${p.rotulo}): ${detalhe}`,
+      `Regem recusou ${via === 'ligacao' ? 'a ligação' : 'o token de integração'} (${res.status}, ${p.rotulo}): ${detalhe}`,
     );
     try {
       await resolver.marcarCredencialRecusada(cfg, res.status, detalhe);
@@ -252,7 +315,7 @@ export async function chamarRegem(
         `Não foi possível marcar a recusa do token de integração: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    throw new RegemCredencialRecusadaError(res.status, detalhe);
+    throw new RegemCredencialRecusadaError(res.status, detalhe, via);
   }
 
   return res;
