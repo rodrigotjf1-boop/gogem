@@ -4,6 +4,7 @@ import { RegemModule } from '../integracoes/regem/regem.module';
 import { RegemImportModule } from '../integracoes/regem/regem-import.module';
 import { IntegracaoController } from './integracao.controller';
 import { IntegracaoService } from './integracao.service';
+import { RegemCliqueService } from '../integracoes/regem/regem-clique.service';
 import { SegredosMigracao } from './segredos.migracao';
 
 /**
@@ -16,6 +17,6 @@ import { SegredosMigracao } from './segredos.migracao';
 @Module({
   imports: [AuthModule, RegemModule, RegemImportModule],
   controllers: [IntegracaoController],
-  providers: [IntegracaoService, SegredosMigracao],
+  providers: [IntegracaoService, RegemCliqueService, SegredosMigracao],
 })
 export class IntegracaoModule {}

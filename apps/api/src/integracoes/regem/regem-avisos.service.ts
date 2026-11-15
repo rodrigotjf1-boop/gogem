@@ -116,7 +116,10 @@ export class RegemAvisosService {
     cfg: RegemConfig,
     opts: { forcar?: boolean; soReativar?: boolean },
   ): Promise<SituacaoDosAvisos> {
-    if (!cfg.tokenIntegracao || !cfg.integracaoId) {
+    // O token colado ou a ligação do "Conectar pelo Regem" (Hub DMS F6): a ligação registra o aviso
+    // pela mesma rota (`PUT /integracao/webhook` aceita a ligação).
+    const credencial = cfg.ligacao || cfg.tokenIntegracao;
+    if (!credencial || !cfg.integracaoId) {
       return this.situacao(null);
     }
     const chave = chaveDosSegredos();
@@ -147,7 +150,7 @@ export class RegemAvisosService {
     };
     const contexto = contextoDoSegredo(dono, CAMPO_DO_SEGREDO);
     const estado = lerEstadoDosAvisos(linha.avisos);
-    const resumo = buscaDoSegredo(cfg.tokenIntegracao);
+    const resumo = buscaDoSegredo(credencial);
     const mesmoToken = estado?.resumoDoToken === resumo;
     const agora = Date.now();
     const agoraIso = new Date(agora).toISOString();
@@ -261,7 +264,7 @@ export class RegemAvisosService {
       select: { id: true, avisos: true },
     });
     if (!linha) return this.situacao(null);
-    if (!cfg.tokenIntegracao) {
+    if (!cfg.tokenIntegracao && !cfg.ligacao) {
       return {
         ...this.situacao(linha.avisos),
         detalhe:

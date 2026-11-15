@@ -21,7 +21,12 @@ import { lerEstadoDosAvisos } from '../integracoes/regem/avisos-regem';
 import {
   RegemCredencialRecusadaError,
   ultimoTesteDaRecusa,
+  type ViaDaCredencial,
 } from '../integracoes/regem/chamada-regem';
+import {
+  situacaoDoClique,
+  type SituacaoDoClique,
+} from '../integracoes/regem/regem-clique.service';
 import {
   RegemImportService,
   type RegemImportResumo,
@@ -70,6 +75,11 @@ export interface IntegracaoView {
    * conector não tem avisos assinados. Nunca leva o segredo.
    */
   avisos: SituacaoDosAvisos | null;
+  /**
+   * "Conectar pelo Regem" (Hub DMS F6; só o Regem): se o botão está ligado neste servidor e as
+   * lojas ligadas pelo clique, com a em uso. `null` = o conector não tem clique. Nunca a ligação.
+   */
+  clique: SituacaoDoClique | null;
 }
 
 /** Resultado de um teste de conexão. */
@@ -218,24 +228,28 @@ export class IntegracaoService {
     }
 
     let resultado: TesteResultado;
+    let viaDaRecusa: ViaDaCredencial = 'token';
     try {
       const cfg = await this.resolver.resolve({ ignoreActive: true });
+      viaDaRecusa = cfg.ligacao ? 'ligacao' : 'token';
       // O teste chama mesmo com a recusa marcada: é o jeito de reconectar.
       const catalogo = await this.catalog.fetchCatalogoWith(cfg, {
         ignorarRecusa: true,
       });
       const n = catalogo.produtos?.length ?? 0;
-      const via = cfg.tokenIntegracao
-        ? 'pelo token de integração'
-        : 'pelo token de sincronização';
+      const via = cfg.ligacao
+        ? 'pela conexão do Regem'
+        : cfg.tokenIntegracao
+          ? 'pelo token de integração'
+          : 'pelo token de sincronização';
       resultado = {
         ok: true,
         detalhe: `Conexão ok — ${n} produto(s) no catálogo do Regem (${via}).`,
         em: new Date().toISOString(),
       };
-      // Conexão ok com o token novo: liga (ou religa) os avisos assinados — decisão do dono
-      // (19/10/2026): sozinho, logo depois de salvar o token e o teste passar.
-      if (cfg.tokenIntegracao) {
+      // Conexão ok com o token novo (ou a ligação do clique): liga (ou religa) os avisos
+      // assinados — decisão do dono (19/10/2026): sozinho, logo depois do teste passar.
+      if (cfg.tokenIntegracao || cfg.ligacao) {
         const avisos = await this.avisos.garantirRegistro(cfg, {
           forcar: true,
         });
@@ -245,7 +259,12 @@ export class IntegracaoService {
       // Recusa do token novo segue marcada (o painel mostra o que fazer).
       resultado =
         err instanceof RegemCredencialRecusadaError
-          ? ultimoTesteDaRecusa(err.status, err.detalhe)
+          ? ultimoTesteDaRecusa(
+              err.status,
+              err.detalhe,
+              new Date(),
+              viaDaRecusa,
+            )
           : {
               ok: false,
               detalhe: err instanceof Error ? err.message : String(err),
@@ -418,6 +437,7 @@ export class IntegracaoService {
       config: unknown;
       ultimoTeste: unknown;
       avisos?: unknown;
+      clique?: unknown;
     },
   ): IntegracaoView {
     const config = (row?.config ?? {}) as Record<string, string>;
@@ -460,6 +480,10 @@ export class IntegracaoService {
       avisos:
         conector.tipo === 'regem'
           ? this.avisos.situacao(row?.avisos ?? null)
+          : null,
+      clique:
+        conector.tipo === 'regem'
+          ? situacaoDoClique(row?.clique ?? null)
           : null,
     };
   }

@@ -26,6 +26,25 @@
 
 ## 1. Autenticação de serviço (máquina-a-máquina)
 
+### 1.00 "Conectar pelo Regem" — a ligação da loja pelo clique (Hub DMS F6, 15/11/2026)
+
+O caminho que substitui o token colado: o presidente da empresa autoriza no **próprio Regem**, loja por
+loja, e ninguém copia token (Padrão DMS §3; do lado do Regem: `docs/integracao-gogem/ENDPOINTS.md`,
+"Pelo clique", Regem #1013). Nasce **desligado**: sem `GOGEM_REGEM_CLIQUE=true` o cartão segue só com o
+token colado (§1.0), que continua valendo até o fim da F6.
+
+| Item | Valor |
+|---|---|
+| **Começar** | Painel → Integrações → Regem → **"Conectar pelo Regem"** (`POST /integracoes/regem/clique`, gerente+). O servidor empurra o pedido (PAR, RFC 9126) com PKCE S256 em `{GOGEM_REGEM_API_URL}/integracao/autorizacao/pedido`, com o token do DMS ID do GoGeM (`client_credentials`, recurso `{API}/integracao`, as 3 permissões do totem), guarda o pedido (`regem_clique_pedidos`: `state` só em hash, verificador cifrado, 10 min) e devolve a página do Regem para o navegador ir. |
+| **Voltar** | O Regem manda o navegador para `{GOGEM_PAINEL_URL}/integracoes/regem/volta` com `code`, `state` e `iss` (RFC 9207). O painel repassa tal como veio (`POST /integracoes/regem/clique/volta`) e tira o código da barra; o servidor confere o `iss` e o `state` (uma vez só, da mesma pessoa e da mesma empresa, dentro dos 10 min) e troca o código (`/integracao/autorizacao/token`) pela **ligação de cada loja marcada** (`dms_lg_regem_…`). A recusa do presidente volta como `recusado`, sem mudar nada. Sessão vencida no meio: o login devolve à volta com a busca. |
+| **Guardar** | `integracoes.clique` (jsonb) da integração da empresa: as lojas (id, nome, prefixo, permissões) e a ligação de cada uma **cifrada** (`v1.`, contexto `clique:<loja>`); a matriz (ou a primeira) fica em uso. Nunca vai ao painel nem ao log. Conectar de novo troca tudo e apaga o "último teste" e o registro dos avisos (presos à credencial antiga). |
+| **Chamar** | Com a ligação: `Authorization: Bearer <token do DMS ID do GoGeM>` + `DMS-Ligacao: dms_lg_regem_…`, sem token colado nem `X-Sync-Token`. A ligação **vence** o token colado, e a base é a do Regem que a emitiu (o `apiBase` colado antes não vale para ela). 401 → uma nova tentativa com token do DMS ID novo; recusa de novo → a mesma régua do §1.0 (marca no "último teste", segura as chamadas), com a mensagem "Conecte de novo pelo Regem, em Integrações › Regem › "Conectar pelo Regem"." |
+| **Loja em uso** | Com mais de uma loja ligada, a lista "Loja do Regem em uso" no cartão (`POST /integracoes/regem/clique/loja`); a troca registra de novo os avisos pela ligação da loja nova. |
+| **Avisos** | Depois da conexão, o GoGeM registra os avisos assinados (§1.0b) pela ligação, sozinho. |
+| **Configuração** (a distribuição, no EasyPanel) | `GOGEM_REGEM_CLIQUE`, `GOGEM_REGEM_API_URL`, `GOGEM_REGEM_APP_URL`, `GOGEM_PAINEL_URL` (só https; padrões de produção) e o aplicativo M2M do GoGeM no DMS ID: `DMS_ID_EMISSOR`, `DMS_ID_APLICATIVO`, `DMS_ID_SEGREDO`. Configuração torta não liga: o motivo vai ao log. |
+| **Código** | `apps/api/src/integracoes/regem/regem-clique.regras.ts` (config, PAR, volta), `regem-clique.service.ts`, `dms-id.cliente.ts`, `clique-guardado.ts`, `chamada-regem.ts`; painel: `components/integracoes/conectar-pelo-regem.tsx`, `routes/integracoes-regem-volta.tsx`. |
+| **Provas** | `apps/api/test/regem-clique.spec.ts` (config, pedido, volta, lojas da troca), `test/regem-clique.service.spec.ts` (o fluxo com o Regem e o DMS ID falsos: iniciar, concluir, `iss` errado, pedido de outra pessoa, recusa do presidente, troca torta, token colado antes, troca de loja) e `apps/admin/test/integracoes-clique.test.tsx` (o cartão, a lista, a volta, a sessão vencida). |
+
 ### 1.0 Token de integração da loja — `Authorization: Bearer rgm_it_…` (GoGeM, fase 3 da credencial própria, 20/10/2026)
 
 O caminho NOVO, e o que um produto de fora do grupo DMS usaria: a **API de integração** do Regem

@@ -30,6 +30,8 @@ export const TENANT_SCOPED_MODELS = new Set([
   'CatalogoConflito',
   'TelemetriaEvento',
   'Auditoria',
+  // "Conectar pelo Regem" (Hub DMS F6): o pedido em andamento, preso à empresa e a quem começou.
+  'RegemCliquePedido',
 ]);
 
 /**

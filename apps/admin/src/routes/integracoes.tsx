@@ -16,6 +16,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePodeEscrever } from '@/auth/auth-context';
+import { ConectarPeloRegem } from '@/components/integracoes/conectar-pelo-regem';
 import { useCardapios } from '@/lib/cardapios';
 import { mensagemDeErro, type ImportResumo } from '@/lib/publicacao';
 import {
@@ -131,6 +132,14 @@ function ConectorCard({
           <p className="font-display font-semibold">{integracao.nome}</p>
           <p className="text-sm text-muted-foreground">{integracao.descricao}</p>
         </div>
+
+        {integracao.clique &&
+          (integracao.clique.disponivel || integracao.clique.conectado) && (
+            <ConectarPeloRegem
+              clique={integracao.clique}
+              podeEscrever={podeEscrever}
+            />
+          )}
 
         {integracao.ultimoTeste && (
           <p
@@ -407,13 +416,21 @@ function ConfigDialog({
           </p>
         )}
         {erro && (
-          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p
+            role="alert"
+            className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
             {erro}
           </p>
         )}
 
         <div className="flex flex-wrap justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onTestar} disabled={ocupado}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onTestar}
+            disabled={ocupado}
+          >
             {testar.isPending ? (
               <Loader2 className="animate-spin" aria-hidden />
             ) : (
@@ -422,7 +439,9 @@ function ConfigDialog({
             Testar conexão
           </Button>
           <Button type="submit" variant="primary" disabled={ocupado}>
-            {salvar.isPending && <Loader2 className="animate-spin" aria-hidden />}
+            {salvar.isPending && (
+              <Loader2 className="animate-spin" aria-hidden />
+            )}
             Salvar
           </Button>
         </div>

@@ -27,9 +27,12 @@ export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const destino =
-    (location.state as { from?: { pathname?: string } } | null)?.from
-      ?.pathname ?? '/catalogo';
+  // A busca vai junto: a volta do "Conectar pelo Regem" traz o código na busca, e a sessão
+  // vencida no meio do caminho não pode jogar fora a autorização que o presidente acabou de dar.
+  const de = (
+    location.state as { from?: { pathname?: string; search?: string } } | null
+  )?.from;
+  const destino = de?.pathname ? de.pathname + (de.search ?? '') : '/catalogo';
 
   const [email, setEmail] = React.useState('');
   const [senha, setSenha] = React.useState('');

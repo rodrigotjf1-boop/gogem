@@ -17,6 +17,7 @@ import CatalogoPage from '@/routes/catalogo';
 import CardapiosPage from '@/routes/cardapios';
 import ConfiguracoesPage from '@/routes/configuracoes';
 import IntegracoesPage from '@/routes/integracoes';
+import VoltaDoRegemPage from '@/routes/integracoes-regem-volta';
 import OpenDeliveryPage from '@/routes/open-delivery';
 import PublicarPage from '@/routes/publicar';
 import RelatoriosPage from '@/routes/relatorios';
@@ -71,6 +72,11 @@ export default function App() {
               <Route path="/catalogo" element={<CatalogoPage />} />
               <Route path="/cardapios" element={<CardapiosPage />} />
               <Route path="/integracoes" element={<IntegracoesPage />} />
+              {/* A volta do "Conectar pelo Regem" (Hub DMS F6). */}
+              <Route
+                path="/integracoes/regem/volta"
+                element={<VoltaDoRegemPage />}
+              />
               <Route path="/open-delivery" element={<OpenDeliveryPage />} />
               {/* Rota antiga: redireciona para a área de Integrações. */}
               <Route
