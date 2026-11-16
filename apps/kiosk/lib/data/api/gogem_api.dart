@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:gogem_payment/payment.dart' show PixCharge, PointCharge;
 import '../catalog/catalog_models.dart';
+import 'repete_na_conexao.dart';
 
 sealed class PublicadoResult {}
 
@@ -90,7 +91,7 @@ class GogemApi {
     required this.bearer,
     this.deviceToken,
     http.Client? client,
-  }) : _client = client ?? http.Client();
+  }) : _client = ClienteQueRepeteNaConexao(client ?? http.Client());
   final String baseUrl;
   final String bearer;
 

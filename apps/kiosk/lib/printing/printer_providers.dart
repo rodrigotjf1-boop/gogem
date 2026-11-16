@@ -76,12 +76,30 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
   /// falha), NÃO o status não ter voltado. Se o device está presente mas o
   /// status é ilegível, assume PRONTA (não trava a venda por um byte perdido) —
   /// a proteção de papel real vem quando o status É lido (ou de imprimir()).
+  ///
+  /// Leitura que ACUSA problema (tampa, papel, offline) só vale confirmada por uma
+  /// segunda: pela USB o byte às vezes volta deslocado e acusa "tampa aberta" que não
+  /// existe — o totem recusava o pagamento até o cliente tocar "Tentar novamente"
+  /// (ERR-043). Problema de verdade persiste nas duas. A confirmação só LIBERA quando
+  /// lê "pronta": se ela não ler, vale a primeira (bloqueia) — regra de ouro: nunca
+  /// iniciar pagamento com a impressora acusando problema.
   Future<PrinterHealth> checarAgora() async {
     final d = ref.read(printerDriverProvider);
     try {
-      final s = await d.consultarStatus();
+      var s = await d.consultarStatus();
       // ignore: avoid_print
       print('[printerHealth] status=$s');
+      if (!s.prontaParaVenda) {
+        await Future<void>.delayed(ref.read(confirmacaoDaImpressoraProvider));
+        try {
+          s = await d.consultarStatus();
+          // ignore: avoid_print
+          print('[printerHealth] confirmação=$s');
+        } catch (e) {
+          // ignore: avoid_print
+          print('[printerHealth] confirmação ilegível ($e) — vale a primeira');
+        }
+      }
       state = PrinterHealth(
           status: s, desconectada: false, ultimaChecagem: DateTime.now());
       return state;
@@ -104,6 +122,11 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
     return state;
   }
 }
+
+/// Espera entre a leitura que acusou problema e a que confirma (ERR-043). Provider
+/// para o teste trocar por zero.
+final confirmacaoDaImpressoraProvider =
+    Provider<Duration>((_) => const Duration(milliseconds: 400));
 
 final printerHealthProvider =
     NotifierProvider<PrinterHealthNotifier, PrinterHealth>(
