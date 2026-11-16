@@ -25,7 +25,8 @@ import { reaisToCentavos } from './reais-to-centavos';
  * código, o ref acompanha (ERR-035: a troca de códigos do Regem em 20/10/2026
  * soltou 57 produtos e fez 4 espelharem OUTRO produto, porque o código antigo
  * deles virou o novo de outro). Ref antigo, sem id, casa pelo código e ganha o
- * id. Grupos e opções casam por `(produtoId, nome)` e `(grupoId, nome)`.
+ * id. Grupos casam por `(produtoId, nome)`; opções, dentro do grupo, pelo
+ * `regem_id`, depois pelo código PDV e só então pelo nome (ERR-040).
  *
  * Semântica v1: **aditivo/refresh** — cria o que falta e atualiza o que já
  * existe; NÃO deleta itens do GoGeM ausentes no Regem.
@@ -658,29 +659,63 @@ export class RegemImportService {
     }
   }
 
-  /** Upsert das opções de um grupo, casadas por `(grupoId, nome)`. */
+  /**
+   * Upsert das opções de um grupo. Cada opção do Regem casa com UMA opção do
+   * GoGeM, pela chave mais estável que houver: (1) o `regem_id` do ref (id da
+   * opção no Regem); (2) o código PDV; e só depois que todas tentaram essas duas,
+   * (3) o nome, entre as que sobraram. Nome repetido no mesmo grupo existe no
+   * Regem (duas opções de mesmo nome, códigos diferentes — ERR-040): casar só pelo nome
+   * juntava as duas, e a criada era anotada com o id falso 'novo', que virava
+   * `update` de registro inexistente (500 no "Importar catálogo").
+   */
   private async importOpcoes(
     grupoId: string,
     rg: RegemGrupo,
     resumo: RegemImportResumo,
   ): Promise<void> {
-    const opcoesExistentes = await this.prisma.complementoOpcao.findMany({
-      where: { grupoId },
-    });
-    const opcaoPorNome = new Map<string, { id: string }>();
-    for (const o of opcoesExistentes) {
-      opcaoPorNome.set(normalizar(o.nome), { id: o.id });
-    }
+    const existentes = (
+      await this.prisma.complementoOpcao.findMany({ where: { grupoId } })
+    ).map((o) => ({
+      id: o.id,
+      nome: normalizar(o.nome),
+      ref: refDoRegem(o.externalRefs),
+    }));
+    const opcoes = rg.opcoes ?? [];
 
-    for (const ro of rg.opcoes ?? []) {
+    // Índice da opção do Regem → id da opção do GoGeM que é o par dela.
+    const par = new Map<number, string>();
+    const usadas = new Set<string>();
+    const casar = (
+      i: number,
+      achou: (o: (typeof existentes)[number]) => boolean,
+    ) => {
+      if (par.has(i)) return;
+      const o = existentes.find((e) => !usadas.has(e.id) && achou(e));
+      if (!o) return;
+      par.set(i, o.id);
+      usadas.add(o.id);
+    };
+    opcoes.forEach((ro, i) => {
+      const id = idDoRegem(ro);
+      if (id) casar(i, (e) => e.ref?.regemId === id);
+    });
+    opcoes.forEach((ro, i) => {
+      const codigo = (ro.codigoPdv ?? '').trim();
+      if (codigo) casar(i, (e) => e.ref?.codigo === codigo);
+    });
+    opcoes.forEach((ro, i) => casar(i, (e) => e.nome === normalizar(ro.nome)));
+
+    for (let i = 0; i < opcoes.length; i++) {
+      const ro = opcoes[i];
       const precoCentavosDelta = reaisToCentavos(ro.precoDelta);
-      const externalRefs: ExternalRef[] = ro.codigoPdv
-        ? [{ sistema: 'regem', codigo_pdv: ro.codigoPdv }]
+      const codigo = (ro.codigoPdv ?? '').trim();
+      const externalRefs: ExternalRef[] = codigo
+        ? comRefDoRegem([], codigo, idDoRegem(ro))
         : [];
-      const existente = opcaoPorNome.get(normalizar(ro.nome));
+      const existente = par.get(i);
       if (existente) {
         await this.prisma.complementoOpcao.update({
-          where: { id: existente.id },
+          where: { id: existente },
           data: {
             nome: ro.nome,
             precoCentavosDelta,
@@ -705,7 +740,6 @@ export class RegemImportService {
           data: data as Prisma.ComplementoOpcaoUncheckedCreateInput,
         });
         resumo.opcoes.criados += 1;
-        opcaoPorNome.set(normalizar(ro.nome), { id: 'novo' });
       }
     }
   }
@@ -759,8 +793,8 @@ function refDoRegem(
   return { codigo, regemId: id || null };
 }
 
-/** Id do produto no catálogo do Regem (null se o Regem não mandou). */
-function idDoRegem(rp: RegemProduto): string | null {
+/** Id do produto (ou da opção) no catálogo do Regem (null se o Regem não mandou). */
+function idDoRegem(rp: { id?: string | null }): string | null {
   const id = typeof rp.id === 'string' ? rp.id.trim() : '';
   return id || null;
 }
