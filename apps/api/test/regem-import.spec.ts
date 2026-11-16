@@ -188,8 +188,9 @@ describe('RegemImportService.importar — catálogo novo (tudo criado)', () => {
     expect(opcao.grupoId).toBe('gg-1');
     expect(opcao.precoCentavosDelta).toBe(500); // "5.00" → 500
     expect(opcao.disponivel).toBe(true);
+    // A opção leva o id dela no Regem (ERR-040): casa por ele na próxima importação.
     expect(opcao.externalRefs).toEqual([
-      { sistema: 'regem', codigo_pdv: 'OPC-1' },
+      { sistema: 'regem', codigo_pdv: 'OPC-1', regem_id: 'ro-1' },
     ]);
   });
 
