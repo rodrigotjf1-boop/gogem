@@ -9,7 +9,7 @@ import 'package:http/testing.dart';
 import 'package:sqflite/sqflite.dart';
 import 'db_helper.dart';
 
-/// ERR-048 — o totem perdia o pareamento a cada reinício.
+/// ERR-047 — o totem perdia o pareamento a cada reinício.
 ///
 /// Na abertura do app, `deviceTokenProvider.carregar()` (lê o token do banco) e a
 /// primeira sync do cardápio disparam juntos. A sync podia sair SEM o token; a nuvem

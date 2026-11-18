@@ -138,7 +138,7 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
   Future<void> sincronizar() async {
     state = state.copyWith(status: SyncStatus.sincronizando);
     // O token com que ESTA chamada sai (o cliente é montado com ele). Só ele pode ser
-    // dado como revogado por um 401 — ver o `catch` abaixo (ERR-048).
+    // dado como revogado por um 401 — ver o `catch` abaixo (ERR-047).
     String? tokenDaChamada;
     try {
       final repo = await ref.read(catalogRepositoryProvider.future);
@@ -186,7 +186,7 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       // adianta insistir com um token morto: apaga e volta ao pareamento (o
       // router reage). Sem isto o totem revogado ficava preso no cache.
       //
-      // ERR-048: só vale quando a chamada SAIU com o token que está valendo agora.
+      // ERR-047: só vale quando a chamada SAIU com o token que está valendo agora.
       // Na abertura, a primeira sync dispara junto com a leitura do token no banco e
       // pode sair SEM ele; a nuvem responde "token ausente", e quando a resposta volta
       // o token já carregou — apagá-lo desfazia o pareamento a cada reinício
