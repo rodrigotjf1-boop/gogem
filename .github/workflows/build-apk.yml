@@ -86,6 +86,25 @@ jobs:
             > android/app/src/main/res/xml/device_filter.xml
           grep -nE 'INTERNET|USB_DEVICE_ATTACHED' "$MANIFEST"
 
+      # O totem abre o GoGeM sozinho ao ligar e volta para ele depois de um
+      # travamento: o app é a TELA INICIAL do Android (HOME), como manda o
+      # ANDROID-KIOSK.md (ERR-046 — sem isso, quem abria ao ligar era o
+      # Gototem). Só no perfil producao: no celular de teste seria trocar a
+      # tela inicial do aparelho da pessoa. Na instalação, definir o GoGeM
+      # como tela inicial: cmd package set-home-activity (ver ANDROID-KIOSK.md).
+      - name: GoGeM como tela inicial do totem (produção)
+        if: ${{ inputs.perfil == 'producao' }}
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.intent.category.HOME' "$MANIFEST"; then
+            sed -i 's#<category android:name="android.intent.category.LAUNCHER"/>#<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.HOME"/>\n                <category android:name="android.intent.category.DEFAULT"/>#' "$MANIFEST"
+          fi
+          if ! grep -q 'android.intent.category.HOME' "$MANIFEST"; then
+            echo "::error::Não achei a categoria LAUNCHER no manifesto gerado — o GoGeM não viraria a tela inicial do totem."
+            exit 1
+          fi
+          grep -nE 'category\.(LAUNCHER|HOME|DEFAULT)' "$MANIFEST"
+
       # Modo quiosque + impressora: substitui o MainActivity gerado pelo que tem
       # lock task (canal 'gogem/kiosk') e registra o UsbPrinterPlugin (canal
       # 'gogem/usb_printer'). Caminho segue --org br.com.dms + gogem_kiosk
@@ -97,6 +116,41 @@ jobs:
           cp tool/kiosk_mainactivity.kt "$DEST/MainActivity.kt"
           cp tool/kiosk_usbprinter.kt "$DEST/UsbPrinterPlugin.kt"
           echo "MainActivity + UsbPrinterPlugin instalados em $DEST"
+
+      # Assinatura com a CHAVE DO GOGEM (a mesma do build-play-aab.yml). Sem
+      # isto o Flutter assina o release com a chave de DEPURAÇÃO, que o runner
+      # cria nova a cada build: nenhuma versão instala por cima da anterior,
+      # nem pelo ADB nem pela Distribuição (ERR-045, LIC-038). Falha fechado
+      # sem os secrets.
+      - name: Configurar assinatura (chave do GoGeM)
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_BASE64 ausente — o APK sairia com a chave de depuração (ver docs/publicar-google-play.md)."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > android/app/upload.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload.jks
+          storePassword=$KS_PASS
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASS
+          EOF
+          GRADLE=android/app/build.gradle.kts
+          printf '%s\n' \
+            'import java.util.Properties' \
+            'val keystoreProperties = Properties().apply {' \
+            '    val f = rootProject.file("key.properties")' \
+            '    if (f.exists()) f.inputStream().use { load(it) }' \
+            '}' \
+            "$(cat "$GRADLE")" > "$GRADLE"
+          perl -0pi -e 's/(android \{)/$1\n    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["keyPassword"] as String\n            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }\n            storePassword = keystoreProperties["storePassword"] as String\n        }\n    }/' "$GRADLE"
+          perl -0pi -e 's/signingConfigs\.getByName\("debug"\)/signingConfigs.getByName("release")/' "$GRADLE"
+          echo "== build.gradle.kts (trecho de assinatura) ==" && grep -nE "signingConfig|keystoreProperties" "$GRADLE" || true
 
       # Perfil → defines. producao = totem (maquininha/impressora/quiosque);
       # teste = celular (tudo fake, SEM travas de papel/tampa, quiosque OFF).
@@ -115,6 +169,27 @@ jobs:
             --dart-define=GOGEM_PRINTER=$PRN \
             --dart-define=GOGEM_PAYMENT_PROVIDER=$PAY \
             --dart-define=GOGEM_KIOSK_LOCK=$KIOSK
+
+      # Portão (LIC-038): APK com a chave de depuração, ou com uma chave que não
+      # é a do GoGeM, NÃO sai do build. A impressão digital é pública (é a do
+      # certificado, não um segredo).
+      - name: Conferir a assinatura do APK (chave do GoGeM)
+        env:
+          CERT_ESPERADO: 6b42eb2d08d21007426e80019df4024b1f173751d2964e00d47e34a1fa607b1e
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)"
+          "$BT/apksigner" verify --print-certs "$APK" > certs.txt
+          cat certs.txt
+          if grep -q 'CN=Android Debug' certs.txt; then
+            echo "::error::APK assinado com a chave de DEPURAÇÃO — não distribua (LIC-038)."
+            exit 1
+          fi
+          if ! grep -q "SHA-256 digest: $CERT_ESPERADO" certs.txt; then
+            echo "::error::APK assinado com uma chave que não é a do GoGeM (esperada $CERT_ESPERADO)."
+            exit 1
+          fi
+          echo "Assinatura conferida: chave do GoGeM."
 
       - name: Publicar APK universal como artifact
         uses: actions/upload-artifact@v4
