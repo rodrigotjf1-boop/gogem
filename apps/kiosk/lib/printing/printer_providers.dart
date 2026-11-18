@@ -85,6 +85,7 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
   /// iniciar pagamento com a impressora acusando problema.
   Future<PrinterHealth> checarAgora() async {
     final d = ref.read(printerDriverProvider);
+    Object? erroDaLeitura;
     try {
       var s = await d.consultarStatus();
       // ignore: avoid_print
@@ -104,21 +105,38 @@ class PrinterHealthNotifier extends Notifier<PrinterHealth> {
           status: s, desconectada: false, ultimaChecagem: DateTime.now());
       return state;
     } catch (e) {
+      erroDaLeitura = e;
       // ignore: avoid_print
       print('[printerHealth] status ilegível: $e');
     }
     // Status não leu — o device ainda está conectado? (open sem erro = presente)
     try {
       await d.conectar();
-      // ignore: avoid_print
-      print('[printerHealth] conectada, status desconhecido → assumindo pronta');
-      state = PrinterHealth(
-          desconectada: false, ultimaChecagem: DateTime.now());
     } catch (e2) {
       // ignore: avoid_print
       print('[printerHealth] desconectada: $e2');
       state = PrinterHealth(desconectada: true, ultimaChecagem: DateTime.now());
+      return state;
     }
+    // ERR-048: a leitura caiu porque a CONEXÃO morreu (a impressora reiniciou e voltou
+    // com outro endereço USB). O `conectar` acabou de abrir uma conexão nova: lê por ela
+    // antes de assumir "pronta" — a impressora que volta pode estar sem papel.
+    if (erroDaLeitura is PrinterDisconnected) {
+      try {
+        final s = await d.consultarStatus();
+        // ignore: avoid_print
+        print('[printerHealth] reconectada, status=$s');
+        state = PrinterHealth(
+            status: s, desconectada: false, ultimaChecagem: DateTime.now());
+        return state;
+      } catch (e3) {
+        // ignore: avoid_print
+        print('[printerHealth] reconectada, status ainda ilegível ($e3)');
+      }
+    }
+    // ignore: avoid_print
+    print('[printerHealth] conectada, status desconhecido → assumindo pronta');
+    state = PrinterHealth(desconectada: false, ultimaChecagem: DateTime.now());
     return state;
   }
 }

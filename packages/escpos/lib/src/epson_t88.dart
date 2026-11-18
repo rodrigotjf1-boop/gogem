@@ -37,6 +37,13 @@ class EpsonT88 implements PrinterDriver {
   Future<PrinterStatus> consultarStatus() async {
     final porta = await _porta();
     if (porta == null) return _consultarDleEot();
+    if (porta.papelAcabando) {
+      // ERR-049: PE com a impressora online e sem erro = rolo perto do fim (vende,
+      // com o aviso). Só bloqueia se o DLE EOT 4 disser FIM de papel (bits 5-6).
+      return await _fimDePapelPeloDleEot()
+          ? const PrinterStatus(semPapel: true)
+          : const PrinterStatus(pertoDoFim: true);
+    }
     if (porta.pronta) {
       return PrinterStatus(pertoDoFim: await _pertoDoFim());
     }
@@ -82,6 +89,16 @@ class EpsonT88 implements PrinterDriver {
     final confirmado = agora && _acabandoNaAnterior;
     _acabandoNaAnterior = agora;
     return confirmado;
+  }
+
+  /// Fim de papel pelo sensor de fim (DLE EOT 4, bits 5-6). Ilegível = não (a porta
+  /// online e sem erro já disse que a impressora segue imprimindo).
+  Future<bool> _fimDePapelPeloDleEot() async {
+    try {
+      return (await _eot(Cmd.eotPaper) & 0x60) != 0;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<PrinterStatus> _consultarDleEot() async {
