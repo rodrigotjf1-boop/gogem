@@ -16,10 +16,20 @@ class StatusDaPorta {
   bool get valido => (byte & ~0x38) == 0;
   bool get semErro => (byte & 0x08) != 0;
   bool get online => (byte & 0x10) != 0;
+
+  /// Bit "sem papel" (PE) da porta. ⚠️ A Epson liga o PE também com o rolo PERTO DO
+  /// FIM (o sensor de quase-fim entra no sinal de fim de papel — ESC c 3), com a
+  /// impressora online e imprimindo: visto no totem .19 em 18/11/2026 (`0x38`, o app
+  /// da Epson dizendo "Papel: Definir" e o teste saindo — ERR-049). Fim de papel DE
+  /// VERDADE para a impressão e a deixa offline → aparece junto com [online] false.
   bool get semPapel => (byte & 0x20) != 0;
 
-  /// Pronta para vender pela porta: online, sem erro e com papel.
-  bool get pronta => valido && online && semErro && !semPapel;
+  /// Pronta para vender pela porta: online e sem erro. O PE sozinho, com a
+  /// impressora online e sem erro, é "papel acabando" (aviso) — ver [semPapel].
+  bool get pronta => valido && online && semErro;
+
+  /// PE com a impressora online e sem erro: o rolo está perto do fim.
+  bool get papelAcabando => pronta && semPapel;
 
   @override
   String toString() => 'StatusDaPorta(0x${byte.toRadixString(16).padLeft(2, '0')} '

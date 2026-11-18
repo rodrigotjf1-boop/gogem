@@ -17,10 +17,19 @@ void main() {
       expect(p.valido, isTrue);
       expect(p.pronta, isTrue);
     });
-    test('0x38 = sem papel → não pronta', () {
+    // ERR-049: o totem .19 lia 0x38 com papel no rolo (o app da Epson: "Papel:
+    // Definir"; o teste de impressão saiu) — o PE com a impressora online é o
+    // sensor de QUASE-FIM. Fim de papel de verdade deixa a impressora offline.
+    test('0x38 = online, sem erro e PE → pronta, papel acabando (não bloqueia)', () {
       const p = StatusDaPorta(0x38);
       expect(p.semPapel, isTrue);
+      expect(p.pronta, isTrue);
+      expect(p.papelAcabando, isTrue);
+    });
+    test('0x20 = PE com a impressora offline e com erro → fim de papel, não pronta', () {
+      const p = StatusDaPorta(0x20);
       expect(p.pronta, isFalse);
+      expect(p.papelAcabando, isFalse);
     });
     test('0x10 = online com erro (tampa) → não pronta', () {
       expect(const StatusDaPorta(0x10).pronta, isFalse);
@@ -64,6 +73,48 @@ void main() {
       final t = FakeTransport()
         ..temStatusDaPorta = true
         ..portaForcada = 0x30; // online, com erro, sem papel
+      final s = await EpsonT88(t).consultarStatus();
+      expect(s.prontaParaVenda, isFalse);
+      expect(s.motivoBloqueio, 'sem papel');
+    });
+
+    test('ERR-049: porta 0x38 (quase-fim) e DLE EOT sem fim de papel → VENDE com o aviso',
+        () async {
+      final t = FakeTransport()
+        ..temStatusDaPorta = true
+        ..portaForcada = 0x38
+        ..pertoDoFim = true; // DLE EOT 4 = 0x0C (quase no fim), sem os bits de fim
+      final s = await EpsonT88(t).consultarStatus();
+      expect(s.prontaParaVenda, isTrue);
+      expect(s.pertoDoFim, isTrue);
+    });
+
+    test('ERR-049: porta 0x38 e DLE EOT mudo → vende com o aviso (a porta diz online)',
+        () async {
+      final t = FakeTransport()
+        ..temStatusDaPorta = true
+        ..portaForcada = 0x38
+        ..dleEotMudo = true;
+      final s = await EpsonT88(t).consultarStatus();
+      expect(s.prontaParaVenda, isTrue);
+      expect(s.pertoDoFim, isTrue);
+    });
+
+    test('ERR-049: porta 0x38 mas o DLE EOT 4 diz FIM de papel → bloqueia', () async {
+      final t = FakeTransport()
+        ..temStatusDaPorta = true
+        ..portaForcada = 0x38
+        ..semPapel = true; // DLE EOT 4 = 0x60
+      final s = await EpsonT88(t).consultarStatus();
+      expect(s.prontaParaVenda, isFalse);
+      expect(s.motivoBloqueio, 'sem papel');
+    });
+
+    test('fim de papel de verdade (porta 0x20: PE, offline, erro) → bloqueia sem papel',
+        () async {
+      final t = FakeTransport()
+        ..temStatusDaPorta = true
+        ..semPapel = true; // o fake responde 0x20 na porta
       final s = await EpsonT88(t).consultarStatus();
       expect(s.prontaParaVenda, isFalse);
       expect(s.motivoBloqueio, 'sem papel');
