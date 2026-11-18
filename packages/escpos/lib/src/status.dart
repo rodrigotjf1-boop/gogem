@@ -1,3 +1,31 @@
+/// Status da PORTA pela classe de impressora USB (GET_PORT_STATUS, canal de
+/// controle — o mesmo que o driver de impressora do Windows e o `usblp` do Linux
+/// leem): bit3 (0x08) = sem erro · bit4 (0x10) = online (selecionada) ·
+/// bit5 (0x20) = sem papel. Os bits 0–2 e 6–7 são reservados (zero): byte com
+/// eles ligados não é um status, é leitura errada → [valido] false.
+///
+/// Por que existe (ERR-043): o DLE EOT faz 4 perguntas e lê 1 byte de cada pela
+/// via de dados; uma resposta atrasada é lida como a da pergunta seguinte, e o
+/// byte do "estado da impressora" (bit 2 = pino da gaveta) lido no lugar da
+/// "causa de offline" vira "tampa aberta". A porta responde pelo canal de
+/// controle, pedido e resposta juntos — não se desloca.
+class StatusDaPorta {
+  const StatusDaPorta(this.byte);
+  final int byte;
+
+  bool get valido => (byte & ~0x38) == 0;
+  bool get semErro => (byte & 0x08) != 0;
+  bool get online => (byte & 0x10) != 0;
+  bool get semPapel => (byte & 0x20) != 0;
+
+  /// Pronta para vender pela porta: online, sem erro e com papel.
+  bool get pronta => valido && online && semErro && !semPapel;
+
+  @override
+  String toString() => 'StatusDaPorta(0x${byte.toRadixString(16).padLeft(2, '0')} '
+      'online:$online semErro:$semErro semPapel:$semPapel)';
+}
+
 /// Estado consolidado da impressora.
 ///
 /// ⚠️ MÁSCARAS DE BITS (TM-T88 series) — validar no bench da F4-hardware:

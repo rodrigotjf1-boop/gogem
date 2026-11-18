@@ -45,4 +45,23 @@ class UsbChannelTransport implements PrinterTransport {
   @override
   Stream<Uint8List> get incoming =>
       _ev.receiveBroadcastStream().map((e) => e as Uint8List);
+
+  /// GET_PORT_STATUS pelo canal de controle (ERR-043). `null` quando o plugin
+  /// não tem a porta (impressora em Vendor Class, falha do pedido, plugin antigo):
+  /// o driver volta ao DLE EOT.
+  @override
+  Future<int?> statusDaPorta() async {
+    try {
+      final b = await _ch.invokeMethod<int>('portStatus');
+      // ignore: avoid_print
+      print('[usbPorta] ${b == null ? 'sem status da porta' : StatusDaPorta(b)}');
+      return b;
+    } on PlatformException catch (e) {
+      // ignore: avoid_print
+      print('[usbPorta] falhou: ${e.message}');
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
 }

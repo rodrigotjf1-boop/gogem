@@ -27,8 +27,64 @@ class EpsonT88 implements PrinterDriver {
     return r[0];
   }
 
+  /// Status para os portões. Com a porta USB legível (Printer Class), ELA decide
+  /// se a impressora está pronta (ERR-043): o DLE EOT se desloca pela via de dados
+  /// e inventava "tampa aberta". Porta pronta → pronta; do DLE EOT sai só o
+  /// "papel acabando" (aviso, nunca bloqueia). Porta com problema → o DLE EOT só
+  /// DETALHA o motivo (tampa × papel); se ele não ler ou disser "pronta", vale a
+  /// porta (bloqueia). Sem a porta (Vendor Class, Windows), o DLE EOT de sempre.
   @override
   Future<PrinterStatus> consultarStatus() async {
+    final porta = await _porta();
+    if (porta == null) return _consultarDleEot();
+    if (porta.pronta) {
+      return PrinterStatus(pertoDoFim: await _pertoDoFim());
+    }
+    try {
+      final detalhe = await _consultarDleEot();
+      if (!detalhe.prontaParaVenda) return detalhe;
+    } catch (_) {
+      // DLE EOT ilegível: o motivo sai da porta.
+    }
+    return PrinterStatus(
+      online: porta.online && porta.semErro,
+      semPapel: porta.semPapel,
+    );
+  }
+
+  Future<StatusDaPorta?> _porta() async {
+    try {
+      final b = await _t.statusDaPorta();
+      if (b == null) return null;
+      final p = StatusDaPorta(b);
+      return p.valido ? p : null;
+    } on PrinterDisconnected {
+      rethrow;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// "Papel acabando" pelo DLE EOT 4 — só aviso, nunca bloqueia. Vale com DUAS
+  /// leituras seguidas: o byte deslocado (0x16) também acende o bit de "acabando"
+  /// (ERR-043), e papel acabando de verdade continua acabando na leitura seguinte.
+  /// Leitura ilegível = não avisa e não apaga a anterior.
+  bool _acabandoNaAnterior = false;
+
+  Future<bool> _pertoDoFim() async {
+    final int b;
+    try {
+      b = await _eot(Cmd.eotPaper);
+    } catch (_) {
+      return false;
+    }
+    final agora = (b & 0x0C) != 0;
+    final confirmado = agora && _acabandoNaAnterior;
+    _acabandoNaAnterior = agora;
+    return confirmado;
+  }
+
+  Future<PrinterStatus> _consultarDleEot() async {
     final printer = await _eot(Cmd.eotPrinter);
     final offlineCause = await _eot(Cmd.eotOffline);
     final error = await _eot(Cmd.eotError);
