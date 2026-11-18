@@ -64,6 +64,20 @@ jobs:
           printf '%s\n' '<resources><usb-device vendor-id="1208"/></resources>' \
             > android/app/src/main/res/xml/device_filter.xml
 
+      # O GoGeM é a TELA INICIAL do totem (HOME), igual ao build-apk.yml
+      # (ERR-046): abre sozinho ao ligar e volta depois de um travamento.
+      - name: GoGeM como tela inicial do totem
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.intent.category.HOME' "$MANIFEST"; then
+            sed -i 's#<category android:name="android.intent.category.LAUNCHER"/>#<category android:name="android.intent.category.LAUNCHER"/>\n                <category android:name="android.intent.category.HOME"/>\n                <category android:name="android.intent.category.DEFAULT"/>#' "$MANIFEST"
+          fi
+          if ! grep -q 'android.intent.category.HOME' "$MANIFEST"; then
+            echo "::error::Não achei a categoria LAUNCHER no manifesto gerado — o GoGeM não viraria a tela inicial do totem."
+            exit 1
+          fi
+          grep -nE 'category\.(LAUNCHER|HOME|DEFAULT)' "$MANIFEST"
+
       - name: Instalar MainActivity + plugin USB
         run: |
           DEST=android/app/src/main/kotlin/br/com/dms/gogem_kiosk

@@ -1,5 +1,13 @@
 # Kiosk Mode Android (F5) — manifest + provisionamento
 
+> **O que o build já faz (desde 0.6.2+33):** o `build-apk.yml` (perfil `producao`) e o
+> `build-play-aab.yml` injetam o `HOME` + `DEFAULT` no intent-filter principal (item 1, sem o
+> `launchMode`/`excludeFromRecents`) e assinam com a **chave do GoGeM** — o portão do build reprova
+> APK com a chave de depuração (LIC-038). Na instalação falta só o passo do item 2:
+> `cmd package set-home-activity`. Totem com um GoGeM assinado com a chave de depuração (até
+> 0.6.1+32): a assinatura muda, então `adb uninstall br.com.dms.gogem_kiosk` antes e parear de
+> novo na Frota — uma vez só.
+
 ## 1. App como LAUNCHER (após `flutter create`)
 No `android/app/src/main/AndroidManifest.xml`, dentro da `<activity>` principal,
 ADICIONE ao intent-filter existente:
