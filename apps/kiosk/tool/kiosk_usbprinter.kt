@@ -59,6 +59,7 @@ class UsbPrinterPlugin(private val ctx: Context) {
                             val args = call.arguments as Map<*, *>
                             result.success(ler(args["max"] as Int, args["timeoutMs"] as Int))
                         }
+                        "portStatus" -> result.success(statusDaPorta())
                         else -> result.notImplemented()
                     }
                 } catch (e: Exception) {
@@ -171,6 +172,27 @@ class UsbPrinterPlugin(private val ctx: Context) {
         val n = synchronized(epInLock) { conn?.bulkTransfer(ep, buf, cap, timeoutMs) ?: -1 }
         if (n <= 0) return ByteArray(0)
         return buf.copyOf(minOf(n, max))
+    }
+
+    /**
+     * GET_PORT_STATUS da classe de impressora USB pelo canal de CONTROLE (ERR-043):
+     * bit3 = sem erro, bit4 = online, bit5 = sem papel. Não usa o endpoint IN, então
+     * não se desloca como a resposta do DLE EOT. Só existe com a interface em Printer
+     * Class (7); em Vendor Class devolve null e o Dart volta ao DLE EOT.
+     * wIndex = número da interface (como o usblp do Linux).
+     */
+    private fun statusDaPorta(): Int? {
+        val c = conn ?: return null
+        val i = iface ?: return null
+        if (i.interfaceClass != UsbConstants.USB_CLASS_PRINTER) return null
+        val buf = ByteArray(1)
+        val tipo = UsbConstants.USB_DIR_IN or UsbConstants.USB_TYPE_CLASS or 0x01 // recipiente: interface
+        val n = c.controlTransfer(tipo, 1 /* GET_PORT_STATUS */, 0, i.id, buf, 1, 1000)
+        if (n != 1) {
+            Log.w(TAG, "GET_PORT_STATUS falhou (n=$n)")
+            return null
+        }
+        return buf[0].toInt() and 0xFF
     }
 
     /** Thread de leitura contínua para ASB (pacotes de 4 bytes espontâneos). */

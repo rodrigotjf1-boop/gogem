@@ -137,9 +137,13 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
 
   Future<void> sincronizar() async {
     state = state.copyWith(status: SyncStatus.sincronizando);
+    // O token com que ESTA chamada sai (o cliente é montado com ele). Só ele pode ser
+    // dado como revogado por um 401 — ver o `catch` abaixo (ERR-047).
+    String? tokenDaChamada;
     try {
       final repo = await ref.read(catalogRepositoryProvider.future);
       final atual = await repo.versaoCorrente();
+      tokenDaChamada = ref.read(deviceTokenProvider).token;
       final api = ref.read(gogemApiProvider);
       final res = await api.getCatalogoPublicado(desde: atual);
       switch (res) {
@@ -181,7 +185,17 @@ class CatalogSyncNotifier extends Notifier<SyncState> {
       // 401 com token de dispositivo = revogado/invalidado no servidor. Não
       // adianta insistir com um token morto: apaga e volta ao pareamento (o
       // router reage). Sem isto o totem revogado ficava preso no cache.
-      if (e.status == 401 && ref.read(deviceTokenProvider).pareado) {
+      //
+      // ERR-047: só vale quando a chamada SAIU com o token que está valendo agora.
+      // Na abertura, a primeira sync dispara junto com a leitura do token no banco e
+      // pode sair SEM ele; a nuvem responde "token ausente", e quando a resposta volta
+      // o token já carregou — apagá-lo desfazia o pareamento a cada reinício
+      // (atualização, queda de energia). Idem para um token trocado no meio da chamada.
+      final tokenAgora = ref.read(deviceTokenProvider).token;
+      if (e.status == 401 &&
+          tokenDaChamada != null &&
+          tokenDaChamada.isNotEmpty &&
+          tokenDaChamada == tokenAgora) {
         await ref.read(deviceTokenProvider.notifier).desparear();
         state = state.copyWith(
             status: SyncStatus.erro,

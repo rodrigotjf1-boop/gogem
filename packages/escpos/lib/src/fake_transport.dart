@@ -21,6 +21,34 @@ class FakeTransport implements PrinterTransport {
   /// o papel acabando NO MEIO de uma sequência real de consultas/impressão).
   void Function()? aposLeitura;
 
+  /// Impressora em Printer Class: responde o GET_PORT_STATUS coerente com o
+  /// estado simulado. Desligado = transporte sem o canal (como em Vendor Class).
+  bool temStatusDaPorta = false;
+
+  /// Byte da porta forçado (ex.: leitura errada com bit reservado ligado).
+  int? portaForcada;
+
+  /// Respostas do DLE EOT forçadas, em ordem — simulam a via de dados deslocada
+  /// do totem (ERR-043): a resposta de uma pergunta lida como a da seguinte.
+  /// Vazia = responde pelo estado simulado.
+  final List<int> filaDleEot = [];
+
+  /// Quantas vezes o GET_PORT_STATUS foi pedido.
+  int pedidosDaPorta = 0;
+
+  /// DLE EOT sem resposta (timeout), como na maior parte das leituras do totem.
+  bool dleEotMudo = false;
+
+  @override
+  Future<int?> statusDaPorta() async {
+    if (desconectada) throw const PrinterDisconnected();
+    if (!temStatusDaPorta) return null;
+    pedidosDaPorta++;
+    if (portaForcada != null) return portaForcada;
+    final problema = offline || tampaAberta || semPapel;
+    return (problema ? 0x00 : 0x18) | (semPapel ? 0x20 : 0x00);
+  }
+
   int? _ultimoEot;
 
   @override
@@ -46,8 +74,9 @@ class FakeTransport implements PrinterTransport {
     if (desconectada) throw const PrinterDisconnected();
     final n = _ultimoEot;
     _ultimoEot = null;
-    if (n == null) throw const PrinterTimeout();
-    final resp = Uint8List.fromList([_statusByte(n)]);
+    if (n == null || dleEotMudo) throw const PrinterTimeout();
+    final resp = Uint8List.fromList(
+        [filaDleEot.isNotEmpty ? filaDleEot.removeAt(0) : _statusByte(n)]);
     aposLeitura?.call();
     return resp;
   }

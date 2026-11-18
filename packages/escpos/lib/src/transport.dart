@@ -10,6 +10,13 @@ abstract interface class PrinterTransport {
   /// Stream de bytes espontâneos (ASB). Pode ser vazio em transportes
   /// que não suportam leitura assíncrona.
   Stream<Uint8List> get incoming;
+
+  /// Byte do GET_PORT_STATUS da classe de impressora USB, pedido pelo canal de
+  /// CONTROLE (ver [StatusDaPorta]). Não passa pela via de dados, então não se
+  /// desloca como a resposta do DLE EOT (ERR-043). `null` quando o transporte não
+  /// tem esse canal: impressora em Vendor Class, Windows, transporte falso sem a
+  /// simulação ligada.
+  Future<int?> statusDaPorta();
 }
 
 class PrinterTimeout implements Exception {
