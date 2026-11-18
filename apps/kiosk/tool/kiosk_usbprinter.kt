@@ -32,6 +32,10 @@ class UsbPrinterPlugin(private val ctx: Context) {
     private var epOut: UsbEndpoint? = null
     private var epIn: UsbEndpoint? = null
     private var iface: UsbInterface? = null
+    // Endereço USB (deviceName, ex. /dev/bus/usb/001/003) do aparelho que está aberto.
+    // A impressora que reinicia volta com OUTRO endereço; a conexão velha fica morta
+    // (ERR-048) — então só se reaproveita a conexão do MESMO aparelho.
+    private var devAberto: String? = null
     private var asbSink: EventChannel.EventSink? = null
     @Volatile private var lendo = false
 
@@ -96,8 +100,14 @@ class UsbPrinterPlugin(private val ctx: Context) {
             fechar() // device sumiu → descarta conexão velha (unplug)
             return false
         }
-        // Já conectado E o device ainda está presente → reusa (check barato).
-        if (conn != null && epOut != null && epIn != null) return true
+        // Já conectado ao MESMO aparelho → reusa (check barato). Outro endereço = a
+        // impressora reiniciou (desligou/religou, queda de energia): a conexão aberta
+        // está morta — escrita e status falham e o app "assumia pronta" (ERR-048).
+        if (conn != null && epOut != null && epIn != null) {
+            if (devAberto == dev.deviceName) return true
+            Log.i(TAG, "impressora reconectada ($devAberto → ${dev.deviceName}) — reabrindo")
+            fechar()
+        }
         if (!mgr.hasPermission(dev)) {
             Log.w(TAG, "sem permissão para vid=0x%04X — abrindo diálogo".format(dev.vendorId))
             solicitarPermissao(mgr, dev)
@@ -118,7 +128,7 @@ class UsbPrinterPlugin(private val ctx: Context) {
                 if (ep.direction == UsbConstants.USB_DIR_OUT) epOut = ep else epIn = ep
             }
         }
-        conn = c; iface = ifc
+        conn = c; iface = ifc; devAberto = dev.deviceName
         val ok = epOut != null && epIn != null
         Log.i(TAG, "conectada=$ok (epOut=${epOut != null} epIn=${epIn != null})")
         return ok
@@ -156,11 +166,17 @@ class UsbPrinterPlugin(private val ctx: Context) {
         iface?.let { conn?.releaseInterface(it) }
         conn?.close()
         conn = null
+        devAberto = null
     }
 
     private fun escrever(b: ByteArray) {
         val n = conn?.bulkTransfer(epOut, b, b.size, 4000) ?: -1
-        if (n < 0) throw RuntimeException("bulkTransfer OUT falhou")
+        if (n < 0) {
+            // Escrita que falha = conexão morta (mesmo com o mesmo endereço): fecha, para
+            // o próximo `open` abrir de novo em vez de reaproveitá-la (ERR-048).
+            fechar()
+            throw RuntimeException("bulkTransfer OUT falhou")
+        }
     }
 
     private fun ler(max: Int, timeoutMs: Int): ByteArray {

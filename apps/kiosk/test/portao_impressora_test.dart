@@ -94,4 +94,49 @@ void main() {
     expect(h.prontaParaVenda, isTrue);
     expect(d.lidas, 1);
   });
+
+  // ERR-048 — a impressora reiniciou (voltou com outro endereço USB): a leitura cai
+  // com "desconectada", o conectar abre uma conexão nova, e o portão lê de novo por
+  // ela em vez de assumir "pronta".
+  group('conexão morta (a impressora reiniciou)', () {
+    test('reconecta e lê de novo: voltou sem papel → bloqueia', () async {
+      final d = _DriverDeLeituras([
+        const PrinterDisconnected('USB write: bulkTransfer OUT falhou'),
+        const PrinterStatus(semPapel: true),
+      ]);
+      final c = _container(d);
+      addTearDown(c.dispose);
+
+      final h = await c.read(printerHealthProvider.notifier).checarAgora();
+
+      expect(h.prontaParaVenda, isFalse);
+      expect(h.motivo, 'sem papel');
+      expect(d.lidas, 2);
+    });
+
+    test('reconecta e lê de novo: voltou pronta → libera', () async {
+      final d = _DriverDeLeituras([
+        const PrinterDisconnected('USB write: bulkTransfer OUT falhou'),
+        const PrinterStatus(),
+      ]);
+      final c = _container(d);
+      addTearDown(c.dispose);
+
+      final h = await c.read(printerHealthProvider.notifier).checarAgora();
+
+      expect(h.prontaParaVenda, isTrue);
+      expect(d.lidas, 2);
+    });
+
+    test('timeout comum (conexão viva) não relê: assume pronta como antes', () async {
+      final d = _DriverDeLeituras([const PrinterTimeout()]);
+      final c = _container(d);
+      addTearDown(c.dispose);
+
+      final h = await c.read(printerHealthProvider.notifier).checarAgora();
+
+      expect(h.prontaParaVenda, isTrue);
+      expect(d.lidas, 1);
+    });
+  });
 }
