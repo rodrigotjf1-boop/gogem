@@ -7,6 +7,7 @@ import '../../core/config/app_config.dart';
 import '../../core/kiosk/kiosk_service.dart';
 import '../../core/theme/gogem_theme.dart';
 import '../../data/catalog/catalog_sync.dart';
+import '../../data/update/updater.dart';
 import '../../domain/order/venda_sync.dart';
 import '../../printing/fila_impressao.dart';
 import '../../printing/printer_providers.dart';
@@ -141,6 +142,10 @@ class _AdminPanelScreenState extends ConsumerState<AdminPanelScreen> {
                     await ref.read(vendaSyncProvider.notifier).drenar();
                     return ref.read(vendaSyncProvider).msg ?? 'fila vazia';
                   })),
+          _Botao('ATUALIZAR O APP', _ocupado,
+              key: const ValueKey('acao-atualizar-app'),
+              onTap: () => _acao('Atualização',
+                  () => ref.read(updaterProvider).atualizarAgora())),
           const SizedBox(height: 24),
           OutlinedButton(
             key: const ValueKey('sair-kiosk'),

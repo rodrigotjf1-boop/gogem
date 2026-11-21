@@ -105,8 +105,8 @@ jobs:
           fi
           grep -nE 'category\.(LAUNCHER|HOME|DEFAULT)' "$MANIFEST"
 
-      # Modo quiosque + impressora: substitui o MainActivity gerado pelo que tem
-      # lock task (canal 'gogem/kiosk') e registra o UsbPrinterPlugin (canal
+      # Canais nativos: substitui o MainActivity gerado pelo de tool/, a única
+      # fonte (quiosque, atualizador, TEF), e registra o UsbPrinterPlugin (canal
       # 'gogem/usb_printer'). Caminho segue --org br.com.dms + gogem_kiosk
       # (= br.com.dms.gogem_kiosk, o MESMO package do campo — atualiza no lugar).
       - name: Instalar MainActivity + plugin USB
@@ -190,6 +190,19 @@ jobs:
             exit 1
           fi
           echo "Assinatura conferida: chave do GoGeM."
+
+      # Portão (ERR-050): o APK saía sem o canal do atualizador e o do TEF, e a
+      # falha só aparecia no totem, calada.
+      - name: Conferir os canais nativos no APK
+        run: |
+          unzip -p build/app/outputs/flutter-apk/app-release.apk 'classes*.dex' > canais.dex
+          for CANAL in gogem/kiosk gogem/usb_printer gogem/updater gogem/tef; do
+            if ! grep -aq "$CANAL" canais.dex; then
+              echo "::error::APK sem o canal nativo $CANAL (ERR-050)."
+              exit 1
+            fi
+            echo "ok: $CANAL"
+          done
 
       - name: Publicar APK universal como artifact
         uses: actions/upload-artifact@v4

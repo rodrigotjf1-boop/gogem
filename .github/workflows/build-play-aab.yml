@@ -129,6 +129,18 @@ jobs:
           --dart-define=GOGEM_KIOSK_LOCK=true
           --dart-define=GOGEM_SELF_UPDATE=false
 
+      # Portão (ERR-050): o mesmo do build-apk.yml.
+      - name: Conferir os canais nativos no AAB
+        run: |
+          unzip -p build/app/outputs/bundle/release/app-release.aab 'base/dex/classes*.dex' > canais.dex
+          for CANAL in gogem/kiosk gogem/usb_printer gogem/updater gogem/tef; do
+            if ! grep -aq "$CANAL" canais.dex; then
+              echo "::error::AAB sem o canal nativo $CANAL (ERR-050)."
+              exit 1
+            fi
+            echo "ok: $CANAL"
+          done
+
       - name: Publicar AAB como artifact
         uses: actions/upload-artifact@v4
         with:
