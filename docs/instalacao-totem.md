@@ -159,9 +159,14 @@ Para não reinstalar na mão a cada versão.
 1. **Admin → Auto atendimentos → Atualizações do totem**: cole o
    `KIOSK_RELEASE_TOKEN` (§2), suba o `.apk`, informe versionCode/versionName →
    **Publicar**.
-2. O totem verifica na tela de descanso (a cada 3h), baixa, confere o `sha256` e
-   instala. Em totem **device owner**, a instalação é **silenciosa**.
-3. **Confirmação:** um totem em versão anterior atualiza sozinho para a publicada.
+2. **Uma vez por totem**, liberar a instalação pelo próprio app:
+   `adb shell appops set br.com.dms.gogem_kiosk REQUEST_INSTALL_PACKAGES allow`.
+3. **Totem comum (o caso da loja):** o Android pede confirmação. Ela aparece **ao
+   ligar o totem** ou em **Painel do totem → ATUALIZAR O APP**: toque em
+   **Instalar**. Se ninguém tocar, ela some em 2 minutos e o totem volta a vender.
+   Versão marcada como **obrigatória** também pede na tela de descanso.
+4. **Totem device owner:** instala sem perguntar, na tela de descanso (a cada 3h).
+5. Nos dois casos, a instalação nunca entra com um cliente no meio do pedido.
 
 ---
 

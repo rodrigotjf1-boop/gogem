@@ -37,7 +37,7 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         // K3 — o desvio de relógio guardado volta antes de tudo: um totem que reinicia
         // sem rede continua com a última hora boa, em vez do relógio torto do aparelho.
         ref.read(relogioServidorProvider.notifier).carregar();
-        ref.read(deviceTokenProvider.notifier).carregar();
+        final tokenCarregado = ref.read(deviceTokenProvider.notifier).carregar();
         ref.read(catalogSyncProvider.notifier).iniciarAgendador();
         ref.read(vendaSyncProvider.notifier).iniciarAgendador();
         // Telemetria: heartbeat periódico (só envia quando pareado).
@@ -45,8 +45,15 @@ class _GogemKioskAppState extends ConsumerState<GogemKioskApp> {
         // Reporter de erros → Distribuição. Expõe a instância pros handlers
         // globais (main) que rodam fora do ProviderScope.
         TelemetriaReporter.instance = ref.read(telemetriaReporterProvider);
-        // Update OBRIGATÓRIO: aplica no boot (não espera a janela de 3h).
-        ref.read(updaterProvider).verificarObrigatorio();
+        // Atualização ao ligar: só depois de o token carregar (a consulta saía
+        // sem ele e voltava 401 — ERR-050) e só se o totem está pareado.
+        tokenCarregado.then((_) {
+          if (!mounted || !ref.read(deviceTokenProvider).pareado) return;
+          ref.read(updaterProvider).verificarObrigatorio(
+              ocioso: () =>
+                  router.routerDelegate.currentConfiguration.uri.path ==
+                  '/descanso');
+        }, onError: (Object e) => debugPrint('[updater] sem token: $e'));
         // Modo quiosque: fixa a tela (best-effort; silencioso sem Device Owner).
         // Desligável p/ build de TESTE (celular): --dart-define=GOGEM_KIOSK_LOCK=false.
         if (_kioskLock) KioskService.entrar();

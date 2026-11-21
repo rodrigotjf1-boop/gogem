@@ -48,7 +48,12 @@ class _DescansoScreenState extends ConsumerState<DescansoScreen>
       final agora = DateTime.now();
       if (agora.difference(_ultimoCheckUpdate) > const Duration(hours: 3)) {
         _ultimoCheckUpdate = agora;
-        ref.read(updaterProvider).verificarEAtualizar();
+        final rotas = GoRouter.maybeOf(context);
+        ref.read(updaterProvider).verificarEAtualizar(
+            ocioso: () =>
+                rotas == null ||
+                rotas.routerDelegate.currentConfiguration.uri.path ==
+                    '/descanso');
       }
     });
   }
