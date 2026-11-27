@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
   Param,
   Post,
   UseGuards,
@@ -38,13 +39,7 @@ export class RegemImportController {
       'Resumo do import: categorias/produtos/grupos/opções criados e atualizados.',
   })
   async importar(): Promise<RegemImportResumo> {
-    // A integração é a DA EMPRESA de quem pede — antes o import exigia as envs globais, e
-    // recusava a empresa com integração própria quando elas não existiam (ERR-012).
-    await this.regem.resolve().catch((e: unknown) => {
-      throw new BadRequestException(
-        e instanceof Error ? e.message : 'Integração Regem não configurada.',
-      );
-    });
+    await this.exigirIntegracao();
     return this.service.importar();
   }
 
@@ -54,8 +49,25 @@ export class RegemImportController {
     description:
       'Diferenças Regem×GoGeM: novos (a importar) e órfãos (sumiram do Regem).',
   })
-  novidades() {
+  async novidades() {
+    // O Catálogo do painel pede as novidades sempre que abre: na empresa sem Regem, a falta
+    // da integração é resposta esperada (400), não erro do servidor com pilha no log (ERR-051).
+    await this.exigirIntegracao();
     return this.service.novidades();
+  }
+
+  /**
+   * A integração é a DA EMPRESA de quem pede — antes o import exigia as envs globais, e recusava
+   * a empresa com integração própria quando elas não existiam (ERR-012). Sem ela → 400 com o
+   * motivo. A recusa que já é HTTP (a cifra que não abre = 503) passa como veio.
+   */
+  private async exigirIntegracao(): Promise<void> {
+    await this.regem.resolve().catch((e: unknown) => {
+      if (e instanceof HttpException) throw e;
+      throw new BadRequestException(
+        e instanceof Error ? e.message : 'Integração Regem não configurada.',
+      );
+    });
   }
 
   @Post('ignorar')
